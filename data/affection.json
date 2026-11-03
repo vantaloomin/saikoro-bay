@@ -3,6 +3,6 @@
 	"note": "Affection milestones (RD-5, RD-7), in rising order of points. Affection never drops. unlock is what reaching a milestone opens: none, or scene (the villager's private scene, behind the content setting). text is what the villager card says it unlocks. Placeholder names and numbers: a date that goes well reaches Close.",
 	"items": [
 		{ "id": "fond", "name": "Fond", "points": 2, "unlock": "none", "text": "" },
-		{ "id": "close", "name": "Close", "points": 3, "unlock": "scene", "text": "Unlocks a private moment" }
+		{ "id": "close", "name": "Close", "points": 3, "unlock": "scene", "text": "a private moment" }
 	]
 }

@@ -489,6 +489,12 @@ func date_refusals(data: GameData, villager: String, spot: String = "") -> Array
 	return out
 
 
+## Whether `spot` is one `villager` wishes to live by (their wish_buildings):
+## the spot pick marks it, and a date there adds the date's wish_bonus.
+static func wished_spot(data: GameData, villager: String, spot: String) -> bool:
+	return data.has_row("villagers", villager) and (data.row("villagers", villager)["wish_buildings"] as Array).has(spot)
+
+
 ## A date session for `villager` at `spot`, ready for its script, or null
 ## if date_refusals says no. Starting changes nothing: the action is spent
 ## and the points kept only by finish_date, so leaving a date midway costs
@@ -512,8 +518,8 @@ func begin_date(data: GameData, villager: String, spot: String, content_level: i
 
 
 ## Ends a date: checks it can still happen, spends its actions, and adds
-## its affection (finishing, the spot's bonus, and what its choices earned,
-## capped at max_gain), all in this one call. Returns [] when kept
+## its affection (finishing, the spot's bonus, a wished-for spot's bonus and
+## what its choices earned, capped at max_gain), all in this one call. Returns [] when kept
 ## (session.kept says how much it added), or why not, having changed
 ## nothing. A session is kept at most once.
 func finish_date(data: GameData, session: DateSession) -> Array[Dictionary]:
@@ -527,7 +533,9 @@ func finish_date(data: GameData, session: DateSession) -> Array[Dictionary]:
 			or session.dates_done != dates_done(session.villager):
 		return [_refusal(Town.Refusal.NOT_YET, "This date is out of date")]
 	var points: int = mini(session.gained() + (date["finish_gain"] as int)
-		+ (data.row("date_spots", session.spot)["bonus"] as int), date["max_gain"] as int)
+		+ (data.row("date_spots", session.spot)["bonus"] as int)
+		+ ((date["wish_bonus"] as int) if wished_spot(data, session.villager, session.spot) else 0),
+		date["max_gain"] as int)
 	town.actions_left -= date["actions"] as int
 	town.kept = mini(town.kept, town.actions_left)
 	if points > 0:

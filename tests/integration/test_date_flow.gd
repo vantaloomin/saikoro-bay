@@ -83,9 +83,9 @@ func _start_date(town: TownScreen, villager: String, spot: String) -> DateScreen
 
 func test_the_card_shows_affection_and_a_date_button() -> void:
 	var town: TownScreen = _open_card("pearl_diver")
-	assert_eq(Array(TownScreen.affection_lines(Game.data, 0)), ["Getting to know you", "Next: Fond at 2"])
+	assert_eq(Array(TownScreen.affection_lines(Game.data, 0)), ["Getting to know you", "Next: Fond"])
 	assert_eq(Array(TownScreen.affection_lines(Game.data, 2)),
-		["Fond", "Next: Close at 3 · unlocks a private moment"])
+		["Fond", "Next: Close · a private moment"])
 	assert_eq(Array(TownScreen.affection_lines(Game.data, 3)), ["Close"])
 	var date: Button = _card_button(town, "Date")
 	assert_not_null(date)
@@ -126,7 +126,10 @@ func test_a_whole_date_spends_the_action_and_saves_the_affection() -> void:
 	assert_true(saved.is_ok(), "saved at the end")
 	var loaded: GameState = GameState.from_dict(saved.payload[GameState.PAYLOAD_KEY])
 	assert_eq(loaded.affection("pearl_diver"), Game.state.affection("pearl_diver"))
-	assert_eq(Array(DateScreen.result_lines(Game.data, Game.state, screen.session, [], screen.scene_reached))[0], "Date over")
+	var lines: PackedStringArray = DateScreen.result_lines(Game.data, Game.state, screen.session, [], screen.scene_reached)
+	assert_eq(lines[0], "Date with Natsu")
+	assert_has(lines, "1 action spent")
+	assert_false(lines.has("Close"), "a milestone is never a bare word that reads as a button (Mara)")
 	(screen.get_node("Box").find_child("BackToTown", true, false) as Button).pressed.emit()
 	await wait_process_frames(2)
 	assert_null(town.date_screen)
@@ -140,7 +143,9 @@ func test_reaching_close_plays_the_invitation() -> void:
 	await _play(screen, 0)
 	assert_true(screen.scene_reached)
 	assert_true(Affection.scene_unlocked(Game.data, Game.state.affection("onsen_keeper")))
-	assert_has(DateScreen.result_lines(Game.data, Game.state, screen.session, [], true), "A private moment is unlocked")
+	var lines: PackedStringArray = DateScreen.result_lines(Game.data, Game.state, screen.session, [], true)
+	assert_has(lines, "A private moment is unlocked")
+	assert_has(lines, "Fond → Close", "the milestone as a change")
 
 
 func test_leaving_midway_spends_and_keeps_nothing() -> void:
@@ -171,3 +176,59 @@ func test_a_double_stamp_opens_one_date() -> void:
 	town._on_date_stamped()
 	await wait_process_frames(2)
 	assert_eq(town.find_children("*", "DateScreen", false, false).size(), 1)
+
+
+func test_answers_wait_for_a_direction_press_and_the_guard() -> void:
+	var town: TownScreen = _open_card("pearl_diver")
+	var screen: DateScreen = await _start_date(town, "pearl_diver", "cafe")
+	var guard: int = 0
+	while screen.runner.line != null and screen.runner.line.responses.is_empty() and guard < 30:
+		guard += 1
+		await screen.go_on()
+	assert_false(screen.runner.line.responses.is_empty(), "reached the first answers")
+	var focused: Control = screen.get_viewport().gui_get_focus_owner()
+	assert_true(focused == null or not screen.get_node("Box").is_ancestor_of(focused), "no answer focused yet (Mara's blocker 1)")
+	assert_false(screen.answers_ready(), "keys and the pad wait out the guard")
+	var line_before: DialogueLine = screen.runner.line
+	screen._on_answer_pressed(0)
+	await wait_process_frames(1)
+	assert_eq(screen.runner.line, line_before, "a key press inside the guard picks nothing")
+	var buttons: Array[Node] = screen.get_node("Box").find_children("Response0", "Button", true, false)
+	assert_true((buttons[0] as Button).text.begins_with("1 "), "answers are numbered")
+	assert_eq((buttons[0] as Button).alignment, HORIZONTAL_ALIGNMENT_LEFT)
+	await wait_seconds(float(DateScreen.ANSWER_GUARD_MS) / 1000.0 + 0.05)
+	assert_true(screen.answers_ready())
+	screen.leave()
+
+
+func test_a_wished_spot_says_so_and_adds_its_bonus() -> void:
+	assert_true(GameState.wished_spot(Game.data, "onsen_keeper", "hot_spring"))
+	assert_false(GameState.wished_spot(Game.data, "onsen_keeper", "cafe"))
+	assert_eq(TownScreen.date_wish_line(Game.data, "onsen_keeper"), "Chiyo would love this · +1")
+	Game.state._landmarks.append("hot_spring")
+	Game.state.build(Game.data, "hot_spring", Vector2i(5, 0))
+	var at_spring: DateSession = Game.begin_date("onsen_keeper", "hot_spring")
+	assert_eq(Game.state.finish_date(Game.data, at_spring), [] as Array[Dictionary])
+	assert_eq(at_spring.kept, 2, "finishing plus the wish bonus, with no answers given")
+	var at_cafe: DateSession = Game.begin_date("onsen_keeper", "cafe")
+	Game.state.finish_date(Game.data, at_cafe)
+	assert_eq(at_cafe.kept, 1)
+
+
+func test_the_meter_fills_one_bead_per_milestone() -> void:
+	var marks: Array[int] = [2, 3]
+	assert_eq(AffectionMeter.fill(marks, 0, 1.0), 0.5, "half way to Fond")
+	assert_eq(AffectionMeter.fill(marks, 1, 1.0), 0.0)
+	assert_eq(AffectionMeter.fill(marks, 0, 2.0), 1.0)
+	assert_eq(AffectionMeter.fill(marks, 1, 2.0), 0.0)
+	assert_eq(AffectionMeter.fill(marks, 1, 5.0), 1.0, "past the last milestone, all full")
+
+
+func test_the_card_heads_with_the_name_and_the_pick_with_the_wish() -> void:
+	var town: TownScreen = _open_card("onsen_keeper")
+	var card: Dictionary = TownScreen.card_for(Game.data, Game.state, {"kind": "villager", "villager": "onsen_keeper"})
+	assert_eq(card["title"], "Chiyo")
+	assert_eq(Array(card["lines"])[0], "Onsen keeper")
+	assert_eq(DateScreen.go_on_hint(true), "Press A to go on")
+	town.open_date("onsen_keeper")
+	assert_true(_card_button(town, "Spot_hot_spring").disabled, "not won yet, so no wish line")

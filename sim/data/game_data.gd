@@ -31,7 +31,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"cost_amount": "int", "die": "string?", "gain": "string", "cost": "string?", "happy_gain": "string?",
 	},
 	"villagers": {
-		"id": "id", "role": "string", "personality": "string?", "bet_lost": "string?",
+		"id": "id", "name": "string?", "role": "string", "personality": "string?", "bet_lost": "string?",
 		"perk": "ref:perks", "wish": "enum:sea|next_to", "wish_buildings": "ref_list:buildings",
 		"wish_text": "string", "wish_line": "string?",
 	},
@@ -94,7 +94,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"dates": {
 		"id": "id", "villager": "ref:villagers", "script": "string", "actions": "int",
-		"finish_gain": "int", "max_gain": "int",
+		"finish_gain": "int", "wish_bonus": "int", "max_gain": "int",
 	},
 	"date_spots": {
 		"id": "ref:landmarks", "text": "string?", "bonus": "int",
@@ -459,7 +459,7 @@ func _check_dates() -> void:
 		if dated.has(villager):
 			errors.append("dates \"%s\": %s already has date \"%s\"" % [id, villager, dated[villager]])
 		dated[villager] = id
-		for field: String in ["actions", "finish_gain", "max_gain"]:
+		for field: String in ["actions", "finish_gain", "wish_bonus", "max_gain"]:
 			if (date[field] as int) < 0:
 				errors.append("dates \"%s\": %s can't be negative" % [id, field])
 		# Dates are for every content level, so their scripts never live

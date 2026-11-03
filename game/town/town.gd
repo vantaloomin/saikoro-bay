@@ -708,7 +708,7 @@ func _on_date_closed(kept: bool, villager: String) -> void:
 
 func _show_date_pick() -> void:
 	var villager: String = sheet["villager"]
-	var role: String = str(Game.data.row("villagers", villager).get("role", villager))
+	var who: String = DateScreen.speaker_name(Game.data, villager)
 	var children: Array[Control] = []
 	for spot: String in Game.data.ids("date_spots"):
 		var name: String = str(Game.data.row("landmarks", spot).get("name", spot))
@@ -720,17 +720,21 @@ func _show_date_pick() -> void:
 		var why: String = str(Game.data.row("date_spots", spot).get("text", ""))
 		if not refusals.is_empty():
 			why = str(refusals[0]["text"])
+		elif GameState.wished_spot(Game.data, villager, spot):
+			# The tie between building and dating (Mara): a wished-for spot
+			# says so, and a date there adds the date's wish bonus.
+			why = date_wish_line(Game.data, villager)
 		if not why.is_empty():
-			children.append(TownStyle.label(why, TownStyle.SMALL, TownStyle.DIM))
+			children.append(TownStyle.label(why, TownStyle.SMALL, TownStyle.HAPPY if why == date_wish_line(Game.data, villager) else TownStyle.DIM))
 	children.append(_button("Not now", back))
-	_fill(_card, "Where to, with the %s?" % role, children)
+	_fill(_card, "Where to, with %s?" % who, children)
 	_card.visible = true
 
 
 func _show_date_confirm() -> void:
 	var villager: String = sheet["villager"]
 	var spot: String = sheet["spot"]
-	var role: String = str(Game.data.row("villagers", villager).get("role", villager))
+	var who: String = DateScreen.speaker_name(Game.data, villager)
 	var name: String = str(Game.data.row("landmarks", spot).get("name", spot))
 	var actions: int = int(GameState.date_row(Game.data, villager).get("actions", 0))
 	var children: Array[Control] = [
@@ -742,13 +746,22 @@ func _show_date_confirm() -> void:
 	_stamp = HankoButton.new()
 	_stamp.text = "Stamp"
 	_stamp.name = "Stamp"
+	_stamp.mark = "date"
 	_stamp.stamped.connect(_on_date_stamped)
 	_stamp.disabled = sheet.has("refusals")
 	children.append(_stamp)
 	children.append(_button("Not now", back))
-	_fill(_card, "Take the %s to the %s?" % [role, name], children)
+	_fill(_card, "Take %s to the %s?" % [who, name], children)
 	_card.visible = true
 	_focus_first.call_deferred()
+
+
+## The spot pick's line under a spot the villager wishes to live by, with
+## what it adds.
+static func date_wish_line(data: GameData, villager: String) -> String:
+	var bonus: int = int(GameState.date_row(data, villager).get("wish_bonus", 0))
+	var line: String = "%s would love this" % DateScreen.speaker_name(data, villager)
+	return line + (" · +%d" % bonus if bonus > 0 else "")
 
 
 ## The Date button's words: what it costs, or why not (the spot aside,
@@ -919,9 +932,15 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 			if not data.has_row("villagers", villager):
 				return {}
 			var row: Dictionary = data.row("villagers", villager)
+			# The name heads the card and the role is its subline (Mara's
+			# date-flow review: names on plates and headers).
+			var title: String = DateScreen.speaker_name(data, villager)
+			var lines: PackedStringArray = [MOOD_WORDS[state.mood(data, villager)]]
+			if title != str(row.get("role", villager)):
+				lines.insert(0, str(row.get("role", villager)))
 			return {
-				"title": str(row.get("role", villager)),
-				"lines": PackedStringArray([MOOD_WORDS[state.mood(data, villager)]]),
+				"title": title,
+				"lines": lines,
 				"chip": "Wish: " + str(row.get("wish_text", "")),
 				"quote": "“%s”" % row.get("wish_line", ""),
 				"affection": affection_lines(data, state.affection(villager)),
@@ -936,8 +955,9 @@ static func affection_lines(data: GameData, points: int) -> PackedStringArray:
 	var out: PackedStringArray = [str(reached["name"]) if not reached.is_empty() else "Getting to know you"]
 	var next: Dictionary = Affection.next(data, points)
 	if not next.is_empty():
-		var unlocks: String = " · " + str(next["text"]).to_lower() if not str(next["text"]).is_empty() else ""
-		out.append("Next: %s at %d%s" % [next["name"], next["points"], unlocks])
+		# No points: the beads show how far (Mara's date-flow review).
+		var unlocks: String = " · " + str(next["text"]) if not str(next["text"]).is_empty() else ""
+		out.append("Next: %s%s" % [next["name"], unlocks])
 	return out
 
 

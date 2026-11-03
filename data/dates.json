@@ -1,10 +1,10 @@
 {
 	"schema": 1,
-	"note": "One date per villager (plan section 2), played at any placed date spot (date_spots.json). script is the villager's dialogue file; the date starts at its \"date\" title. actions is what the date costs, spent when it ends (specs/town.md: dates cost an action). A finished date adds finish_gain, plus the spot's bonus, plus what its choices earned, up to max_gain. Dates can be repeated. Placeholder numbers.",
+	"note": "One date per villager (plan section 2), played at any placed date spot (date_spots.json). script is the villager's dialogue file; the date starts at its \"date\" title. actions is what the date costs, spent when it ends (specs/town.md: dates cost an action). A finished date adds finish_gain, plus the spot's bonus, plus wish_bonus at a spot the villager wishes to live by (their wish_buildings), plus what its choices earned, up to max_gain. Dates can be repeated. Placeholder numbers.",
 	"items": [
-		{ "id": "pearl_diver_date", "villager": "pearl_diver", "script": "res://dialogue/villagers/pearl_diver.dialogue", "actions": 1, "finish_gain": 1, "max_gain": 3 },
-		{ "id": "shipwright_date", "villager": "shipwright", "script": "res://dialogue/villagers/shipwright.dialogue", "actions": 1, "finish_gain": 1, "max_gain": 3 },
-		{ "id": "onsen_keeper_date", "villager": "onsen_keeper", "script": "res://dialogue/villagers/onsen_keeper.dialogue", "actions": 1, "finish_gain": 1, "max_gain": 3 },
-		{ "id": "shrine_keeper_date", "villager": "shrine_keeper", "script": "res://dialogue/villagers/shrine_keeper.dialogue", "actions": 1, "finish_gain": 1, "max_gain": 3 }
+		{ "id": "pearl_diver_date", "villager": "pearl_diver", "script": "res://dialogue/villagers/pearl_diver.dialogue", "actions": 1, "finish_gain": 1, "wish_bonus": 1, "max_gain": 3 },
+		{ "id": "shipwright_date", "villager": "shipwright", "script": "res://dialogue/villagers/shipwright.dialogue", "actions": 1, "finish_gain": 1, "wish_bonus": 1, "max_gain": 3 },
+		{ "id": "onsen_keeper_date", "villager": "onsen_keeper", "script": "res://dialogue/villagers/onsen_keeper.dialogue", "actions": 1, "finish_gain": 1, "wish_bonus": 1, "max_gain": 3 },
+		{ "id": "shrine_keeper_date", "villager": "shrine_keeper", "script": "res://dialogue/villagers/shrine_keeper.dialogue", "actions": 1, "finish_gain": 1, "wish_bonus": 1, "max_gain": 3 }
 	]
 }
