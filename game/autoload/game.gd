@@ -62,6 +62,9 @@ func load_or_new() -> String:
 	var loaded: GameState = null
 	if result.is_ok():
 		loaded = GameState.from_dict(result.payload.get(GameState.PAYLOAD_KEY, {}) as Dictionary)
+		if loaded != null and not loaded.town_problems(data).is_empty():
+			push_error("Saved town doesn't match this build's data: " + ", ".join(loaded.town_problems(data)))
+			loaded = null
 		if loaded == null:
 			# It passed its checksum but doesn't load: a bug, not a damaged
 			# file. Keep every copy and save nothing, so the campaign survives
@@ -106,6 +109,28 @@ static func _already_kept(file_path: String) -> bool:
 		if name.begins_with(prefix) and FileAccess.get_file_as_bytes(file_path.get_base_dir().path_join(name)) == bytes:
 			return true
 	return false
+
+
+## Builds in town and saves at once, as after every costed action. Returns
+## [] when built, or the sim's reasons it wasn't (GameState.build).
+func build(building_id: String, cell: Vector2i) -> Array[Dictionary]:
+	if state.phase != GameState.Phase.TOWN:
+		return [{"kind": Town.Refusal.SPOT, "text": "Not in town"}]
+	var refusals: Array[Dictionary] = state.build(data, building_id, cell)
+	if refusals.is_empty():
+		save()
+	return refusals
+
+
+## Moves a building for free, and saves, so a move is never lost to a quit.
+## Returns "" when it moved, or why not.
+func move_building(uid: int, cell: Vector2i) -> String:
+	if state.phase != GameState.Phase.TOWN:
+		return "Not in town"
+	var problem: String = state.move_building(data, uid, cell)
+	if problem.is_empty():
+		save()
+	return problem
 
 
 ## "Go down" (TC-7). Returns false if it's not allowed right now.

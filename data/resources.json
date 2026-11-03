@@ -1,9 +1,9 @@
 {
 	"schema": 1,
-	"note": "Placeholder resources for the slice until the town economy (M3) names them. All amounts are whole numbers.",
+	"note": "Placeholder resources for the slice until the town economy (M3) names them. All amounts are whole numbers. found says where to get more, for the town's \"short\" lines.",
 	"items": [
-		{ "id": "driftwood", "name": "Driftwood" },
-		{ "id": "pearls", "name": "Pearls" },
-		{ "id": "koban_coins", "name": "Koban coins" }
+		{ "id": "driftwood", "name": "Driftwood", "found": "found in fights and small locks below" },
+		{ "id": "pearls", "name": "Pearls", "found": "found in fights and pearl locks below" },
+		{ "id": "koban_coins", "name": "Koban coins", "found": "found in elite fights and jackpot locks below" }
 	]
 }
