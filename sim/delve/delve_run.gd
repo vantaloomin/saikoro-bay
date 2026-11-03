@@ -15,10 +15,11 @@ extends RefCounted
 ## player can't see yet.
 ##
 ## Randomness: the map comes from its own seed (DelveMap). The run's streams
-## are seeded with the delve seed: ENEMIES picks who's in a fight room when
-## you walk in, ROLLS rolls the dice, and LOOT pays out when a room is
-## cleared. `choices` records every choice and each room's moves, so the seed,
-## the perks, the pools and the choices replay a whole delve (replay()).
+## are seeded from the delve seed and the attempt (run_seed): ENEMIES picks
+## who's in a fight room when you walk in, ROLLS rolls the dice, and LOOT
+## pays out when a room is cleared. `choices` records every choice and each
+## room's moves, so the seed, the attempt, the perks, the pools and the
+## choices replay a whole delve (replay()).
 ##
 ## Treasure, rest and rescue rooms are DiceRooms: what they pay goes into
 ## the haul, rest heals, and opening the rescue cage adds the villager. The
@@ -61,6 +62,10 @@ var reveal_rows: int = 2
 var foresight: bool = false
 
 var delve_seed: int = 0
+## How many times this delve was abandoned before (GameState.delve_attempt).
+## A retry keeps the map but rolls everything else afresh, so quitting can't
+## show you the rolls or Koban's hands ahead (Imogen's #39 audit).
+var attempt: int = 0
 var perks: Array[Dictionary] = []
 var _data: GameData
 var _rng: RngStreams
@@ -69,15 +74,16 @@ var _rng: RngStreams
 ## Starts a delve with full HP and an empty haul. `perks` is the list Fight
 ## takes ({"perk": id, "source": id}). Returns null if the data is missing.
 static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary],
-		villagers_left: Array[String], landmarks_left: Array[String]) -> DelveRun:
+		villagers_left: Array[String], landmarks_left: Array[String], attempt_number: int) -> DelveRun:
 	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice") \
 			or not Vault.can_open(data, LOADOUT, VAULT_ID):
 		return null
 	var run: DelveRun = DelveRun.new()
 	run._data = data
 	run.delve_seed = seed_value
+	run.attempt = attempt_number
 	run.perks = with_perks.duplicate(true)
-	run._rng = RngStreams.new(seed_value)
+	run._rng = RngStreams.new(run_seed(seed_value, attempt_number))
 	run.map = DelveMap.generate(data, seed_value, villagers_left, landmarks_left)
 	run.max_hp = data.row("loadouts", LOADOUT)["hp"] as int
 	run.hp = run.max_hp
@@ -92,8 +98,9 @@ static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary
 ## Rebuilds a delve from its inputs and log. Returns null if any logged
 ## move is refused (a log that doesn't match the seed, data or pools).
 static func replay(data: GameData, seed_value: int, with_perks: Array[Dictionary],
-		villagers_left: Array[String], landmarks_left: Array[String], moves: Array[Dictionary]) -> DelveRun:
-	var run: DelveRun = create(data, seed_value, with_perks, villagers_left, landmarks_left)
+		villagers_left: Array[String], landmarks_left: Array[String], moves: Array[Dictionary],
+		attempt_number: int) -> DelveRun:
+	var run: DelveRun = create(data, seed_value, with_perks, villagers_left, landmarks_left, attempt_number)
 	if run == null:
 		return null
 	for entry: Dictionary in moves:
@@ -114,6 +121,15 @@ static func replay(data: GameData, seed_value: int, with_perks: Array[Dictionary
 		if not ok:
 			return null
 	return run
+
+
+## The seed for the run's streams (ROLLS, ENEMIES, LOOT). The first attempt
+## uses the delve seed itself; a retry after an abandon hashes in the
+## attempt, with SHA-256 like GameState.delve_seed.
+static func run_seed(seed_value: int, attempt_number: int) -> int:
+	if attempt_number == 0:
+		return seed_value
+	return ("saikoro-bay:retry:%d:%d" % [seed_value, attempt_number]).sha256_text().substr(0, 15).hex_to_int()
 
 
 ## Regular enemies or the elite, in data order.

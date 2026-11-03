@@ -32,7 +32,7 @@ func _screen(run: DelveRun) -> Control:
 
 
 func _new_run(seed_value: int = 5, perks: Array[Dictionary] = []) -> DelveRun:
-	return DelveRun.create(Game.data, seed_value, perks, VILLAGERS, LANDMARKS)
+	return DelveRun.create(Game.data, seed_value, perks, VILLAGERS, LANDMARKS, 0)
 
 
 ## Plays the run with the bots up to its first landing.

@@ -77,10 +77,15 @@ func load_or_new() -> String:
 		if result.status != SaveCodec.Status.EMPTY:
 			push_warning("Save slot unreadable (%s); starting a new campaign." % SaveCodec.Status.keys()[result.status])
 		state = GameState.new(_new_campaign_seed())
+		state.arrive(data)
 	else:
+		# Load order (Imogen): the codec has migrated already, then an
+		# abandoned delve is converted, then arrival. One budget, never two.
 		state = loaded
 		if state.phase == GameState.Phase.DELVE:
 			state.finish_delve(data, Haul.ABANDONED, Haul.new())
+			save()
+		elif state.arrive(data):
 			save()
 	return scene_for_phase()
 
@@ -146,10 +151,10 @@ func swap_home(villager: String, uid: int) -> String:
 
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
 func go_down() -> bool:
-	if SceneFlow.busy or not state.start_delve():
+	if SceneFlow.busy or not state.start_delve(data):
 		return false
 	run = DelveRun.create(data, state.current_delve_seed(), state.delve_perks(data),
-		state.villagers_left(data), state.landmarks_left(data))
+		state.villagers_left(data), state.landmarks_left(data), state.delve_attempt)
 	save()
 	delve_started.emit(state.delve_count, state.current_delve_seed())
 	SceneFlow.change_half(DELVE_SCENE, TideTransition.Direction.DOWN)

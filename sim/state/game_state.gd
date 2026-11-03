@@ -19,6 +19,10 @@ var phase: Phase = Phase.TOWN
 var campaign_seed: int = 0
 ## Delves started so far. Also numbers the current delve while in one.
 var delve_count: int = 0
+## Times the current delve number was abandoned and retried. The retry has
+## the same map but fresh rolls (DelveRun.run_seed). Back to 0 on a real
+## outcome.
+var delve_attempt: int = 0
 
 var _resources: Dictionary[String, int] = {}
 ## Villagers living in town and landmarks rebuilt, in the order they came.
@@ -40,12 +44,18 @@ func _init(seed_value: int = 0) -> void:
 
 # --- Delve flow ---------------------------------------------------------------
 
-## Goes below the tide. Returns false if already in a delve.
-func start_delve() -> bool:
+## Goes below the tide ("Go down", TC-7). In the same state change, up to
+## keep_max unused actions are kept for the next visit and the rest are
+## lost (TC-3), and the actions held now are noted for an abandoned delve.
+## Returns false if already in a delve.
+func start_delve(data: GameData) -> bool:
 	if phase != Phase.TOWN:
 		return false
 	delve_count += 1
 	phase = Phase.DELVE
+	town.held_at_go_down = town.actions_left
+	town.kept = mini(_town_row(data)["keep_max"] as int, town.actions_left)
+	town.actions_left = 0
 	return true
 
 
@@ -70,8 +80,64 @@ func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
 		_landmarks.append(kept.landmark)
 	last_delve = {"delve": delve_count, "outcome": outcome, "kept": kept.to_dict()}
 	phase = Phase.TOWN
+	if outcome == Haul.ABANDONED and not town.needs_budget:
+		_undo_go_down()
+	else:
+		_set_budget(data)
+		delve_attempt = 0
 	settle_villagers(data)
 	return true
+
+
+## An abandoned delve counts as never having happened for time (Imogen's
+## town review, option 1, pending Vanta): the actions held at "Go down"
+## come back, and the next delve reuses this delve's number, so its seed
+## and map. The haul is still lost. Quitting and reloading gains nothing.
+func _undo_go_down() -> void:
+	town.actions_left = town.held_at_go_down
+	town.kept = mini(town.kept, town.actions_left)
+	town.held_at_go_down = 0
+	delve_count -= 1
+	delve_attempt += 1
+
+
+## The visit's budget (TC-1): base_actions plus the kept action, if any.
+## `kept` then counts how many of actions_left came from the last visit;
+## spending takes fresh actions first, so it's spent last.
+func _set_budget(data: GameData) -> void:
+	var town_row: Dictionary = _town_row(data)
+	town.kept = mini(town.kept, town_row["keep_max"] as int)
+	town.actions_left = (town_row["base_actions"] as int) + town.kept
+	town.held_at_go_down = 0
+	town.needs_budget = false
+
+
+## Arrival for a town with no budget yet: a new campaign, or a save from
+## before the town existed. Returns true if it set one. Coming up from a
+## delve sets the budget inside finish_delve instead, so a visit gets
+## exactly one.
+func arrive(data: GameData) -> bool:
+	if phase != Phase.TOWN or not town.needs_budget:
+		return false
+	_set_budget(data)
+	settle_villagers(data)
+	return true
+
+
+## The "Go down" button's words, which say what's lost because controller
+## and touch have no hover (spec section 1): "Go down · keep 1, 2 are lost".
+func go_down_label(data: GameData) -> String:
+	var keep: int = mini(_town_row(data)["keep_max"] as int, town.actions_left)
+	var lost: int = town.actions_left - keep
+	if keep == 0:
+		return "Go down"
+	if lost == 0:
+		return "Go down · keep %d" % keep
+	return "Go down · keep %d, %d %s lost" % [keep, lost, "is" if lost == 1 else "are"]
+
+
+static func _town_row(data: GameData) -> Dictionary:
+	return data.row("town", data.ids("town")[0])
 
 
 ## The seed for delve number `n` (1 for the first). Uses SHA-256 so it
@@ -288,6 +354,10 @@ static func _refusal(kind: Town.Refusal, text: String) -> Dictionary:
 ## layout and actions), or nothing. Game.load_or_new locks saving on any.
 func town_problems(data: GameData) -> PackedStringArray:
 	var out: PackedStringArray = town.problems(data, _villagers)
+	if phase == Phase.TOWN and town.kept > town.actions_left:
+		out.append("more actions kept than left")
+	if phase == Phase.DELVE and town.actions_left != 0:
+		out.append("actions left during a delve")
 	for building: Dictionary in town.placed:
 		if data.has_row("landmarks", building["building"]) and not _landmarks.has(building["building"]):
 			out.append("landmark \"%s\" placed but never won" % building["building"])
@@ -348,6 +418,7 @@ func to_dict() -> Dictionary:
 		"phase": Phase.keys()[phase],
 		"campaign_seed": str(campaign_seed),
 		"delve_count": delve_count,
+		"delve_attempt": delve_attempt,
 		"resources": resource_data,
 		"seen_twists": _seen_twists.duplicate(),
 		"villagers": _villagers.duplicate(),
@@ -377,6 +448,7 @@ static func migrate_to_v3(payload: Dictionary) -> Dictionary:
 	if not payload.get(PAYLOAD_KEY) is Dictionary:
 		return payload
 	(payload[PAYLOAD_KEY] as Dictionary)["town"] = Town.new().to_dict()
+	(payload[PAYLOAD_KEY] as Dictionary)["delve_attempt"] = 0
 	return payload
 
 
@@ -385,14 +457,18 @@ static func migrate_to_v3(payload: Dictionary) -> Dictionary:
 ## "seen_twists" is optional, so saves from before it existed still load.
 ## "villagers", "landmarks" and "last_delve" are required: version 2 saves
 ## always have them, and older saves get them from migrate_to_v2().
-## "town" is required too (version 3, or migrate_to_v3()). Checks against
-## the data, like whether buildings fit the map, are in town_problems().
+## "town" and "delve_attempt" are required too (version 3, or
+## migrate_to_v3()). Checks against the data, like whether buildings fit
+## the map, are in town_problems().
 static func from_dict(data: Dictionary) -> GameState:
 	var phase_name: Variant = data.get("phase")
 	if not (phase_name is String and Phase.has(phase_name)):
 		return null
 	var seed_value: Variant = data.get("campaign_seed")
 	var count: Variant = data.get("delve_count")
+	var attempt: Variant = data.get("delve_attempt")
+	if not SaveCodec.is_int_like(attempt) or SaveCodec.to_int_or(attempt, -1) < 0:
+		return null
 	var resource_data: Variant = data.get("resources", {})
 	if not SaveCodec.is_int_like(seed_value) or not seed_value is String:
 		return null
@@ -418,6 +494,7 @@ static func from_dict(data: Dictionary) -> GameState:
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
 	state.phase = Phase[phase_name as String] as Phase
 	state.delve_count = SaveCodec.to_int_or(count, 0)
+	state.delve_attempt = SaveCodec.to_int_or(attempt, 0)
 	if state.phase == Phase.DELVE and state.delve_count < 1:
 		return null
 	for id: Variant in resource_data as Dictionary:

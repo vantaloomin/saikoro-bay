@@ -26,11 +26,13 @@ var next_uid: int = 1
 ## Villager id -> uid of the home they live in. Villagers in town without
 ## an entry wait at the dock.
 var homes: Dictionary[String, int] = {}
-## Actions left this visit, kept one included.
+## Actions left this visit, kept one included. 0 during a delve.
 var actions_left: int = 0
-## How many of actions_left were kept from the last visit (drawn as a pearl).
+## In town: how many of actions_left were kept from the last visit (drawn
+## as a pearl, spent last). During a delve: the actions carried down for
+## the next visit, min(keep_max, actions left at "Go down").
 var kept: int = 0
-## The actions held at "Go down", for the abandoned-delve rule (PR 3).
+## The actions held at "Go down", given back if the delve is abandoned.
 var held_at_go_down: int = 0
 ## True until this visit's budget is set: a new campaign, or a save from
 ## before the town existed. Arrival sets it, once.
@@ -161,7 +163,7 @@ func problems(data: GameData, villagers: Array[String]) -> PackedStringArray:
 	var map: TownMap = TownMap.from_row(town_row)
 	var keep_max: int = town_row["keep_max"]
 	var most: int = (town_row["base_actions"] as int) + keep_max
-	if actions_left > most or held_at_go_down > most or kept > keep_max or kept > actions_left:
+	if actions_left > most or held_at_go_down > most or kept > keep_max:
 		out.append("actions out of range")
 	var counts: Dictionary[String, int] = {}
 	var standing: Array[Dictionary] = []

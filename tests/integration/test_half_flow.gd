@@ -13,6 +13,7 @@ func before_each() -> void:
 	Game.store = SaveStore.new(TEST_SAVE)
 	Game.store.erase()
 	Game.state = GameState.new(1234)
+	Game.state.arrive(Game.data)
 	Game.run = null
 	Game.saving_locked = false
 	Game.save_problem = ""
@@ -78,12 +79,12 @@ func test_load_or_new_resumes_the_saved_town() -> void:
 
 func test_closing_mid_delve_washes_up_with_nothing() -> void:
 	Game.state.add_resource("pearls", 3)
-	Game.state.start_delve()
+	Game.state.start_delve(Game.data)
 	Game.save()
 	Game.state = GameState.new(1)
 	assert_eq(Game.load_or_new(), Game.TOWN_SCENE, "an abandoned delve lands in town")
 	assert_eq(Game.state.phase, GameState.Phase.TOWN)
-	assert_eq(Game.state.delve_count, 1, "the delve still counts")
+	assert_eq(Game.state.delve_count, 0, "it never happened for time: the next delve reuses its seed")
 	assert_eq(Game.state.resource("pearls"), 3, "town resources are untouched")
 	assert_eq(Game.state.last_delve["outcome"], Haul.ABANDONED)
 	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
@@ -204,3 +205,42 @@ func test_a_rescued_villager_moves_into_a_free_home_before_the_save() -> void:
 	assert_eq(saved.town.homes, {"pearl_diver": 1} as Dictionary[String, int])
 	assert_eq(Game.swap_home("pearl_diver", 1), "Already lives here")
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+
+
+## Imogen's town review, finding 1: go down, quit, reload, as often as you
+## like. Actions never grow, and the map never changes.
+func test_quitting_mid_delve_never_mints_actions_or_a_new_map() -> void:
+	Game.state.town.actions_left = 3
+	Game.save()
+	var seed_before: int = Game.state.delve_seed(1)
+	for attempt: int in 3:
+		assert_true(Game.state.start_delve(Game.data))
+		assert_eq(Game.state.current_delve_seed(), seed_before, "attempt %d gets the same map" % attempt)
+		Game.save()
+		Game.state = GameState.new(1)
+		Game.load_or_new()
+		assert_eq(Game.state.town.actions_left, 3, "attempt %d: the actions held at Go down, no more" % attempt)
+		assert_eq(Game.state.town.kept, 1)
+	assert_eq(Game.state.delve_count, 0)
+
+
+func test_a_v2_save_gets_exactly_one_budget() -> void:
+	for fixture: String in ["TOWN", "DELVE"]:
+		var text: String = FileAccess.get_file_as_string("res://tests/saves/v2_cafe_two_villagers.save")
+		if fixture == "DELVE":
+			var lines: PackedStringArray = text.split("\n")
+			var body: String = lines[1].replace("\"phase\":\"TOWN\"", "\"phase\":\"DELVE\"")
+			text = JSON.stringify({"format": SaveCodec.FORMAT, "version": 2, "seq": 9,
+				"sha256": SaveCodec.digest(2, 9, body)}, "", true) + "\n" + body + "\n"
+		DirAccess.make_dir_recursive_absolute(TEST_SAVE.get_base_dir())
+		var file: FileAccess = FileAccess.open(TEST_SAVE, FileAccess.WRITE)
+		file.store_string(text)
+		file.close()
+		Game.load_or_new()
+		assert_eq(Game.state.phase, GameState.Phase.TOWN)
+		assert_eq(Game.state.last_delve["outcome"], Haul.ABANDONED if fixture == "DELVE" else Haul.CLEARED)
+		assert_eq([Game.state.town.actions_left, Game.state.town.kept], [4, 0], fixture)
+		Game.state = GameState.new(1)
+		Game.load_or_new()
+		assert_eq(Game.state.town.actions_left, 4, "%s: reloading doesn't grant another budget" % fixture)
+		Game.store.erase()

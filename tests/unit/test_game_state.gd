@@ -12,8 +12,8 @@ func test_starts_in_town() -> void:
 
 func test_delve_can_only_start_once() -> void:
 	var state: GameState = GameState.new(1)
-	assert_true(state.start_delve())
-	assert_false(state.start_delve(), "a double click can't start a second delve")
+	assert_true(state.start_delve(game_data))
+	assert_false(state.start_delve(game_data), "a double click can't start a second delve")
 	assert_eq(state.delve_count, 1)
 	assert_true(state.finish_delve(game_data, Haul.SURFACED, Haul.new()))
 	assert_false(state.finish_delve(game_data, Haul.SURFACED, Haul.new()), "banks only once")
@@ -53,7 +53,7 @@ func test_round_trip_through_a_real_save() -> void:
 	var state: GameState = GameState.new(-8070450532247928832)
 	state.add_resource("pearls", 12)
 	state.add_resource("koban", 3)
-	state.start_delve()
+	state.start_delve(game_data)
 	state.meet_twist("snake_eyes")
 	var text: String = SaveCodec.encode({GameState.PAYLOAD_KEY: state.to_dict()})
 	var decoded: SaveCodec.DecodeResult = SaveCodec.decode(text)
@@ -94,6 +94,7 @@ func test_from_dict_rejects_bad_data() -> void:
 		"numeric seed": {"campaign_seed": 5},
 		"fraction count": {"delve_count": 1.5},
 		"negative count": {"delve_count": -1},
+		"negative attempt": {"delve_attempt": -1},
 		"in a delve before any delve": {"phase": "DELVE", "delve_count": 0},
 		"fraction resource": {"resources": {"pearls": 2.5}},
 		"negative resource": {"resources": {"pearls": -2}},
@@ -112,7 +113,7 @@ func test_from_dict_rejects_bad_data() -> void:
 		var data: Dictionary = good.duplicate(true)
 		data.merge(cases[label] as Dictionary, true)
 		assert_null(GameState.from_dict(data), label)
-	for field: String in ["villagers", "landmarks", "last_delve", "town"]:
+	for field: String in ["villagers", "landmarks", "last_delve", "town", "delve_attempt"]:
 		var missing: Dictionary = good.duplicate(true)
 		missing.erase(field)
 		assert_null(GameState.from_dict(missing), "a version 3 save needs %s" % field)
@@ -132,7 +133,7 @@ func _haul() -> Haul:
 func _in_delve() -> GameState:
 	var state: GameState = GameState.new(3)
 	state.add_resource("driftwood", 2)
-	state.start_delve()
+	state.start_delve(game_data)
 	return state
 
 
@@ -169,11 +170,11 @@ func test_an_abandoned_delve_keeps_nothing() -> void:
 func test_banking_refuses_bad_calls_and_never_duplicates() -> void:
 	var state: GameState = GameState.new(3)
 	assert_false(state.finish_delve(game_data, Haul.SURFACED, _haul()), "not in a delve")
-	state.start_delve()
+	state.start_delve(game_data)
 	assert_false(state.finish_delve(game_data, "vanished", _haul()), "unknown outcome")
 	assert_eq(state.phase, GameState.Phase.DELVE)
 	assert_true(state.finish_delve(game_data, Haul.SURFACED, _haul()))
-	state.start_delve()
+	state.start_delve(game_data)
 	assert_true(state.finish_delve(game_data, Haul.CLEARED, _haul()))
 	assert_eq(state.villagers(), ["pearl_diver"] as Array[String], "never twice")
 	assert_eq(state.landmarks(), ["cafe"] as Array[String])
@@ -199,7 +200,7 @@ func test_banked_state_round_trips_through_a_save() -> void:
 
 func test_version_1_saves_upgrade_with_an_empty_town() -> void:
 	var v1: Dictionary = GameState.new(9).to_dict()
-	for field: String in ["villagers", "landmarks", "last_delve", "town"]:
+	for field: String in ["villagers", "landmarks", "last_delve", "town", "delve_attempt"]:
 		v1.erase(field)
 	v1["phase"] = "DELVE"
 	v1["delve_count"] = 2

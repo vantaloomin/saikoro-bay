@@ -14,7 +14,7 @@ func before_all() -> void:
 
 
 func _run(seed_value: int) -> DelveRun:
-	var run: DelveRun = DelveRun.create(data, seed_value, [], VILLAGERS, LANDMARKS)
+	var run: DelveRun = DelveRun.create(data, seed_value, [], VILLAGERS, LANDMARKS, 0)
 	assert_not_null(run)
 	return run
 

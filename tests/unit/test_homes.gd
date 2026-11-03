@@ -133,7 +133,7 @@ func test_moods_are_never_saved() -> void:
 func test_banking_a_delve_settles_the_rescued() -> void:
 	var state: GameState = _state()
 	state.build(data, "cottage", Vector2i(0, 0))
-	state.start_delve()
+	state.start_delve(data)
 	var haul: Haul = Haul.new()
 	haul.villagers.append("pearl_diver")
 	assert_true(state.finish_delve(data, Haul.SURFACED, haul))
@@ -167,7 +167,7 @@ func test_nobody_is_homeless_beside_an_empty_home() -> void:
 							state.town.placed[rng.randi_range(0, state.town.placed.size() - 1)]["uid"])
 				3:
 					var left: Array[String] = state.villagers_left(data)
-					state.start_delve()
+					state.start_delve(data)
 					var haul: Haul = Haul.new()
 					if not left.is_empty():
 						haul.villagers.append(left[0])
