@@ -12,8 +12,10 @@ extends RefCounted
 ## - Perks change amounts after the draws, never how many draws happen.
 
 const LOADOUT: String = "fresh"
-## Highest face a kit die may have, for from_dict's checks.
+## Bounds for from_dict's checks: a logged kit past these is malformed.
 const MAX_FACE: int = 20
+const MAX_DICE: int = 8
+const MAX_AMOUNT: int = 20
 
 ## One entry per die, in die-id order:
 ## {"type": dice row id, "faces": Array[int], "source": "" or who changed it}.
@@ -54,15 +56,16 @@ static func build(data: GameData, state: GameState) -> Kit:
 		if not data.has_row("villagers", villager):
 			continue
 		var happy: bool = state.mood(data, villager) == Town.Mood.HAPPY
-		kit.add_perk(data, str(data.row("villagers", villager)["perk"]), villager, happy)
+		if not kit.add_perk(data, str(data.row("villagers", villager)["perk"]), villager, happy):
+			return null
 	return kit
 
 
 ## Adds a perk, with its happy bonus if `happy`. Returns false for an
-## unknown perk.
+## unknown perk or one the kit already holds (a kit holds each perk once).
 func add_perk(data: GameData, perk_id: String, source: String, happy: bool = false) -> bool:
-	if not data.has_row("perks", perk_id):
-		push_error("Kit: unknown perk \"%s\" from \"%s\"" % [perk_id, source])
+	if not data.has_row("perks", perk_id) or has_perk(perk_id):
+		push_error("Kit: unknown or repeated perk \"%s\" from \"%s\"" % [perk_id, source])
 		return false
 	var row: Dictionary = data.row("perks", perk_id)
 	perks.append({
@@ -95,6 +98,15 @@ func die_specs() -> Array:
 	return out
 
 
+## An independent copy: a run keeps its own, so nothing that changes the
+## kit later reaches a delve already under way (Imogen's #49 audit).
+func copy() -> Kit:
+	var out: Kit = Kit.new()
+	out.dice = dice.duplicate(true)
+	out.perks = perks.duplicate(true)
+	return out
+
+
 ## JSON-friendly, for the playtest log and replays.
 func to_dict() -> Dictionary:
 	return {"dice": dice.duplicate(true), "perks": perks.duplicate(true)}
@@ -106,7 +118,8 @@ func to_dict() -> Dictionary:
 static func from_dict(data: GameData, d: Dictionary) -> Kit:
 	var dice_in: Variant = d.get("dice")
 	var perks_in: Variant = d.get("perks")
-	if not (dice_in is Array and perks_in is Array) or (dice_in as Array).is_empty():
+	if not (dice_in is Array and perks_in is Array) or (dice_in as Array).is_empty() \
+			or (dice_in as Array).size() > MAX_DICE:
 		return null
 	var kit: Kit = Kit.new()
 	for raw: Variant in dice_in as Array:
@@ -130,12 +143,13 @@ static func from_dict(data: GameData, d: Dictionary) -> Kit:
 			return null
 		var entry: Dictionary = raw
 		if not data.has_row("perks", str(entry.get("perk", ""))) or not entry.get("source") is String \
-				or not entry.get("happy") is bool:
+				or not entry.get("happy") is bool or kit.has_perk(str(entry["perk"])):
 			return null
 		var numbers: Array[int] = []
 		for key: String in ["amount", "uses_per_turn"]:
 			var value: Variant = entry.get(key)
-			if not (value is int or value is float) or float(value) != floorf(float(value)) or float(value) < 0.0:
+			if not (value is int or value is float) or float(value) != floorf(float(value)) \
+					or float(value) < 0.0 or float(value) > MAX_AMOUNT:
 				return null
 			numbers.append(int(value))
 		kit.perks.append({"perk": str(entry["perk"]), "source": str(entry["source"]), "amount": numbers[0],

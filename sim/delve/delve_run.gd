@@ -87,7 +87,7 @@ static func create(data: GameData, seed_value: int, with_kit: Kit,
 	run._data = data
 	run.delve_seed = seed_value
 	run.attempt = attempt_number
-	run.kit = with_kit
+	run.kit = with_kit.copy()
 	run.perks = with_kit.perks.duplicate(true)
 	run._rng = RngStreams.new(run_seed(seed_value, attempt_number))
 	run.map = DelveMap.generate(data, seed_value, villagers_left, landmarks_left)

@@ -110,6 +110,9 @@ static func create(data: GameData, loadout_id: String, vault_id: String, rng: Rn
 			vault.table.nudge_source = str(entry.get("source", ""))
 			vault.table.nudge_amount = int(entry.get("amount", nudge_row["amount"]))
 			vault.table.nudge_uses_per_turn = int(entry.get("uses_per_turn", nudge_row["uses_per_turn"]))
+			# A happy pearl diver's extra nudge counts in the vault too
+			# (Imogen's #49 audit, option a): the vault's allowance grows by it.
+			vault.nudges_per_vault += maxi(0, vault.table.nudge_uses_per_turn - int(nudge_row["uses_per_turn"]))
 			break
 	vault._start_round()
 	return vault

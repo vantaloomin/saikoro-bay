@@ -118,6 +118,11 @@ func test_from_dict_is_strict() -> void:
 		"negative amount": func(d: Dictionary) -> void: d["perks"][0]["amount"] = -1,
 		"missing happy": func(d: Dictionary) -> void: (d["perks"][0] as Dictionary).erase("happy"),
 		"perks not a list": func(d: Dictionary) -> void: d["perks"] = {},
+		"an amount past the cap": func(d: Dictionary) -> void: d["perks"][0]["amount"] = Kit.MAX_AMOUNT + 1,
+		"a repeated perk": func(d: Dictionary) -> void: (d["perks"] as Array).append((d["perks"][0] as Dictionary).duplicate()),
+		"too many dice": func(d: Dictionary) -> void:
+			for _i: int in Kit.MAX_DICE:
+				(d["dice"] as Array).append((d["dice"][0] as Dictionary).duplicate(true)),
 	}
 	for name: String in cases:
 		var bad: Dictionary = good.duplicate(true)
@@ -138,6 +143,32 @@ func test_a_delve_replays_from_its_logged_kit() -> void:
 		assert_eq(again.fight.hand.map(func(d: DiceTable.Die) -> int: return d.value),
 			run.fight.hand.map(func(d: DiceTable.Die) -> int: return d.value))
 		assert_eq(again.fight.player_block, 3)
+
+
+func test_a_happy_pearl_diver_nudges_twice_in_the_vault_too() -> void:
+	var plain: Kit = Kit.fresh(data, [{"perk": "nudge", "source": "pearl_diver"}] as Array[Dictionary])
+	var happy: Kit = Kit.fresh(data, [{"perk": "nudge", "source": "pearl_diver", "happy": true}] as Array[Dictionary])
+	var a: Vault = Vault.create(data, Kit.LOADOUT, DelveRun.VAULT_ID, RngStreams.new(3), plain.perks, Haul.new(), plain.die_specs())
+	var b: Vault = Vault.create(data, Kit.LOADOUT, DelveRun.VAULT_ID, RngStreams.new(3), happy.perks, Haul.new(), happy.die_specs())
+	assert_eq(a.nudges_per_vault, 1)
+	assert_eq(b.nudges_per_vault, 2, "the happy bonus counts in Koban's vault (Imogen's #49 audit)")
+	assert_true(b.roll())
+	assert_eq(b.table.nudges_left, 2, "and the cap doesn't cut it back")
+
+
+func test_a_kit_holds_each_perk_once() -> void:
+	assert_null(Kit.fresh(data, [{"perk": "brace", "source": "shipwright"},
+		{"perk": "brace", "source": "net_shed"}] as Array[Dictionary]))
+	assert_push_error("repeated perk \"brace\"")
+
+
+func test_a_run_keeps_its_own_copy_of_the_kit() -> void:
+	var kit: Kit = Kit.fresh(data, [{"perk": "brace", "source": "shipwright"}] as Array[Dictionary])
+	var run: DelveRun = DelveRun.create(data, 5, kit, VILLAGERS, LANDMARKS, 0)
+	kit.dice[0]["faces"] = [6, 6, 6, 6, 6, 6] as Array[int]
+	kit.perks.clear()
+	assert_eq(run.kit.dice[0]["faces"], [1, 2, 3, 4, 5, 6] as Array[int])
+	assert_true(run.kit.has_perk("brace"))
 
 
 func test_a_delve_needs_a_kit() -> void:

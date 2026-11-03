@@ -45,6 +45,10 @@ func test_bad_rows_are_reported() -> void:
 	var villagers: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",
 			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
+		{"id": "w", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
+			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
+		{"id": "x", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
+			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
 	]})
 	var data: GameData = GameData.new()
 	data.load_texts({"perks": perks, "villagers": villagers})
@@ -56,6 +60,7 @@ func test_bad_rows_are_reported() -> void:
 	assert_string_contains(all, "missing \"uses_per_turn\"")
 	assert_string_contains(all, "\"name\" must be some text")
 	assert_string_contains(all, "points to missing perks \"ghost\"")
+	assert_string_contains(all, "villagers \"x\": perk \"ok\" is already w's", "one villager per perk")
 	assert_eq(data.ids("perks"), PackedStringArray(["ok"]), "only the good row loads")
 
 
