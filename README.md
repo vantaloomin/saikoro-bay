@@ -31,6 +31,19 @@ Open the folder in the Godot 4.6 editor and press Play, or from a terminal:
 godot --path .
 ```
 
+## Checks
+
+CI runs these on every pull request. To run them locally:
+
+```
+python3 tools/lint_sim.py                                   # sim/ stays seeded and headless
+godot --headless --path . --import                          # first run only
+godot --headless --path . -s res://tools/check_scripts.gd   # every script compiles
+godot --headless --path . -s res://addons/gut/gut_cmdln.gd  # tests (GUT)
+```
+
+Tests live in `tests/` and use [GUT](https://github.com/bitwes/Gut) (vendored in `addons/gut`, MIT). In the editor, the GUT panel runs them too.
+
 ## Repository layout
 
 ```
@@ -42,6 +55,7 @@ content/adult/  Adult-only assets. Excluded from SFW builds.
 dialogue/       Dialogue and scene scripts.
 tests/          Automated tests.
 tools/          Scripts for CI, linting and the balance bot.
+addons/         Third-party Godot plugins (GUT for tests).
 .github/        PR and issue templates, labels, workflows.
 ```
 
