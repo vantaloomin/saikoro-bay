@@ -7,9 +7,17 @@ extends FightBot
 ## result of that reroll (it never sees the real one) and rerolls only if
 ## the average beats the plan in hand.
 ##
+## With Slow pour in the kit there's no discard reroll; it weighs a pour
+## the same way (keep the plan's dice placed, pour the rest) when three
+## dice or fewer would roll, so the weighing stays small.
+##
 ## It plays like a strong player, not a perfect one: it looks one turn
 ## ahead and weighs one keep set per reroll. The gap between it and
 ## GreedyBot shows how much skill the fight rewards.
+
+
+## Most dice a pour it weighs may roll.
+const POUR_DICE: int = 3
 
 
 func name() -> String:
@@ -23,6 +31,12 @@ func play_turn(fight: Fight) -> void:
 		if not reroll.is_empty() and (reroll["total_score"] as int) > (plan["score"] as int) * (reroll["total_weight"] as int):
 			_apply(fight, reroll["keep_plan"] as Dictionary)
 			fight.reroll(reroll["discard"] as int)
+			plan = best_plan(fight, true)
+	elif fight.pour_refusal().is_empty():
+		var pour: Dictionary = _reroll_option(fight, plan, true)
+		if not pour.is_empty() and (pour["total_score"] as int) > (plan["score"] as int) * (pour["total_weight"] as int):
+			_apply(fight, pour["keep_plan"] as Dictionary)
+			fight.pour()
 			plan = best_plan(fight, true)
 	_apply(fight, plan)
 
@@ -77,9 +91,10 @@ func _search(before: Fight, plan: Fight, free: Array[int], index: int, places: A
 
 ## The reroll worth weighing, or {} if there isn't one: keep the plan's
 ## placed dice, discard the lowest leftover, reroll the other leftovers.
+## A pour discards nothing and rerolls every leftover (at most POUR_DICE).
 ## Returns {"total_score", "total_weight", "discard", "keep_plan"}: the
 ## expected score is total_score / total_weight, compared without dividing.
-func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
+func _reroll_option(fight: Fight, plan: Dictionary, pour: bool = false) -> Dictionary:
 	var used: Dictionary = {}
 	for place: Variant in plan["places"] as Array:
 		used[(place as Array)[0]] = true
@@ -87,12 +102,14 @@ func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 	for d: Fight.Die in fight.hand:
 		if d.is_free() and not d.locked and not used.has(d.id):
 			leftovers.append(d)
-	if leftovers.size() < 2:
+	if leftovers.size() < (1 if pour else 2) or (pour and leftovers.size() > POUR_DICE):
 		return {}
-	var discard: Fight.Die = leftovers[0]
-	for d: Fight.Die in leftovers:
-		if d.value < discard.value:
-			discard = d
+	var discard: Fight.Die = null
+	if not pour:
+		discard = leftovers[0]
+		for d: Fight.Die in leftovers:
+			if d.value < discard.value:
+				discard = d
 	var rerolled: Array[Fight.Die] = []
 	for d: Fight.Die in leftovers:
 		if d != discard:
@@ -102,8 +119,11 @@ func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 	var keep_plan: Dictionary = {"nudge": plan["nudge"] if used.has(plan["nudge"]) else -1, "places": plan["places"]}
 	var kept: Fight = fight.planning_copy()
 	_apply(kept, keep_plan)
-	kept.hand[discard.id].discarded = true
-	kept.rerolls_left -= 1
+	if pour:
+		kept.table.pours_left -= 1
+	else:
+		kept.hand[discard.id].discarded = true
+		kept.rerolls_left -= 1
 
 	var total_weight: int = 0
 	var total_score: int = 0
@@ -119,7 +139,8 @@ func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 		var weight: int = outcome[1]
 		total_weight += weight
 		total_score += weight * (best_plan(trial, true)["score"] as int)
-	return {"total_score": total_score, "total_weight": total_weight, "discard": discard.id, "keep_plan": keep_plan}
+	return {"total_score": total_score, "total_weight": total_weight, "discard": -1 if pour else discard.id,
+		"keep_plan": keep_plan}
 
 
 func _apply(fight: Fight, plan: Dictionary) -> void:

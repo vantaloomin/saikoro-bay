@@ -26,8 +26,9 @@ const SCHEMA: int = 1
 
 const TABLES: Dictionary[String, Dictionary] = {
 	"perks": {
-		"id": "id", "name": "string", "kind": "string", "text": "string",
-		"amount": "int", "uses_per_turn": "int", "happy_amount": "int", "happy_uses_per_turn": "int",
+		"id": "id", "name": "string", "kind": "enum:die_change|defend|sustain|map|die_faces|pour|haul|add_die",
+		"text": "string", "amount": "int", "uses_per_turn": "int", "happy_amount": "int", "happy_uses_per_turn": "int",
+		"cost_amount": "int", "die": "string?",
 	},
 	"villagers": {
 		"id": "id", "role": "string", "personality": "string?", "bet_lost": "string?",
@@ -77,6 +78,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"id": "id", "name": "string", "max_count": "int", "kind": "enum:home|shop|decor|landmark", "width": "int", "height": "int",
 		"cost": "string_list", "actions": "int", "text": "string",
 		"unlock": "enum:always|buildings_placed|villager_in_town|won", "unlock_count": "int", "unlock_villager": "string?",
+		"perk": "string?",
 	},
 	"dice_rooms": {
 		"id": "ref:rooms", "slots": "ref_list:slots", "turns": "int", "rerolls_per_turn": "int",
@@ -272,13 +274,7 @@ func _check_rows() -> void:
 			errors.append("slots \"%s\": only a resource slot names a resource" % id)
 	# A slot's effect has to mean something where it's used: fights deal
 	# damage, block and heal; dice rooms heal, pay and open.
-	# One villager per perk: a kit holds each perk once (Imogen's #49 audit).
-	var perk_owner: Dictionary[String, String] = {}
-	for id: String in ids("villagers"):
-		var perk_id: String = str(row("villagers", id)["perk"])
-		if perk_owner.has(perk_id):
-			errors.append("villagers \"%s\": perk \"%s\" is already %s's" % [id, perk_id, perk_owner[perk_id]])
-		perk_owner[perk_id] = id
+	_check_perks()
 	_check_slot_effects("loadouts", ["damage", "block", "heal"])
 	_check_slot_effects("dice_rooms", ["heal", "resource", "open"])
 	_check_slot_effects("vaults", ["open"])
@@ -301,6 +297,9 @@ func _check_rows() -> void:
 		var vault_dice: Array = (vault_row["house_dice"] as Array).duplicate()
 		if has_row("loadouts", DelveRun.LOADOUT):
 			vault_dice.append_array(row("loadouts", DelveRun.LOADOUT)["dice"] as Array)
+		for perk_id: String in ids("perks"):
+			if not str(row("perks", perk_id)["die"]).is_empty():
+				vault_dice.append(row("perks", perk_id)["die"])
 		for die_id: Variant in vault_dice:
 			if has_row("dice", str(die_id)) and (row("dice", str(die_id))["faces"] as Array).any(
 					func(face: Variant) -> bool: return int(face) < 0 or int(face) > Vault.MAX_FACE):
@@ -327,6 +326,42 @@ func _check_rows() -> void:
 			errors.append("loot \"%s\": chance_percent must be 0 to 100" % id)
 		if (loot_row["min"] as int) < 0 or (loot_row["min"] as int) > (loot_row["max"] as int):
 			errors.append("loot \"%s\": needs 0 <= min <= max" % id)
+
+
+## Perks and who gives them (specs/bridge.md sections 2 and 3).
+func _check_perks() -> void:
+	for id: String in ids("perks"):
+		var perk_row: Dictionary = row("perks", id)
+		# A die_faces perk swaps die 0 for its die and an add_die perk adds
+		# its die last (Imogen's rule 3); no other perk names a die.
+		var changes_dice: bool = perk_row["kind"] in ["die_faces", "add_die"]
+		var die_id: String = perk_row["die"]
+		if changes_dice and not has_row("dice", die_id):
+			errors.append("perks \"%s\": %s needs a real die, got \"%s\"" % [id, perk_row["kind"], die_id])
+		elif not changes_dice and not die_id.is_empty():
+			errors.append("perks \"%s\": only a die_faces or add_die perk names a die" % id)
+		for field: String in ["amount", "uses_per_turn", "happy_amount", "happy_uses_per_turn", "cost_amount"]:
+			if (perk_row[field] as int) < 0:
+				errors.append("perks \"%s\": %s can't be negative" % [id, field])
+	# One giver per perk, villager or shop: a kit holds each perk once
+	# (Imogen's #49 audit). A shop gives one, and only one of it stands.
+	var perk_owner: Dictionary[String, String] = {}
+	for table: String in ["villagers", "buildings"]:
+		for id: String in ids(table):
+			var perk_id: String = str(row(table, id)["perk"])
+			if table == "buildings":
+				var building: Dictionary = row(table, id)
+				if (building["kind"] == "shop") == perk_id.is_empty():
+					errors.append("buildings \"%s\": every shop gives a perk, and nothing else does" % id)
+				if perk_id.is_empty():
+					continue
+				if not has_row("perks", perk_id):
+					errors.append("buildings \"%s\": \"perk\" points to missing perks \"%s\"" % [id, perk_id])
+				if (building["max_count"] as int) != 1:
+					errors.append("buildings \"%s\": a shop with a perk needs max_count 1" % id)
+			if perk_owner.has(perk_id):
+				errors.append("%s \"%s\": perk \"%s\" is already %s's" % [table, id, perk_id, perk_owner[perk_id]])
+			perk_owner[perk_id] = id
 
 
 ## The town map, its buildings and villagers' wishes (specs/town.md).

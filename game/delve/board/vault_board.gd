@@ -82,6 +82,8 @@ class HouseDice:
 
 var vault: Vault
 var data: GameData
+## The note under the intro on a die that sits out, or "".
+var sitting_out: String = ""
 ## The landmark's name ("Café"), for the title and the win copy.
 var prize: String = ""
 ## Room left free above the board for the haul strip.
@@ -130,10 +132,26 @@ var _panel_shown_at: int = 0
 var _finished: bool = false
 
 
-func setup(new_vault: Vault, game_data: GameData, prize_name: String = "") -> void:
+func setup(new_vault: Vault, game_data: GameData, prize_name: String = "", kit: Kit = null) -> void:
 	vault = new_vault
 	data = game_data
 	prize = prize_name
+	sitting_out = sitting_out_line(game_data, kit)
+
+
+## The intro's note on dice the vault leaves out (Imogen's #49 audit: the
+## Spare die sits out, and the card says so), or "".
+static func sitting_out_line(game_data: GameData, kit: Kit) -> String:
+	if kit == null:
+		return ""
+	for entry: Dictionary in kit.dice:
+		if entry["added"]:
+			var source: String = str(entry["source"])
+			var from: String = str(game_data.row("buildings", source)["name"]) if game_data.has_row("buildings", source) else source
+			return "Your %s from the %s sits out: Koban's table takes %d dice." % [
+				str(game_data.row("dice", str(entry["type"]))["name"]).to_lower(), from,
+				kit.dice.filter(func(d: Dictionary) -> bool: return not d["added"]).size()]
+	return ""
 
 
 func _ready() -> void:
@@ -778,6 +796,8 @@ func _build() -> void:
 	title.add_theme_font_override("font", BoardStyle.title_font())
 	head_text.add_child(title)
 	head_text.add_child(BoardStyle.label(INTRO, BoardStyle.BODY, BoardStyle.INK))
+	if not sitting_out.is_empty():
+		head_text.add_child(BoardStyle.label(sitting_out, BoardStyle.BODY, BoardStyle.INK))
 	var score: VBoxContainer = VBoxContainer.new()
 	score.alignment = BoxContainer.ALIGNMENT_CENTER
 	head_inner.add_child(score)

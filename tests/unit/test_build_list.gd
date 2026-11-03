@@ -74,7 +74,7 @@ func test_a_card_lists_every_reason_but_no_actions() -> void:
 	var card: Dictionary = BuildList.card_for(data, state, "tea_stall")
 	assert_eq(card["title"], "Tea stall")
 	assert_eq(Array(card["lines"]), [
-		"A shop. Its dice perk comes in a later update.", "Costs 1 shell + 3 driftwood + 1 pearl",
+		"A shop. Slow pour: free rerolls in fights, but only two.", "Costs 1 shell + 3 driftwood + 1 pearl",
 		"Needs 2 more driftwood (you have 1) · found in fights and small locks below",
 		"Needs 1 more pearl (you have 0) · found in fights and pearl locks below",
 	])

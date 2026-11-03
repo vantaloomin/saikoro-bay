@@ -34,13 +34,13 @@ func test_missing_row_is_empty() -> void:
 
 func test_bad_rows_are_reported() -> void:
 	var perks: String = JSON.stringify({"schema": 1, "items": [
-		{"id": "ok", "name": "Ok", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
-		{"id": "ok", "name": "Dup", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
-		{"id": "Bad Id", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
-		{"id": "frac", "name": "N", "kind": "x", "text": "t", "amount": 1.5, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
-		{"id": "typo", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "amout": 2},
-		{"id": "missing", "name": "N", "kind": "x", "text": "t", "amount": 1},
-		{"id": "blank", "name": "", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "ok", "name": "Ok", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
+		{"id": "ok", "name": "Dup", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
+		{"id": "Bad Id", "name": "N", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
+		{"id": "frac", "name": "N", "kind": "map", "text": "t", "amount": 1.5, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
+		{"id": "typo", "name": "N", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "amout": 2},
+		{"id": "missing", "name": "N", "kind": "map", "text": "t", "amount": 1},
+		{"id": "blank", "name": "", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
 	]})
 	var villagers: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",
@@ -189,3 +189,44 @@ func test_loot_is_only_for_fights() -> void:
 	var data: GameData = GameData.new()
 	data.load_texts({"loot": loot})
 	assert_string_contains(", ".join(data.errors), "\"room\" must be one of fight, elite", "treasure pays through its locks")
+
+
+func test_shop_perks_are_checked() -> void:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	var buildings: Dictionary = JSON.parse_string(texts["buildings"])
+	for item: Dictionary in buildings["items"] as Array:
+		match str(item["id"]):
+			"net_shed":
+				item["perk"] = ""
+			"tea_stall":
+				item["perk"] = "brace"
+			"boat_shed":
+				item["perk"] = "ghost"
+			"cottage":
+				item["perk"] = "chum"
+	texts["buildings"] = JSON.stringify(buildings)
+	var perks: Dictionary = JSON.parse_string(texts["perks"])
+	for item: Dictionary in perks["items"] as Array:
+		match str(item["id"]):
+			"spare_die":
+				item["die"] = ""
+			"mend":
+				item["die"] = "d6"
+			"chum":
+				item["cost_amount"] = -1
+	texts["perks"] = JSON.stringify(perks)
+	var data: GameData = GameData.new()
+	data.load_texts(texts)
+	assert_eq(data.errors, PackedStringArray([
+		"perks \"mend\": only a die_faces or add_die perk names a die",
+		"perks \"chum\": cost_amount can't be negative",
+		"perks \"spare_die\": add_die needs a real die, got \"\"",
+		"buildings \"cottage\": every shop gives a perk, and nothing else does",
+		"buildings \"cottage\": a shop with a perk needs max_count 1",
+		"buildings \"net_shed\": every shop gives a perk, and nothing else does",
+		"buildings \"tea_stall\": perk \"brace\" is already shipwright's",
+		"buildings \"bait_shop\": perk \"chum\" is already cottage's",
+		"buildings \"boat_shed\": \"perk\" points to missing perks \"ghost\"",
+	]))

@@ -3,8 +3,8 @@ extends RefCounted
 ## One dice fight (DR-1 to DR-4, DR-6, DR-8), as plain rules with no nodes.
 ##
 ## The board scene and the bot both play through the same moves: place,
-## take_back, reroll, nudge and end_turn. Each returns false and changes
-## nothing when the move isn't allowed. Nothing takes effect when a die is
+## take_back, reroll, nudge, pour (Slow pour) and end_turn. Each returns
+## false and changes nothing when the move isn't allowed. Nothing takes effect when a die is
 ## placed; end_turn() commits every slot at once, so taking a die back is
 ## always safe and every preview is exact.
 ##
@@ -41,6 +41,8 @@ enum State { PLAYER_TURN, WON, LOST }
 const NUDGE_PERK: String = "nudge"
 const BRACE_PERK: String = "brace"
 const MEND_PERK: String = "mend"
+const POUR_PERK: String = "slow_pour"
+const CHUM_PERK: String = "chum"
 
 
 ## The table's dice and slots, under their old names.
@@ -55,6 +57,8 @@ class Perk:
 	var source: String = ""
 	var amount: int = 0
 	var uses_per_turn: int = 0
+	## What it costs (Chum: this much more on every enemy attack).
+	var cost: int = 0
 
 
 var state: State = State.PLAYER_TURN
@@ -170,6 +174,7 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 		perk.source = str(entry.get("source", ""))
 		perk.amount = int(entry.get("amount", perk_row["amount"]))
 		perk.uses_per_turn = int(entry.get("uses_per_turn", perk_row["uses_per_turn"]))
+		perk.cost = int(entry.get("cost", perk_row["cost_amount"]))
 		fight._perks[perk_id] = perk
 	if fight.has_perk(NUDGE_PERK):
 		var nudge_perk: Perk = fight._perks[NUDGE_PERK]
@@ -177,6 +182,8 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 		fight.table.nudge_source = nudge_perk.source
 		fight.table.nudge_amount = nudge_perk.amount
 		fight.table.nudge_uses_per_turn = nudge_perk.uses_per_turn
+	if fight.has_perk(POUR_PERK):
+		fight.table.start_pour(POUR_PERK, fight._perks[POUR_PERK].source, fight._perks[POUR_PERK].amount)
 
 	fight.start_hp = fight.player_hp
 	fight.start_rng = rng.to_dict()
@@ -226,13 +233,19 @@ func next_intent() -> Dictionary:
 
 
 ## Rising stakes: attacks grow by 1 every turn, on top of the cycle, so
-## the n-th intent (from 0) attacks for n more. Other twists leave it as is.
+## the n-th intent (from 0) attacks for n more. Chum's cost adds to every
+## attack, as "chum" so the board can badge it. Other twists leave it as is.
 func _raised(intent: Dictionary, index: int) -> Dictionary:
-	if twist != "rising_stakes" or not intent.has("attack") or index <= 0:
+	var stakes: int = index if twist == "rising_stakes" and index > 0 else 0
+	var chum: int = _perks[CHUM_PERK].cost if has_perk(CHUM_PERK) else 0
+	if not intent.has("attack") or stakes + chum == 0:
 		return intent
 	var out: Dictionary = intent.duplicate()
-	out["attack"] = (intent["attack"] as int) + index
-	out["raised"] = index
+	out["attack"] = (intent["attack"] as int) + stakes + chum
+	if stakes > 0:
+		out["raised"] = stakes
+	if chum > 0:
+		out["chum"] = chum
 	return out
 
 
@@ -243,6 +256,11 @@ func has_perk(perk_id: String) -> bool:
 ## Who granted `perk_id` (villager or building id), or "".
 func perk_source(perk_id: String) -> String:
 	return _perks[perk_id].source if _perks.has(perk_id) else ""
+
+
+## The resolved amount of `perk_id` (Slow pour: pours per fight), or 0.
+func perk_amount(perk_id: String) -> int:
+	return _perks[perk_id].amount if _perks.has(perk_id) else 0
 
 
 func die(die_id: int) -> Die:
@@ -282,6 +300,18 @@ func reroll_refusal(discard_id: int) -> String:
 ## order (DR-2). The House lock is then recomputed.
 func reroll(discard_id: int) -> bool:
 	return state == State.PLAYER_TURN and table.reroll(discard_id)
+
+
+## Why a Slow pour isn't allowed now, or "" if it is.
+func pour_refusal() -> String:
+	if state != State.PLAYER_TURN:
+		return "The fight is over."
+	return table.pour_refusal()
+
+
+## The Tea stall's perk: rerolls every free, unlocked die with no discard.
+func pour() -> bool:
+	return state == State.PLAYER_TURN and table.pour()
 
 
 ## Pearl diver's perk: +amount to a free die, up to its highest face.
@@ -451,6 +481,8 @@ func apply_moves(log: Array[Dictionary]) -> bool:
 				ok = reroll(int(entry.get("die", -1)))
 			"nudge":
 				ok = nudge(int(entry.get("die", -1)))
+			"pour":
+				ok = pour()
 			"end_turn":
 				ok = end_turn()
 		if not ok:
@@ -516,6 +548,7 @@ func _copy() -> Fight:
 		perk.source = _perks[perk_id].source
 		perk.amount = _perks[perk_id].amount
 		perk.uses_per_turn = _perks[perk_id].uses_per_turn
+		perk.cost = _perks[perk_id].cost
 		copy._perks[perk_id] = perk
 	return copy
 
