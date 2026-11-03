@@ -24,6 +24,8 @@ var path: String = ""
 var _file: FileAccess
 var _session_start_ms: int = 0
 var _town_since_ms: int = -1
+## When the tally opened, or -1: its time isn't town time (Imogen's #58 audit).
+var _tally_since_ms: int = -1
 var _prompted_this_visit: bool = false
 
 
@@ -33,6 +35,7 @@ func _ready() -> void:
 		start_after_load(DIR.path_join(Time.get_datetime_string_from_system(true).replace(":", "").replace("T", "-") + ".jsonl"))
 	Game.delve_started.connect(_on_delve_started)
 	Game.returned_to_town.connect(_on_returned_to_town)
+	Game.tally_closed.connect(_on_tally_closed)
 
 
 ## Starts the log once Game has loaded the campaign, so session_start
@@ -114,8 +117,19 @@ func _on_delve_started(number: int, seed_value: int) -> void:
 
 func _on_returned_to_town(number: int) -> void:
 	log_event("delve_end", {"delve": number, "outcome": str(Game.state.last_delve.get("outcome", ""))})
-	_town_since_ms = Time.get_ticks_msec()
+	_tally_since_ms = Time.get_ticks_msec()
 	_prompted_this_visit = false
+
+
+## Town time starts at the tally's Continue, not when the delve ends, so
+## the M7 numbers don't count the tally as time in town.
+func _on_tally_closed(number: int) -> void:
+	var fields: Dictionary = {"delve": number}
+	if _tally_since_ms >= 0:
+		fields["tally_ms"] = Time.get_ticks_msec() - _tally_since_ms
+	log_event("tally_closed", fields)
+	_tally_since_ms = -1
+	_town_since_ms = Time.get_ticks_msec()
 
 
 func _exit_tree() -> void:

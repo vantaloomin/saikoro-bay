@@ -4,14 +4,16 @@ extends Node
 ##
 ## Autoload "Game". Saves happen only at half changes, before the transition
 ## starts: going down saves the delve as started (so reloading can't reroll
-## a delve), and coming up saves the town. SceneFlow blocks saving while the
-## transition runs.
+## a delve), and coming up saves the town as it banks, before the tally.
+## SceneFlow blocks saving while the transition runs.
 
 signal save_failed(error: Error)
 ## A delve began (after the save, as the tide starts rising).
 signal delve_started(number: int, seed_value: int)
 ## The player left delve `number` for town.
 signal returned_to_town(number: int)
+## The tally's Continue for delve `number`: the tide starts up to town.
+signal tally_closed(number: int)
 ## load_or_new has the campaign (or the test town) in place.
 signal campaign_loaded
 
@@ -37,6 +39,13 @@ var store: SaveStore:
 var saving_locked: bool = false
 ## Why saving is off or the last save failed, for the town to show, or "".
 var save_problem: String = ""
+## The last delve's settlement (GameState.settle_delve): the tally shows
+## it, and the town plays its count-up and arrivals, then clears it. Not
+## saved: a game closed mid-tally reloads in town with the haul banked.
+var settlement: Dictionary = {}
+## True from coming up until the tally's Continue: the haul is banked and
+## saved, and the delve screen shows the tally while Game.run is null.
+var tally_open: bool = false
 ## True while playing the M3 exit check's test town (FakeTown), so the
 ## notice board and the playtest log can say so.
 var fake_town: bool = false
@@ -182,6 +191,8 @@ func go_down() -> bool:
 	var kit: Kit = Kit.build(data, state)
 	if kit == null or not state.start_delve(data):
 		return false
+	settlement = {}
+	tally_open = false
 	run = DelveRun.create(data, state.current_delve_seed(), kit,
 		state.villagers_left(data), state.landmarks_left(data), state.delve_attempt)
 	save()
@@ -190,21 +201,36 @@ func go_down() -> bool:
 	return true
 
 
-## Leaves the delve for town once the run is over, banking its haul by how
-## it ended (surfaced at a landing, cleared the vault, or washed up): the
-## outcome comes from the run, never the caller. The save is written before
-## the tide starts moving, so quitting during the animation can't reload as
-## an abandoned delve. Returns false if it's not allowed right now.
+## Ends the delve once the run is over, banking its haul by how it ended
+## (surfaced at a landing, cleared the vault, or washed up): the outcome
+## comes from the run, never the caller. The save is written as it banks,
+## before the tally shows, so quitting during the tally or the tide can't
+## reload as an abandoned delve. The tide waits for leave_tally(). Returns
+## false if it's not allowed right now.
 func come_up() -> bool:
 	if SceneFlow.busy or run == null or not run.is_over():
 		return false
-	if not state.finish_delve(data, run.outcome(), run.haul):
+	var settled: Dictionary = state.settle_delve(data, run.outcome(), run.haul)
+	if settled.is_empty():
 		return false
 	run = null
+	settlement = settled
+	tally_open = true
 	var error: Error = save()
 	if error != OK and error != ERR_BUSY and not saving_locked:
 		save_problem = "Your delve was banked, but saving failed. Keep the game open and try again."
 	returned_to_town.emit(state.delve_count)
+	return true
+
+
+## The tally's Continue (specs/bridge.md section 6): the tide carries you
+## up to town, which plays the settlement's count-up and arrivals. Refused
+## with no tally open or while a transition runs.
+func leave_tally() -> bool:
+	if SceneFlow.busy or not tally_open:
+		return false
+	tally_open = false
+	tally_closed.emit(int(settlement.get("delve", state.delve_count)))
 	SceneFlow.change_half(TOWN_SCENE, TideTransition.Direction.UP)
 	return true
 

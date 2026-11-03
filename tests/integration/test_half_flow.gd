@@ -69,11 +69,24 @@ func test_come_up_returns_to_town_and_saves() -> void:
 	Game.go_down()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	assert_false(Game.come_up(), "not mid-run: only from a landing, the vault or a wash-up")
+	assert_false(Game.leave_tally(), "no tally open: a stray call can't start a tide (Imogen's #58 audit)")
+	assert_false(SceneFlow.busy)
 	Game.run.step = DelveRun.Step.SURFACED
 	assert_true(Game.come_up())
 	assert_false(Game.come_up())
+	assert_true(Game.tally_open)
+	assert_false(SceneFlow.busy, "the tide waits for the tally's Continue")
+	assert_eq(Game.settlement["outcome"], Haul.SURFACED)
+	var banked: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq(banked.phase, GameState.Phase.TOWN, "banked and saved before the tally shows")
+	assert_true(Game.leave_tally())
+	assert_false(Game.leave_tally(), "once only")
+	assert_false(Game.tally_open)
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	assert_eq(get_tree().current_scene.scene_file_path, Game.TOWN_SCENE)
+	assert_false(Game.settlement.is_empty(), "kept for the town's count-up")
+	assert_false(Game.leave_tally(), "and none from town after Continue")
+	assert_false(SceneFlow.busy, "no town-to-town tide")
 	var loaded: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
 	assert_eq(loaded.phase, GameState.Phase.TOWN)
 
@@ -214,6 +227,7 @@ func test_a_rescued_villager_moves_into_a_free_home_before_the_save() -> void:
 	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
 	assert_eq(saved.town.homes, {"pearl_diver": 1} as Dictionary[String, int])
 	assert_eq(Game.swap_home("pearl_diver", 1), "Already lives here")
+	assert_true(Game.leave_tally())
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 
 
