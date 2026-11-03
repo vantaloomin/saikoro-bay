@@ -33,6 +33,7 @@ CLAUDE.local.md
 prompts/
 *.prompt.md
 notes/
+docs/
 
 # Secrets and local env
 .env
