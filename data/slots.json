@@ -1,25 +1,25 @@
 {
 	"schema": 1,
-	"note": "Action card slots (DR-1, DR-3). Effect amount = die total x mult + add. A slot takes up to max_dice dice and fires with at least min_dice. Placeholder numbers, tuned with the bot.",
+	"note": "Action card slots (DR-1, DR-3). Effect amount = die total x mult + add. A slot takes up to max_dice dice and fires with at least min_dice. accepts: pair and three_kind match the first die, run needs consecutive numbers, sum_at_least takes any die and needs a total of at least min. A persists slot that is complete at the end of a turn keeps its dice (they leave the hand) and takes no more. Placeholder numbers, tuned with the bot.",
 	"items": [
 		{
 			"id": "strike", "name": "Strike", "text": "Deal damage equal to the die.",
-			"accepts": "any", "min": 1, "max": 6, "min_dice": 1, "max_dice": 1,
+			"accepts": "any", "min": 1, "max": 6, "min_dice": 1, "max_dice": 1, "persists": false,
 			"effect": "damage", "mult": 1, "add": 0, "icon_shape": "blade"
 		},
 		{
 			"id": "guard", "name": "Guard", "text": "Low die (1-4): gain block equal to the die + 1.",
-			"accepts": "range", "min": 1, "max": 4, "min_dice": 1, "max_dice": 1,
+			"accepts": "range", "min": 1, "max": 4, "min_dice": 1, "max_dice": 1, "persists": false,
 			"effect": "block", "mult": 1, "add": 1, "icon_shape": "shield"
 		},
 		{
 			"id": "high_roller", "name": "High Roller", "text": "High die (5-6): deal 8 damage.",
-			"accepts": "range", "min": 5, "max": 6, "min_dice": 1, "max_dice": 1,
+			"accepts": "range", "min": 5, "max": 6, "min_dice": 1, "max_dice": 1, "persists": false,
 			"effect": "damage", "mult": 0, "add": 8, "icon_shape": "crown"
 		},
 		{
 			"id": "pair_bet", "name": "Pair Bet", "text": "Two dice showing the same number: deal their total x 2.",
-			"accepts": "pair", "min": 1, "max": 6, "min_dice": 2, "max_dice": 2,
+			"accepts": "pair", "min": 1, "max": 6, "min_dice": 2, "max_dice": 2, "persists": false,
 			"effect": "damage", "mult": 2, "add": 0, "icon_shape": "twin_dice"
 		}
 	]

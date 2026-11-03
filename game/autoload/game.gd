@@ -87,12 +87,25 @@ func scene_for_phase() -> String:
 
 
 ## Copies every file of the slot aside as <name>.unloadable-<time>, so even
-## a later save can't rotate them away.
+## a later save can't rotate them away. A file already copied (same bytes)
+## isn't copied again, so relaunching doesn't pile up copies.
 func _keep_unloadable_copies() -> void:
 	var stamp: String = str(int(Time.get_unix_time_from_system()))
 	for file_path: String in [store.path, store.temp_path(), store.backup_path()]:
-		if FileAccess.file_exists(file_path):
-			DirAccess.copy_absolute(file_path, "%s.unloadable-%s" % [file_path, stamp])
+		if not FileAccess.file_exists(file_path) or _already_kept(file_path):
+			continue
+		var error: Error = DirAccess.copy_absolute(file_path, "%s.unloadable-%s" % [file_path, stamp])
+		if error != OK:
+			push_warning("Couldn't keep a copy of %s: %s" % [file_path, error_string(error)])
+
+
+static func _already_kept(file_path: String) -> bool:
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(file_path)
+	var prefix: String = file_path.get_file() + ".unloadable-"
+	for name: String in DirAccess.get_files_at(file_path.get_base_dir()):
+		if name.begins_with(prefix) and FileAccess.get_file_as_bytes(file_path.get_base_dir().path_join(name)) == bytes:
+			return true
+	return false
 
 
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
@@ -133,7 +146,9 @@ func save() -> Error:
 	if saving_locked:
 		return ERR_UNAUTHORIZED
 	var error: Error = store.write_when_ready(_build_payload)
-	if error != OK and error != ERR_BUSY:
+	if error == OK:
+		save_problem = ""
+	elif error != ERR_BUSY:
 		push_warning("Save failed: %s" % error_string(error))
 		save_failed.emit(error)
 	return error
@@ -158,6 +173,8 @@ func _on_transition_finished(_direction: TideTransition.Direction) -> void:
 
 
 func _on_deferred_write_finished(error: Error) -> void:
+	if error == OK and not saving_locked:
+		save_problem = ""
 	if error != OK:
 		push_warning("Held save failed: %s" % error_string(error))
 		save_failed.emit(error)

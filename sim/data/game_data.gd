@@ -14,6 +14,7 @@ extends RefCounted
 ##   "string"    non-empty string
 ##   "string?"   string, may be empty (for things still being written)
 ##   "int"       whole number
+##   "bool"      true or false
 ##   "int_list"  non-empty list of whole numbers
 ##   "string_list"  list of non-empty strings (may be empty)
 ##   "enum:a|b"  one of the listed words
@@ -40,8 +41,8 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"slots": {
 		"id": "id", "name": "string", "text": "string",
-		"accepts": "enum:any|range|even|odd|exact|pair",
-		"min": "int", "max": "int", "min_dice": "int", "max_dice": "int",
+		"accepts": "enum:any|range|even|odd|exact|pair|three_kind|run|sum_at_least",
+		"min": "int", "max": "int", "min_dice": "int", "max_dice": "int", "persists": "bool",
 		"effect": "enum:damage|block|heal", "mult": "int", "add": "int",
 		"icon_shape": "string",
 	},
@@ -197,6 +198,10 @@ func _read_row(where: String, item: Dictionary, fields: Dictionary) -> Variant:
 					ok = false
 				else:
 					value = SaveCodec.to_int_or(value, 0)
+			"bool":
+				if not value is bool:
+					errors.append("%s: \"%s\" must be true or false" % [where, field])
+					ok = false
 			"int_list":
 				var numbers: Variant = _int_list(value)
 				if numbers == null:
@@ -236,6 +241,10 @@ func _check_rows() -> void:
 		if (slot_row["min_dice"] as int) < 1 or (slot_row["min_dice"] as int) > (slot_row["max_dice"] as int):
 			errors.append("slots \"%s\": needs 1 <= min_dice <= max_dice, got %d and %d" % [
 				id, slot_row["min_dice"], slot_row["max_dice"]])
+		# A pair needs two dice and three of a kind three, or fewer would count.
+		var fewest: int = {"pair": 2, "three_kind": 3}.get(slot_row["accepts"], 1)
+		if (slot_row["min_dice"] as int) < fewest:
+			errors.append("slots \"%s\": %s needs min_dice of at least %d" % [id, slot_row["accepts"], fewest])
 	# Every tier needs an enemy: the map places fight and elite rooms.
 	if _tables.has("enemies"):
 		var tiers: Dictionary[String, int] = {"regular": 0, "elite": 0}
