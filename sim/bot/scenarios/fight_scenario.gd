@@ -24,7 +24,8 @@ func name() -> String:
 
 func play(rng: RngStreams) -> BotScenario.Outcome:
 	var outcome: BotScenario.Outcome = BotScenario.Outcome.new()
-	var fight: Fight = Fight.create(data, loadout_id, enemy_id, rng, perks)
+	var kit: Kit = Kit.fresh(data, perks)
+	var fight: Fight = Fight.create(data, loadout_id, enemy_id, rng, kit.perks, -1, kit.die_specs())
 	var turns: int = bot.play_fight(fight)
 	outcome.won = fight.state == Fight.State.WON
 	outcome.turns = turns if turns > 0 else fight.turn

@@ -40,9 +40,11 @@ func play(rng: RngStreams) -> BotScenario.Outcome:
 	var outcome: BotScenario.Outcome = BotScenario.Outcome.new()
 	var enemies: Array = Array(DelveRun.enemy_pool(data, "regular"))
 	var hp: int = -1
+	# The kit's dice too, so a die perk (Weighted die, Spare die) plays.
+	var kit: Kit = Kit.fresh(data, perks)
 	for i: int in fights:
 		var enemy_id: String = rng.pick(RngStreams.Stream.ENEMIES, enemies) as String
-		var fight: Fight = Fight.create(data, loadout_id, enemy_id, rng, perks, hp)
+		var fight: Fight = Fight.create(data, loadout_id, enemy_id, rng, kit.perks, hp, kit.die_specs())
 		var turns: int = bot.play_fight(fight)
 		outcome.turns += fight.turn
 		_count(outcome, "fights:" + enemy_id, 1)

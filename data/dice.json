@@ -1,8 +1,10 @@
 {
 	"schema": 1,
-	"note": "Die types. Perks and buildings will add changed faces later (KP-3).",
+	"note": "Die types. The Net shed's Weighted die and the Boat shed's d4 are shop perks (KP-3, specs/bridge.md section 3).",
 	"items": [
 		{ "id": "d6", "name": "Six-sided die", "faces": [1, 2, 3, 4, 5, 6] },
-		{ "id": "koban_d6", "name": "Koban's die", "faces": [3, 4, 4, 5, 6, 6] }
+		{ "id": "koban_d6", "name": "Koban's die", "faces": [3, 4, 4, 5, 6, 6] },
+		{ "id": "weighted_d6", "name": "Weighted die", "faces": [2, 3, 3, 4, 4, 5] },
+		{ "id": "d4", "name": "Four-sided die", "faces": [1, 2, 3, 4] }
 	]
 }

@@ -77,8 +77,8 @@ var _is_preview: bool = false
 var _preview_spent: bool = false
 
 
-## Opens the vault on `haul` (the run's own Haul). Returns null if the
-## data is missing.
+## Opens the vault on `haul` (the run's own Haul), with the kit's dice
+## (Kit.die_specs) less any added die. Returns null if the data is missing.
 static func create(data: GameData, loadout_id: String, vault_id: String, rng: RngStreams,
 		perks: Array[Dictionary], run_haul: Haul, dice: Array = []) -> Vault:
 	if not can_open(data, loadout_id, vault_id) or run_haul == null:
@@ -86,7 +86,11 @@ static func create(data: GameData, loadout_id: String, vault_id: String, rng: Rn
 	var vault_row: Dictionary = data.row("vaults", vault_id)
 	var loadout: Dictionary = data.row("loadouts", loadout_id)
 	var vault: Vault = Vault.new()
-	vault.table = DiceTable.create(data, dice if not dice.is_empty() else loadout["dice"] as Array,
+	# An added die (the Spare die) sits out: best 3 of 5 would beat best 3
+	# of 4 on every seed, a flat increase (Imogen's #49 audit).
+	var played: Array = dice.filter(func(spec: Variant) -> bool:
+		return not (spec is Dictionary and bool((spec as Dictionary).get("added", false))))
+	vault.table = DiceTable.create(data, played if not played.is_empty() else loadout["dice"] as Array,
 		vault_row["slots"] as Array, rng)
 	if vault.table == null:
 		return null

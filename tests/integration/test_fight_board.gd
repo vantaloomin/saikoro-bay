@@ -253,3 +253,21 @@ func test_the_buttons_stay_put_as_the_preview_comes_and_goes() -> void:
 	board._set_detail(false)
 	await wait_process_frames(2)
 	assert_eq(board._end_turn.global_position.y, end_y, "hiding it doesn't either")
+
+
+func test_slow_pour_rerolls_in_one_press_and_shows_what_it_costs() -> void:
+	var kit: Kit = Kit.fresh(data, [{"perk": "slow_pour", "source": "tea_stall"}] as Array[Dictionary])
+	var poured: Fight = Fight.create(data, "fresh", "snake_eyes_eel", RngStreams.new(11), kit.perks, -1, kit.die_specs())
+	var pour_board: FightBoard = BOARD.instantiate() as FightBoard
+	pour_board.setup(poured, data)
+	add_child_autofree(pour_board)
+	assert_eq(pour_board._reroll.text, "Slow pour (2 left)")
+	pour_board._on_reroll()
+	assert_eq(poured.table.pours_left, 1, "no discard to pick")
+	assert_eq(poured.moves.back(), {"move": "pour"})
+	assert_eq(pour_board._badge.text, "Tea stall · Slow pour · used 1 of 2")
+	assert_eq(pour_board._reroll.text, "Slow pour (1 left)")
+	pour_board._on_reroll()
+	assert_true(pour_board._reroll.disabled)
+	pour_board._on_reroll()
+	assert_eq(poured.moves.size(), 2, "a third press does nothing")

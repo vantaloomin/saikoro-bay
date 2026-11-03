@@ -243,3 +243,13 @@ func test_finished_fires_once() -> void:
 		_past_guard(board)
 	board._continue.pressed.emit()
 	assert_eq(count[0], 1)
+
+
+func test_the_vault_says_when_the_spare_die_sits_out() -> void:
+	var kit: Kit = Kit.fresh(data, [{"perk": "spare_die", "source": "boat_shed"}] as Array[Dictionary])
+	var vault: Vault = Vault.create(data, "fresh", "koban", RngStreams.new(3), kit.perks, _haul(), kit.die_specs())
+	var board: VaultBoard = VaultBoard.new()
+	board.setup(vault, data, "Café", kit)
+	add_child_autofree(board)
+	assert_eq(board.sitting_out, "Your four-sided die from the Boat shed sits out: Koban's table takes 4 dice.")
+	assert_eq(VaultBoard.sitting_out_line(data, Kit.fresh(data)), "", "nothing to say for the plain kit")

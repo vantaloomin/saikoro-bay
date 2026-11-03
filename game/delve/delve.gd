@@ -138,7 +138,7 @@ func _show_vault(run: DelveRun) -> void:
 	if Game.data.has_row("landmarks", landmark):
 		prize = str(Game.data.row("landmarks", landmark)["name"])
 	_vault_board = VaultBoard.new()
-	_vault_board.setup(run.vault, Game.data, prize)
+	_vault_board.setup(run.vault, Game.data, prize, run.kit)
 	_vault_board.top_inset = HaulStrip.HEIGHT
 	_vault_board.finished.connect(_on_vault_over)
 	add_child(_vault_board)

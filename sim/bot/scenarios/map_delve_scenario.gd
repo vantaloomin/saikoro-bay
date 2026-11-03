@@ -8,8 +8,9 @@ extends BotScenario
 ## Outcome: won = cleared the vault, depth = rooms played, turns = fight
 ## turns. Counters: stalemates (a fight hit the turn cap), stuck (the run
 ## couldn't go on: both must stay 0), reached_vault, cleared, washed_up, surfaced_floor_<n>,
-## rooms:<type>, hp_lost:<type>, rescued, and haul:<outcome>:<resource>
-## (what the haul held when the delve ended).
+## rooms:<type>, hp_lost:<type>, rescued, haul:<outcome>:<resource>
+## (what the haul held when the delve ended) and kept:<resource> (what the
+## town banks from it).
 ##
 ## The villager and landmark pools are a fresh campaign's (everyone still
 ## to rescue, every landmark still to win).
@@ -89,6 +90,9 @@ func play(rng: RngStreams) -> BotScenario.Outcome:
 		_count(outcome, "washed_up", 1)
 	for id: String in run.haul.resources:
 		_count(outcome, "haul:%s:%s" % [run.outcome(), id], run.haul.resources[id])
+	var kept: Haul = run.kept_haul()
+	for id: String in kept.resources:
+		_count(outcome, "kept:" + id, kept.resources[id])
 	return outcome
 
 

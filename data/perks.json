@@ -1,6 +1,6 @@
 {
 	"schema": 1,
-	"note": "Placeholder numbers. Tuned with the bot from M1 onward. happy_amount and happy_uses_per_turn are what a happy villager adds (specs/bridge.md section 4).",
+	"note": "Placeholder numbers. Tuned with the bot from M1 onward. happy_amount and happy_uses_per_turn are what a happy villager adds (specs/bridge.md section 4). cost_amount is what the perk costs (Chum: +1 enemy attack), and die is the dice row a die_faces perk puts in place of die 0 or an add_die perk adds last (specs/bridge.md section 3). Villagers give the first four, shops the rest.",
 	"items": [
 		{
 			"id": "nudge",
@@ -10,7 +10,9 @@
 			"amount": 1,
 			"uses_per_turn": 1,
 			"happy_amount": 0,
-			"happy_uses_per_turn": 1
+			"happy_uses_per_turn": 1,
+			"cost_amount": 0,
+			"die": ""
 		},
 		{
 			"id": "brace",
@@ -20,7 +22,9 @@
 			"amount": 2,
 			"uses_per_turn": 0,
 			"happy_amount": 1,
-			"happy_uses_per_turn": 0
+			"happy_uses_per_turn": 0,
+			"cost_amount": 0,
+			"die": ""
 		},
 		{
 			"id": "mend",
@@ -30,7 +34,9 @@
 			"amount": 5,
 			"uses_per_turn": 0,
 			"happy_amount": 1,
-			"happy_uses_per_turn": 0
+			"happy_uses_per_turn": 0,
+			"cost_amount": 0,
+			"die": ""
 		},
 		{
 			"id": "foresight",
@@ -40,7 +46,57 @@
 			"amount": 1,
 			"uses_per_turn": 0,
 			"happy_amount": 1,
-			"happy_uses_per_turn": 0
+			"happy_uses_per_turn": 0,
+			"cost_amount": 0,
+			"die": ""
+				},
+		{
+			"id": "weighted_die",
+			"name": "Weighted die",
+			"kind": "die_faces",
+			"text": "Your first die rolls 2, 3, 3, 4, 4 or 5. Steadier, but never a 6.",
+			"amount": 0,
+			"uses_per_turn": 0,
+			"happy_amount": 0,
+			"happy_uses_per_turn": 0,
+			"cost_amount": 0,
+			"die": "weighted_d6"
+		},
+		{
+			"id": "slow_pour",
+			"name": "Slow pour",
+			"kind": "pour",
+			"text": "In fights, reroll without spending a die, twice per fight. It replaces the usual reroll.",
+			"amount": 2,
+			"uses_per_turn": 0,
+			"happy_amount": 0,
+			"happy_uses_per_turn": 0,
+			"cost_amount": 0,
+			"die": ""
+		},
+		{
+			"id": "chum",
+			"name": "Chum",
+			"kind": "haul",
+			"text": "Treasure rooms pay 1 more of each resource they pay, but every enemy hits 1 harder.",
+			"amount": 1,
+			"uses_per_turn": 0,
+			"happy_amount": 0,
+			"happy_uses_per_turn": 0,
+			"cost_amount": 1,
+			"die": ""
+		},
+		{
+			"id": "spare_die",
+			"name": "Spare die",
+			"kind": "add_die",
+			"text": "Take a fifth die down, a d4. It sits out of Koban's vault.",
+			"amount": 0,
+			"uses_per_turn": 0,
+			"happy_amount": 0,
+			"happy_uses_per_turn": 0,
+			"cost_amount": 0,
+			"die": "d4"
 		}
 	]
 }

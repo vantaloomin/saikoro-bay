@@ -102,10 +102,12 @@ func _initialize() -> void:
 	quit(1 if failed else 0)
 
 
+## Who gives `perk_id`: a villager or a shop.
 static func _villager_for(data: GameData, perk_id: String) -> String:
-	for villager: String in data.ids("villagers"):
-		if data.row("villagers", villager)["perk"] == perk_id:
-			return villager
+	for table: String in ["villagers", "buildings"]:
+		for id: String in data.ids(table):
+			if data.row(table, id)["perk"] == perk_id:
+				return id
 	return ""
 
 

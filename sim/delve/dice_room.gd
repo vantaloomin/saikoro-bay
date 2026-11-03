@@ -12,7 +12,8 @@ extends RefCounted
 ##
 ## end_turn() runs one fixed pipeline:
 ##   1. complete slots that aren't already open resolve in card order:
-##      heal (capped at max HP), resource (into `payout`), open (nothing
+##      heal (capped at max HP), resource (into `payout`, plus Chum's
+##      extra in a treasure room), open (nothing
 ##      now: a persistent slot stays open from here on)
 ##   2. success check: an open_all room succeeds once every slot is open,
 ##      and ends there
@@ -27,6 +28,9 @@ extends RefCounted
 enum State { PLAYER_TURN, DONE, LOST }
 
 const NUDGE_PERK: String = "nudge"
+## The Bait shop's perk, and the room it pays more in.
+const CHUM_PERK: String = "chum"
+const CHUM_ROOM: String = "treasure"
 
 const Die = DiceTable.Die
 const Slot = DiceTable.Slot
@@ -44,6 +48,12 @@ var hp: int = 0
 var max_hp: int = 0
 ## What the room has paid so far: {resource id: amount}.
 var payout: Dictionary[String, int] = {}
+## Chum: this much more of each resource a slot pays here, and who gave it.
+var chum_amount: int = 0
+var chum_source: String = ""
+## Resources Chum has already added to in this room: once per room, as the
+## spec says, even if locks paying one resource open on different turns.
+var chummed: Array[String] = []
 
 var table: DiceTable
 var events: Array[Dictionary] = []
@@ -88,7 +98,9 @@ static func create(data: GameData, loadout_id: String, room_ref: String, rng: Rn
 			room.table.nudge_source = str(entry.get("source", ""))
 			room.table.nudge_amount = int(entry.get("amount", nudge_row["amount"]))
 			room.table.nudge_uses_per_turn = int(entry.get("uses_per_turn", nudge_row["uses_per_turn"]))
-			break
+		elif str(entry.get("perk", "")) == CHUM_PERK and room_ref == CHUM_ROOM and data.has_row("perks", CHUM_PERK):
+			room.chum_amount = int(entry.get("amount", data.row("perks", CHUM_PERK)["amount"]))
+			room.chum_source = str(entry.get("source", ""))
 	room.start_hp = room.hp
 	room.start_rng = rng.to_dict()
 	room._start_turn()
@@ -175,6 +187,7 @@ func end_turn() -> bool:
 		moves.append({"move": "end_turn"})
 
 	# 1. Slots, in card order.
+	var paid: Array[String] = []
 	for s: Slot in slots:
 		if s.sealed or not s.is_complete():
 			continue
@@ -189,8 +202,20 @@ func end_turn() -> bool:
 				if amount > 0:
 					payout[resource_id] = payout.get(resource_id, 0) + amount
 					events.append({"type": "loot", "resource": resource_id, "amount": amount, "source": "slot:" + s.id})
+					if not paid.has(resource_id):
+						paid.append(resource_id)
 			"open":
 				events.append({"type": "open", "source": "slot:" + s.id})
+	# Chum: once per resource the room pays, however many locks pay it,
+	# after the draws and an amount only (Imogen's rule 5 and #50 audit).
+	if chum_amount > 0:
+		for resource_id: String in paid:
+			if chummed.has(resource_id):
+				continue
+			chummed.append(resource_id)
+			payout[resource_id] += chum_amount
+			events.append({"type": "perk", "perk": CHUM_PERK, "source": chum_source,
+				"resource": resource_id, "amount": chum_amount})
 
 	# 2. Success.
 	if open_all and open_count() == slots.size():
@@ -254,6 +279,9 @@ func planning_copy() -> DiceRoom:
 	copy.hp = hp
 	copy.max_hp = max_hp
 	copy.payout = payout.duplicate()
+	copy.chum_amount = chum_amount
+	copy.chum_source = chum_source
+	copy.chummed = chummed.duplicate()
 	copy.table = table.copy(copy.events, copy.moves)
 	copy.start_rng = start_rng.duplicate(true)
 	copy.start_hp = start_hp

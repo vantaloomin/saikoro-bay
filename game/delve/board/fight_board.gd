@@ -9,6 +9,7 @@ extends Control
 ##   right-click / B on a slot or placed die     take back
 ##   X or the "+1" button with a die selected    Nudge
 ##   R or Reroll, pick the discard, confirm      reroll (two steps)
+##   R or Slow pour (Tea stall's perk)          reroll every free die, no discard
 ##   Y, Space or End turn                        commit (hover shows the result)
 ## Clicking or pressing A during resolution fast-forwards it.
 
@@ -259,6 +260,18 @@ func _on_nudge() -> void:
 func _on_reroll() -> void:
 	if _busy:
 		return
+	if fight.table.is_pouring():
+		var refusal: String = fight.pour_refusal()
+		if not refusal.is_empty():
+			_say(refusal, true)
+			return
+		_selected = -1
+		fight.pour()
+		_roll_sound()
+		_say("", false)
+		_refresh_all()
+		_show_badge(fight.events.back())
+		return
 	if not _reroll_mode:
 		if fight.rerolls_left <= 0:
 			_say("No rerolls left this turn.", true)
@@ -368,6 +381,9 @@ func _show_badge(event: Dictionary) -> void:
 			what = "+%d block" % event["amount"]
 		Fight.MEND_PERK:
 			what = "+%d HP" % event["amount"]
+		Fight.POUR_PERK:
+			var uses: int = fight.perk_amount(Fight.POUR_PERK)
+			what = "Slow pour · used %d of %d" % [uses - int(event["left"]), uses]
 	_badge.text = "%s · %s" % [_source_name(str(event["source"])), what]
 	_badge.visible = true
 
@@ -375,6 +391,8 @@ func _show_badge(event: Dictionary) -> void:
 func _source_name(source: String) -> String:
 	if data != null and data.has_row("villagers", source):
 		return str(data.row("villagers", source)["role"])
+	if data != null and data.has_row("buildings", source):
+		return str(data.row("buildings", source)["name"])
 	return source.capitalize()
 
 
@@ -417,7 +435,10 @@ func _refresh_all() -> void:
 
 	_reroll.visible = true
 	_reroll.disabled = fight.rerolls_left <= 0 and not _reroll_mode
-	if _reroll_mode:
+	if fight.table.is_pouring():
+		_reroll.disabled = fight.table.pours_left <= 0
+		_reroll.text = "Slow pour (%d left)" % fight.table.pours_left
+	elif _reroll_mode:
 		var others: int = 0
 		for d: Fight.Die in fight.hand:
 			if d.is_free() and not d.locked and d.id != _reroll_discard:

@@ -31,6 +31,7 @@ func test_a_fresh_kit_is_the_loadout() -> void:
 		assert_eq(entry["type"], "d6")
 		assert_eq(entry["faces"], [1, 2, 3, 4, 5, 6] as Array[int])
 		assert_eq(entry["source"], "")
+		assert_false(entry["added"])
 	assert_true(kit.perks.is_empty())
 
 
@@ -103,6 +104,18 @@ func test_a_kit_survives_json_exactly() -> void:
 	assert_eq(again.dice[0]["faces"], [2, 3, 3, 4, 4, 5] as Array[int], "faces come back as ints")
 
 
+func test_a_kit_with_shop_dice_survives_json_and_keeps_added_last() -> void:
+	var kit: Kit = Kit.fresh(data, [{"perk": "spare_die", "source": "boat_shed"},
+		{"perk": "weighted_die", "source": "net_shed"}, {"perk": "chum", "source": "bait_shop"}] as Array[Dictionary])
+	var logged: Dictionary = JSON.parse_string(JSON.stringify(kit.to_dict()))
+	var again: Kit = Kit.from_dict(data, logged)
+	assert_eq(again.to_dict(), kit.to_dict())
+	assert_eq(again.dice.map(func(entry: Dictionary) -> bool: return entry["added"]), [false, false, false, false, true])
+	assert_eq(again.perk("chum")["cost"], 1)
+	(logged["dice"] as Array).push_front((logged["dice"] as Array).pop_back())
+	assert_null(Kit.from_dict(data, logged), "an added die can't jump the queue")
+
+
 func test_from_dict_is_strict() -> void:
 	var good: Dictionary = JSON.parse_string(JSON.stringify(Kit.fresh(data,
 		[{"perk": "brace", "source": "shipwright"}] as Array[Dictionary]).to_dict()))
@@ -114,6 +127,10 @@ func test_from_dict_is_strict() -> void:
 		"a fractional face": func(d: Dictionary) -> void: d["dice"][0]["faces"][0] = 2.5,
 		"no faces": func(d: Dictionary) -> void: d["dice"][0]["faces"] = [],
 		"missing source": func(d: Dictionary) -> void: (d["dice"][0] as Dictionary).erase("source"),
+		"missing added": func(d: Dictionary) -> void: (d["dice"][0] as Dictionary).erase("added"),
+		"added not a bool": func(d: Dictionary) -> void: d["dice"][0]["added"] = 1,
+		"an added die before a loadout die": func(d: Dictionary) -> void: d["dice"][0]["added"] = true,
+		"missing cost": func(d: Dictionary) -> void: (d["perks"][0] as Dictionary).erase("cost"),
 		"unknown perk": func(d: Dictionary) -> void: d["perks"][0]["perk"] = "ghost",
 		"negative amount": func(d: Dictionary) -> void: d["perks"][0]["amount"] = -1,
 		"missing happy": func(d: Dictionary) -> void: (d["perks"][0] as Dictionary).erase("happy"),

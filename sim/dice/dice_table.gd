@@ -120,6 +120,11 @@ var nudge_uses_per_turn: int = 0
 var nudge_amount: int = 0
 var nudge_perk: String = ""
 var nudge_source: String = ""
+## Slow pour (start_pour): rerolls with no discard, `pours_left` for the
+## whole room. reset_turn leaves it alone. It replaces the normal reroll.
+var pours_left: int = 0
+var pour_perk: String = ""
+var pour_source: String = ""
 
 ## The owner's logs, shared by reference.
 var events: Array[Dictionary] = []
@@ -173,6 +178,22 @@ func slot(slot_id: String) -> Slot:
 
 func can_roll() -> bool:
 	return _rng != null
+
+
+## Swaps the normal reroll for the Slow pour: `uses` rerolls with no
+## discard for the whole room, and no discard rerolls (Imogen's bridge
+## review: on top of the reroll it would be a flat increase). Call before
+## the first turn, after rerolls_per_turn is set.
+func start_pour(perk_id: String, source: String, uses: int) -> void:
+	pour_perk = perk_id
+	pour_source = source
+	pours_left = uses
+	rerolls_per_turn = 0
+	rerolls_left = 0
+
+
+func is_pouring() -> bool:
+	return not pour_perk.is_empty()
 
 
 # --- Turn -----------------------------------------------------------------------
@@ -291,6 +312,8 @@ func take_back(die_id: int) -> bool:
 ## Why rerolling by discarding `discard_id` isn't allowed, or "" if it is.
 func reroll_refusal(discard_id: int) -> String:
 	var d: Die = die(discard_id)
+	if is_pouring():
+		return "Slow pour replaces the reroll: no die to spend."
 	if rerolls_left <= 0:
 		return "No rerolls left this turn."
 	if d == null or not d.is_free():
@@ -318,6 +341,36 @@ func reroll(discard_id: int) -> bool:
 			rerolled.append(other.id)
 	events.append({"type": "reroll", "discarded": discard_id, "dice": rerolled})
 	moves.append({"move": "reroll", "die": discard_id})
+	apply_lock()
+	return true
+
+
+## Why a Slow pour isn't allowed now, or "" if it is.
+func pour_refusal() -> String:
+	if not is_pouring():
+		return "No Slow pour in this kit."
+	if pours_left <= 0:
+		return "No pours left this fight."
+	if _rng == null:
+		return "Planning copies can't reroll."
+	if rerollable_count() < 1:
+		return "Nothing left to reroll."
+	return ""
+
+
+## Slow pour: rerolls every free, unlocked die, in die-id order, with no
+## die spent. The lock policy then runs again, as after a reroll.
+func pour() -> bool:
+	if not pour_refusal().is_empty():
+		return false
+	pours_left -= 1
+	var rerolled: Array[int] = []
+	for d: Die in hand:
+		if d.is_free() and not d.locked:
+			d.value = _roll(d)
+			rerolled.append(d.id)
+	events.append({"type": "pour", "perk": pour_perk, "source": pour_source, "dice": rerolled, "left": pours_left})
+	moves.append({"move": "pour"})
 	apply_lock()
 	return true
 
@@ -394,6 +447,9 @@ func copy(into_events: Array[Dictionary], into_moves: Array[Dictionary]) -> Dice
 	t.nudge_amount = nudge_amount
 	t.nudge_perk = nudge_perk
 	t.nudge_source = nudge_source
+	t.pours_left = pours_left
+	t.pour_perk = pour_perk
+	t.pour_source = pour_source
 	t.events = into_events
 	t.moves = into_moves
 	for d: Die in hand:
