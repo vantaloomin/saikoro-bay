@@ -74,7 +74,7 @@ var _rng: RngStreams
 ## Starts a delve with full HP and an empty haul. `perks` is the list Fight
 ## takes ({"perk": id, "source": id}). Returns null if the data is missing.
 static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary],
-		villagers_left: Array[String], landmarks_left: Array[String], attempt_number: int = 0) -> DelveRun:
+		villagers_left: Array[String], landmarks_left: Array[String], attempt_number: int) -> DelveRun:
 	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice") \
 			or not Vault.can_open(data, LOADOUT, VAULT_ID):
 		return null
@@ -99,7 +99,7 @@ static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary
 ## move is refused (a log that doesn't match the seed, data or pools).
 static func replay(data: GameData, seed_value: int, with_perks: Array[Dictionary],
 		villagers_left: Array[String], landmarks_left: Array[String], moves: Array[Dictionary],
-		attempt_number: int = 0) -> DelveRun:
+		attempt_number: int) -> DelveRun:
 	var run: DelveRun = create(data, seed_value, with_perks, villagers_left, landmarks_left, attempt_number)
 	if run == null:
 		return null
