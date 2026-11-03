@@ -12,6 +12,8 @@ signal save_failed(error: Error)
 signal delve_started(number: int, seed_value: int)
 ## The player left delve `number` for town.
 signal returned_to_town(number: int)
+## The tally's Continue for delve `number`: the tide starts up to town.
+signal tally_closed(number: int)
 ## load_or_new has the campaign (or the test town) in place.
 signal campaign_loaded
 
@@ -228,6 +230,7 @@ func leave_tally() -> bool:
 	if SceneFlow.busy or not tally_open:
 		return false
 	tally_open = false
+	tally_closed.emit(int(settlement.get("delve", state.delve_count)))
 	SceneFlow.change_half(TOWN_SCENE, TideTransition.Direction.UP)
 	return true
 

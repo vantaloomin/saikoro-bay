@@ -69,6 +69,8 @@ func test_come_up_returns_to_town_and_saves() -> void:
 	Game.go_down()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	assert_false(Game.come_up(), "not mid-run: only from a landing, the vault or a wash-up")
+	assert_false(Game.leave_tally(), "no tally open: a stray call can't start a tide (Imogen's #58 audit)")
+	assert_false(SceneFlow.busy)
 	Game.run.step = DelveRun.Step.SURFACED
 	assert_true(Game.come_up())
 	assert_false(Game.come_up())
@@ -83,6 +85,8 @@ func test_come_up_returns_to_town_and_saves() -> void:
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	assert_eq(get_tree().current_scene.scene_file_path, Game.TOWN_SCENE)
 	assert_false(Game.settlement.is_empty(), "kept for the town's count-up")
+	assert_false(Game.leave_tally(), "and none from town after Continue")
+	assert_false(SceneFlow.busy, "no town-to-town tide")
 	var loaded: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
 	assert_eq(loaded.phase, GameState.Phase.TOWN)
 
