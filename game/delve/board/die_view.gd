@@ -118,8 +118,13 @@ func _draw() -> void:
 		face = BoardStyle.DIM
 	BoardStyle.draw_die(self, rect, value, face)
 	if locked:
-		draw_rect(rect, Color(0, 0, 0, 0.45))
-		BoardStyle.draw_padlock(self, rect)
+		# Lightly greyed so the pips still show what it is; the padlock sits
+		# in a corner badge, like the bite tag, instead of over the pips.
+		draw_rect(rect, Color(0, 0, 0, 0.25))
+		var badge: Rect2 = Rect2(rect.position - Vector2(14, 14), Vector2(36, 36))
+		draw_rect(badge, BoardStyle.LACQUER)
+		draw_rect(badge, BoardStyle.DANGER, false, 2.0)
+		BoardStyle.draw_padlock(self, badge.grow(4))
 	if discarded:
 		# Dark under red, so the cross reads in greyscale too.
 		for pass_color: Color in [BoardStyle.LACQUER, BoardStyle.DANGER]:
@@ -129,7 +134,7 @@ func _draw() -> void:
 	if bite_marker:
 		var font: Font = get_theme_default_font()
 		draw_rect(Rect2(rect.end.x - 40, rect.position.y - 6, 46, 30), BoardStyle.DANGER)
-		draw_string(font, Vector2(rect.end.x - 36, rect.position.y + 18), "-1", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, BoardStyle.INK)
+		draw_string(font, Vector2(rect.end.x - 36, rect.position.y + 18), "-1", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, BoardStyle.LACQUER)
 	if selected:
 		BoardStyle.draw_brackets(self, rect, BoardStyle.GOLD, 10.0)
 	elif has_focus() or is_hovered():
