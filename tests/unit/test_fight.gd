@@ -38,7 +38,7 @@ func _fight(enemy: String = "card_shark", perks: Array[Dictionary] = [], seed_va
 func _set_hand(fight: Fight, values: Array[int]) -> void:
 	for i: int in values.size():
 		fight.hand[i].value = values[i]
-	fight._apply_house_lock()
+	fight.table.apply_lock()
 	fight.events.clear()
 
 
@@ -165,7 +165,7 @@ func test_reroll_spends_the_discard_and_rerolls_the_free_dice_in_id_order() -> v
 	_set_hand(fight, [3, 3, 3, 3])
 	fight.place(1, "strike")
 	var expected_rng: RngStreams = RngStreams.new()
-	expected_rng.load_dict(fight._rng.to_dict())
+	expected_rng.load_dict(fight.table._rng.to_dict())
 	var expected: Array[int] = []
 	for i: int in 2:
 		expected.append(fight.hand[0].faces[expected_rng.index(RngStreams.Stream.ROLLS, 6)])
@@ -437,9 +437,9 @@ func test_end_turn_preview_is_exact_and_moves_nothing() -> void:
 	for seed_value: int in 20:
 		var fight: Fight = _fight("snake_eyes_eel", [{"perk": "brace", "source": "shipwright"}], seed_value)
 		_play_greedy_turn(fight)
-		var rng_before: Dictionary = fight._rng.to_dict()
+		var rng_before: Dictionary = fight.table._rng.to_dict()
 		var preview: Dictionary = fight.preview_end_turn()
-		assert_eq(fight._rng.to_dict(), rng_before, "preview leaves the real RNG alone")
+		assert_eq(fight.table._rng.to_dict(), rng_before, "preview leaves the real RNG alone")
 		assert_eq(fight.turn, 1)
 		var before: int = fight.events.size()
 		fight.end_turn()
@@ -512,7 +512,11 @@ func test_planning_copy_matches_the_fight_and_cant_roll() -> void:
 	fight.nudge(0)
 	var copy: Fight = fight.planning_copy()
 	var skip: Array[String] = ["events", "moves", "_rng", "_is_preview"]
-	assert_eq(_vars(copy, skip), _vars(fight, skip), "every field is copied")
+	assert_eq(_vars(copy, skip), _vars(fight, skip), "every field is copied, the dice table's too")
+	assert_true(copy.table.events == copy.events and is_same(copy.table.events, copy.events), "one event log per room")
+	assert_true(is_same(copy.table.moves, copy.moves), "one move log per room")
+	assert_false(is_same(copy.table.hand, fight.table.hand), "dice aren't shared")
+	assert_false(copy.table.can_roll())
 	assert_eq(copy.reroll_refusal(3), "Planning copies can't reroll.")
 	assert_true(copy.end_turn())
 	assert_eq(copy.turn, fight.turn, "a planning copy stops before the next roll")
@@ -520,24 +524,25 @@ func test_planning_copy_matches_the_fight_and_cant_roll() -> void:
 	assert_eq(fight._perks["brace"].amount, 2, "perks aren't shared")
 
 
-## Script variables of `value`, recursing into objects, arrays and dictionaries.
+## Script variables of `value`, recursing into objects, arrays and
+## dictionaries. `skip` names are left out at every depth.
 func _vars(value: Variant, skip: Array[String] = []) -> Variant:
 	if value is Object:
 		var out: Dictionary = {}
 		for prop: Dictionary in (value as Object).get_property_list():
 			var prop_name: String = prop["name"]
 			if (prop["usage"] as int) & PROPERTY_USAGE_SCRIPT_VARIABLE and not prop_name in skip:
-				out[prop_name] = _vars((value as Object).get(prop_name))
+				out[prop_name] = _vars((value as Object).get(prop_name), skip)
 		return out
 	if value is Array:
 		var items: Array = []
 		for item: Variant in value as Array:
-			items.append(_vars(item))
+			items.append(_vars(item, skip))
 		return items
 	if value is Dictionary:
 		var entries: Dictionary = {}
 		for key: Variant in value as Dictionary:
-			entries[key] = _vars((value as Dictionary)[key])
+			entries[key] = _vars((value as Dictionary)[key], skip)
 		return entries
 	return value
 
@@ -602,7 +607,8 @@ func test_shipped_enemies_and_kits_are_playable() -> void:
 		assert_eq(Fight.intent_errors(shipped.row("enemies", enemy)), PackedStringArray(), enemy)
 	for slot_id: String in shipped.ids("slots"):
 		var row: Dictionary = shipped.row("slots", slot_id)
-		assert_between(row["dice_needed"] as int, 1, 4, slot_id)
+		assert_between(row["min_dice"] as int, 1, 4, slot_id)
+		assert_between(row["max_dice"] as int, row["min_dice"] as int, 4, slot_id)
 		assert_true((row["min"] as int) <= (row["max"] as int), slot_id)
 	for loadout: String in shipped.ids("loadouts"):
 		assert_gt((shipped.row("loadouts", loadout)["hp"] as int), 0, loadout)

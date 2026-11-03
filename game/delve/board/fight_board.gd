@@ -186,7 +186,7 @@ func _on_slot_pressed(slot_id: String) -> void:
 		var card: SlotCard = _slot_cards[slot_id]
 		card.preview_text = reason
 		card.preview_tone = "error"
-		_pulse(card, fight.slot(slot_id).dice.size() >= fight.slot(slot_id).needed())
+		_pulse(card, fight.slot(slot_id).dice.size() >= fight.slot(slot_id).max_dice())
 		_sounds.play("invalid")
 		return
 	PlaytestLog.log_event("place", {"die": _selected, "slot": slot_id, "hover_ms": Time.get_ticks_msec() - _selected_at_ms})
@@ -670,7 +670,7 @@ func _build() -> void:
 		card.order = order
 		card.title = str(s.row["name"])
 		card.rule_text = str(s.row["text"])
-		card.sockets = s.needed()
+		card.sockets = s.max_dice()
 		card.is_pair = s.row["accepts"] == "pair"
 		for face: int in 6:
 			card.accepted[face] = _accepts_face(s.row, face + 1)

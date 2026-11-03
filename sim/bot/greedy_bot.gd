@@ -20,7 +20,7 @@ func play_turn(fight: Fight) -> void:
 		var best_slot: String = ""
 		var best_value: int = 0
 		for s: Fight.Slot in fight.slots:
-			if s.needed() > 1:
+			if s.max_dice() > 1:
 				continue
 			var preview: Dictionary = fight.preview(d.id, s.id)
 			if not preview["ok"]:

@@ -52,6 +52,8 @@ godot --headless --path . -s res://tools/run_bot.gd -- --bot=planner --seeds=500
 godot --headless --path . -s res://tools/run_bot.gd -- --scenario=fight --enemy=hermit_croupier
 ```
 
+`tests/golden/` holds golden fights: 630 bot fights recorded move by move, with hashes of their events, end state and board previews. The fight rules must reproduce them exactly, so a refactor can't change how fights play unnoticed. Regenerate them with `tools/make_golden_fights.gd` only for a change meant to alter fights, and say so in the PR.
+
 Tests live in `tests/` and use [GUT](https://github.com/bitwes/Gut) (vendored in `addons/gut`, MIT). In the editor, the GUT panel runs them too.
 
 ## Builds

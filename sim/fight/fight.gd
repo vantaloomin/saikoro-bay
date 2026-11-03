@@ -21,6 +21,10 @@ extends RefCounted
 ##      now, so it protects during the turn it's shown), roll in die-id
 ##      order, House lock on the highest die (lowest id on ties)
 ##
+## The dice (hand, slots, per-turn counters and the moves on them) live in
+## a DiceTable that the fight owns, shared with the other dice rooms. The
+## fight owns HP, the enemy and what each slot does when the turn ends.
+##
 ## Randomness: rolls use the ROLLS stream and nothing else draws during a
 ## fight. Previews and planning copies run the same pipeline on a copy with
 ## no dice streams, so they can't drift from what really happens, can't
@@ -38,37 +42,9 @@ const BRACE_PERK: String = "brace"
 const MEND_PERK: String = "mend"
 
 
-class Die:
-	extends RefCounted
-	var id: int = 0
-	var type_id: String = ""
-	var faces: Array[int] = []
-	var value: int = 0
-	## The enemy's twist stops this die being placed this turn.
-	var locked: bool = false
-	## Spent to pay for a reroll this turn.
-	var discarded: bool = false
-	## Slot it's planned for this turn, or "".
-	var slot_id: String = ""
-
-	func max_face() -> int:
-		return faces.max() as int
-
-	func is_free() -> bool:
-		return slot_id.is_empty() and not discarded
-
-
-class Slot:
-	extends RefCounted
-	var id: String = ""
-	var row: Dictionary = {}
-	var dice: Array[int] = []
-
-	func needed() -> int:
-		return row["dice_needed"] as int
-
-	func is_complete() -> bool:
-		return dice.size() == needed()
+## The table's dice and slots, under their old names.
+const Die = DiceTable.Die
+const Slot = DiceTable.Slot
 
 
 class Perk:
@@ -95,10 +71,26 @@ var enemy_block: int = 0
 var twist: String = "none"
 var intent_index: int = 0
 
-var hand: Array[Die] = []
-var slots: Array[Slot] = []
-var rerolls_left: int = 0
-var nudges_left: int = 0
+## The dice. Its event and move logs are this fight's, so table moves and
+## fight moves form one sequence.
+var table: DiceTable
+
+var hand: Array[Die]:
+	get:
+		return table.hand
+var slots: Array[Slot]:
+	get:
+		return table.slots
+var rerolls_left: int:
+	get:
+		return table.rerolls_left
+	set(value):
+		table.rerolls_left = value
+var nudges_left: int:
+	get:
+		return table.nudges_left
+	set(value):
+		table.nudges_left = value
 
 ## The RNG state and HP the fight started with, before the first roll.
 ## With the move log, this replays any fight of a delve, not just the first.
@@ -109,8 +101,6 @@ var events: Array[Dictionary] = []
 ## Every accepted move, in order: {"move": "place", "die": 0, "slot": "strike"}...
 var moves: Array[Dictionary] = []
 
-var _rng: RngStreams
-var _rerolls_per_turn: int = 0
 var _unused_die_block: int = 0
 ## True on preview copies: end_turn stops before the next turn starts.
 var _is_preview: bool = false
@@ -129,27 +119,16 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 	if hp == 0:
 		return null
 	var fight: Fight = Fight.new()
-	fight._rng = rng
 	var loadout: Dictionary = data.row("loadouts", loadout_id)
+	fight.table = DiceTable.create(data, loadout["dice"] as Array, loadout["slots"] as Array, rng)
+	if fight.table == null:
+		return null
+	fight.table.events = fight.events
+	fight.table.moves = fight.moves
+	fight.table.rerolls_per_turn = loadout["rerolls_per_turn"] as int
 	fight.player_max_hp = loadout["hp"] as int
 	fight.player_hp = fight.player_max_hp if hp < 0 else mini(hp, fight.player_max_hp)
-	fight._rerolls_per_turn = loadout["rerolls_per_turn"] as int
 	fight._unused_die_block = loadout["unused_die_block"] as int
-
-	var index: int = 0
-	for type_id: Variant in loadout["dice"] as Array:
-		var die: Die = Die.new()
-		die.id = index
-		die.type_id = type_id as String
-		die.faces.assign(data.row("dice", type_id as String)["faces"] as Array)
-		die.faces.make_read_only()
-		fight.hand.append(die)
-		index += 1
-	for slot_ref: Variant in loadout["slots"] as Array:
-		var slot: Slot = Slot.new()
-		slot.id = slot_ref as String
-		slot.row = data.row("slots", slot_ref as String)
-		fight.slots.append(slot)
 
 	var enemy: Dictionary = data.row("enemies", enemy_ref)
 	fight.enemy_id = enemy_ref
@@ -157,6 +136,9 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 	fight.enemy_max_hp = enemy["hp"] as int
 	fight.enemy_hp = fight.enemy_max_hp
 	fight.twist = enemy["twist"]
+	if fight.twist == "house_lock":
+		fight.table.lock_policy = DiceTable.LockPolicy.LOCK_HIGHEST_FREE
+		fight.table.lock_source = fight.twist
 	for text: Variant in enemy["intents"] as Array:
 		var intent: Dictionary = parse_intent(text as String)
 		intent.make_read_only()
@@ -175,6 +157,12 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 		perk.amount = perk_row["amount"] as int
 		perk.uses_per_turn = perk_row["uses_per_turn"] as int
 		fight._perks[perk_id] = perk
+	if fight.has_perk(NUDGE_PERK):
+		var nudge_perk: Perk = fight._perks[NUDGE_PERK]
+		fight.table.nudge_perk = NUDGE_PERK
+		fight.table.nudge_source = nudge_perk.source
+		fight.table.nudge_amount = nudge_perk.amount
+		fight.table.nudge_uses_per_turn = nudge_perk.uses_per_turn
 
 	fight.start_hp = fight.player_hp
 	fight.start_rng = rng.to_dict()
@@ -233,14 +221,11 @@ func perk_source(perk_id: String) -> String:
 
 
 func die(die_id: int) -> Die:
-	return hand[die_id] if die_id >= 0 and die_id < hand.size() else null
+	return table.die(die_id)
 
 
 func slot(slot_id: String) -> Slot:
-	for candidate: Slot in slots:
-		if candidate.id == slot_id:
-			return candidate
-	return null
+	return table.slot(slot_id)
 
 
 # --- Moves --------------------------------------------------------------------
@@ -249,108 +234,34 @@ func slot(slot_id: String) -> Slot:
 func place_refusal(die_id: int, slot_id: String) -> String:
 	if state != State.PLAYER_TURN:
 		return "The fight is over."
-	var d: Die = die(die_id)
-	var s: Slot = slot(slot_id)
-	if d == null or s == null:
-		return "No such die or slot."
-	if d.discarded:
-		return "That die was spent on a reroll."
-	if not d.slot_id.is_empty():
-		return "That die is already placed."
-	if d.locked:
-		return "House lock: this die is locked this turn."
-	if s.dice.size() >= s.needed():
-		return "This slot is full."
-	match s.row["accepts"] as String:
-		"range":
-			if d.value < (s.row["min"] as int) or d.value > (s.row["max"] as int):
-				return "Needs %d to %d." % [s.row["min"], s.row["max"]]
-		"even":
-			if d.value % 2 != 0:
-				return "Needs an even number."
-		"odd":
-			if d.value % 2 == 0:
-				return "Needs an odd number."
-		"exact":
-			if d.value != (s.row["min"] as int):
-				return "Needs exactly %d." % s.row["min"]
-		"pair":
-			if not s.dice.is_empty() and hand[s.dice[0]].value != d.value:
-				return "Needs a %d to match." % hand[s.dice[0]].value
-	return ""
+	return table.place_refusal(die_id, slot_id)
 
 
 func place(die_id: int, slot_id: String) -> bool:
-	if not place_refusal(die_id, slot_id).is_empty():
-		return false
-	hand[die_id].slot_id = slot_id
-	slot(slot_id).dice.append(die_id)
-	events.append({"type": "place", "die": die_id, "slot": slot_id})
-	moves.append({"move": "place", "die": die_id, "slot": slot_id})
-	return true
+	return state == State.PLAYER_TURN and table.place(die_id, slot_id)
 
 
 ## Returns a placed die to the hand. Free, any number of times (DR-4).
 func take_back(die_id: int) -> bool:
-	var d: Die = die(die_id)
-	if state != State.PLAYER_TURN or d == null or d.slot_id.is_empty():
-		return false
-	slot(d.slot_id).dice.erase(die_id)
-	events.append({"type": "take_back", "die": die_id, "slot": d.slot_id})
-	moves.append({"move": "take_back", "die": die_id})
-	d.slot_id = ""
-	return true
+	return state == State.PLAYER_TURN and table.take_back(die_id)
 
 
 ## Why rerolling by discarding `discard_id` isn't allowed, or "" if it is.
 func reroll_refusal(discard_id: int) -> String:
-	var d: Die = die(discard_id)
 	if state != State.PLAYER_TURN:
 		return "The fight is over."
-	if rerolls_left <= 0:
-		return "No rerolls left this turn."
-	if d == null or not d.is_free():
-		return "Pick an unplaced die to discard."
-	if d.locked:
-		return "A locked die can't pay for a reroll."
-	if _rng == null:
-		return "Planning copies can't reroll."
-	if _rerollable_count() < 2:
-		return "Nothing left to reroll."
-	return ""
+	return table.reroll_refusal(discard_id)
 
 
 ## Spends `discard_id` to reroll every other free, unlocked die, in die-id
 ## order (DR-2). The House lock is then recomputed.
 func reroll(discard_id: int) -> bool:
-	if not reroll_refusal(discard_id).is_empty():
-		return false
-	rerolls_left -= 1
-	hand[discard_id].discarded = true
-	var rerolled: Array[int] = []
-	for other: Die in hand:
-		if other.is_free() and not other.locked:
-			other.value = _roll(other)
-			rerolled.append(other.id)
-	events.append({"type": "reroll", "discarded": discard_id, "dice": rerolled})
-	moves.append({"move": "reroll", "die": discard_id})
-	_apply_house_lock()
-	return true
+	return state == State.PLAYER_TURN and table.reroll(discard_id)
 
 
 ## Pearl diver's perk: +amount to a free die, up to its highest face.
 func nudge(die_id: int) -> bool:
-	var d: Die = die(die_id)
-	if state != State.PLAYER_TURN or not has_perk(NUDGE_PERK) or nudges_left <= 0:
-		return false
-	if d == null or not d.is_free() or d.locked or d.value >= d.max_face():
-		return false
-	var perk: Perk = _perks[NUDGE_PERK]
-	nudges_left -= 1
-	d.value = mini(d.value + perk.amount, d.max_face())
-	events.append({"type": "perk", "perk": NUDGE_PERK, "source": perk.source, "die": die_id, "amount": perk.amount})
-	moves.append({"move": "nudge", "die": die_id})
-	return true
+	return state == State.PLAYER_TURN and has_perk(NUDGE_PERK) and table.nudge(die_id)
 
 
 ## What a slot would do with `die_id` added (DR-3), as it would really land
@@ -373,17 +284,15 @@ func preview(die_id: int, slot_id: String) -> Dictionary:
 	if not reason.is_empty():
 		return result
 	var s: Slot = slot(slot_id)
-	var values: Array[int] = []
-	for placed: int in s.dice:
-		values.append(hand[placed].value)
+	var values: Array[int] = table.values_in(s)
 	values.append(hand[die_id].value)
-	var missing: int = s.needed() - values.size()
+	var missing: int = maxi(0, s.min_dice() - values.size())
 	result["complete"] = missing == 0
-	result["can_complete"] = missing <= _matching_free_dice(die_id, hand[die_id].value)
-	while values.size() < s.needed():
+	result["can_complete"] = missing <= table.matching_free_dice(die_id, hand[die_id].value)
+	while values.size() < s.min_dice():
 		values.append(hand[die_id].value)
 	result["effect"] = s.row["effect"]
-	result["amount"] = _amount(s, values)
+	result["amount"] = DiceTable.amount(s, values)
 
 	var copy: Fight = planning_copy()
 	copy.place(die_id, slot_id)
@@ -391,7 +300,8 @@ func preview(die_id: int, slot_id: String) -> Dictionary:
 		# Pretend the rest arrived: the slot fires now with the full amount.
 		var copy_slot: Slot = copy.slot(slot_id)
 		var row: Dictionary = copy_slot.row.duplicate()
-		row["dice_needed"] = copy_slot.dice.size()
+		row["min_dice"] = copy_slot.dice.size()
+		row["max_dice"] = copy_slot.dice.size()
 		row["mult"] = 0
 		row["add"] = result["amount"]
 		copy_slot.row = row
@@ -425,10 +335,7 @@ func preview_end_turn() -> Dictionary:
 func slot_amount(s: Slot) -> int:
 	if not s.is_complete():
 		return 0
-	var values: Array[int] = []
-	for placed: int in s.dice:
-		values.append(hand[placed].value)
-	return _amount(s, values)
+	return DiceTable.amount(s, table.values_in(s))
 
 
 ## Commits the turn through the pipeline in the header. Starts the next
@@ -454,7 +361,7 @@ func end_turn() -> bool:
 				_heal(amount, "slot:" + s.id)
 
 	# 2. Unused dice (including a half-filled pair) give block.
-	var unused: Array[Die] = _unused_dice()
+	var unused: Array[Die] = table.unused_dice()
 	var unused_block: int = 0
 	for d: Die in unused:
 		if not d.locked:
@@ -525,10 +432,7 @@ func apply_moves(log: Array[Dictionary]) -> bool:
 func _start_turn() -> void:
 	turn += 1
 	player_block = 0
-	rerolls_left = _rerolls_per_turn
-	nudges_left = _perks[NUDGE_PERK].uses_per_turn if has_perk(NUDGE_PERK) else 0
-	for s: Slot in slots:
-		s.dice.clear()
+	table.reset_turn()
 
 	if has_perk(BRACE_PERK):
 		var brace: Perk = _perks[BRACE_PERK]
@@ -540,58 +444,9 @@ func _start_turn() -> void:
 	if enemy_block > 0:
 		events.append({"type": "block", "target": "enemy", "amount": enemy_block, "source": "enemy"})
 
-	var values: Array[int] = []
-	for d: Die in hand:
-		d.slot_id = ""
-		d.discarded = false
-		d.locked = false
-		d.value = _roll(d)
-		values.append(d.value)
+	var values: Array[int] = table.roll_hand()
 	events.append({"type": "turn_start", "turn": turn, "values": values, "intent": intent})
-	_apply_house_lock()
-
-
-## House lock: the highest free die is locked, lowest id on ties. Runs after
-## the roll and after a reroll, never after a nudge.
-func _apply_house_lock() -> void:
-	if twist != "house_lock":
-		return
-	var highest: Die = null
-	for d: Die in hand:
-		d.locked = false
-	for d: Die in hand:
-		if d.is_free() and (highest == null or d.value > highest.value):
-			highest = d
-	if highest != null:
-		highest.locked = true
-		events.append({"type": "twist", "twist": twist, "die": highest.id})
-
-
-func _unused_dice() -> Array[Die]:
-	var unused: Array[Die] = []
-	for d: Die in hand:
-		if d.discarded:
-			continue
-		if d.slot_id.is_empty() or not slot(d.slot_id).is_complete():
-			unused.append(d)
-	return unused
-
-
-## Free, unlocked dice other than `except_id` showing `value`.
-func _matching_free_dice(except_id: int, value: int) -> int:
-	var count: int = 0
-	for d: Die in hand:
-		if d.id != except_id and d.is_free() and not d.locked and d.value == value:
-			count += 1
-	return count
-
-
-func _rerollable_count() -> int:
-	var count: int = 0
-	for d: Die in hand:
-		if d.is_free() and not d.locked:
-			count += 1
-	return count
+	table.apply_lock()
 
 
 ## A copy to plan on: place, take back, nudge and preview freely. It has no
@@ -619,9 +474,7 @@ func _copy() -> Fight:
 	copy.enemy_block = enemy_block
 	copy.twist = twist
 	copy.intent_index = intent_index
-	copy.rerolls_left = rerolls_left
-	copy.nudges_left = nudges_left
-	copy._rerolls_per_turn = _rerolls_per_turn
+	copy.table = table.copy(copy.events, copy.moves)
 	copy._unused_die_block = _unused_die_block
 	copy._intents = _intents
 	copy.start_rng = start_rng
@@ -633,34 +486,7 @@ func _copy() -> Fight:
 		perk.amount = _perks[perk_id].amount
 		perk.uses_per_turn = _perks[perk_id].uses_per_turn
 		copy._perks[perk_id] = perk
-	for d: Die in hand:
-		var dd: Die = Die.new()
-		dd.id = d.id
-		dd.type_id = d.type_id
-		dd.faces = d.faces
-		dd.value = d.value
-		dd.locked = d.locked
-		dd.discarded = d.discarded
-		dd.slot_id = d.slot_id
-		copy.hand.append(dd)
-	for s: Slot in slots:
-		var ss: Slot = Slot.new()
-		ss.id = s.id
-		ss.row = s.row
-		ss.dice = s.dice.duplicate()
-		copy.slots.append(ss)
 	return copy
-
-
-func _roll(d: Die) -> int:
-	return d.faces[_rng.index(RngStreams.Stream.ROLLS, d.faces.size())]
-
-
-static func _amount(s: Slot, values: Array[int]) -> int:
-	var total: int = 0
-	for v: int in values:
-		total += v
-	return maxi(0, total * (s.row["mult"] as int) + (s.row["add"] as int))
 
 
 func _hit_enemy(amount: int, source: String) -> void:
