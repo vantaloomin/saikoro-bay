@@ -47,6 +47,13 @@ var rescue_villager: String = ""
 var vault_prize: Dictionary = {}
 ## Which attempt produced this map (0 = first draw), or -1 for the template.
 var attempt: int = 0
+## Everything the map was drawn from besides the data files: the seed, the
+## config row and both pools in order. A replay needs all of it, so log
+## inputs() wherever a delve seed is logged.
+var input_seed: int = 0
+var input_config: String = ""
+var input_villagers: Array[String] = []
+var input_landmarks: Array[String] = []
 var max_fight_streak: int = 3
 
 
@@ -72,12 +79,33 @@ static func generate(data: GameData, delve_seed: int, villagers_left: Array[Stri
 	for attempt_index: int in attempts:
 		var rng: RngStreams = RngStreams.new(sub_seed(delve_seed, attempt_index))
 		var map: DelveMap = _draw(config, rng, villagers_left, landmarks_left)
-		map.attempt = attempt_index
+		map._set_inputs(delve_seed, config_id, villagers_left, landmarks_left, attempt_index)
 		if map.map_errors().is_empty():
 			return map
 	var fallback: DelveMap = template(config, RngStreams.new(sub_seed(delve_seed, attempts)), villagers_left, landmarks_left)
-	fallback.attempt = -1
+	fallback._set_inputs(delve_seed, config_id, villagers_left, landmarks_left, -1)
+	# The template's room plan is fixed but the rules come from data, so a
+	# balance edit can break it. CI checks it too (tools/check_maps.gd).
+	var errors: PackedStringArray = fallback.map_errors()
+	if not errors.is_empty():
+		push_error("DelveMap: template breaks the \"%s\" config: %s" % [config_id, "; ".join(errors)])
 	return fallback
+
+
+## The map's replay inputs, for logs and bug reports.
+func inputs() -> Dictionary:
+	return {
+		"seed": str(input_seed), "config": input_config, "attempt": attempt,
+		"villagers_left": input_villagers.duplicate(), "landmarks_left": input_landmarks.duplicate(),
+	}
+
+
+func _set_inputs(seed_value: int, config: String, villagers: Array[String], landmarks: Array[String], attempt_index: int) -> void:
+	input_seed = seed_value
+	input_config = config
+	input_villagers = villagers.duplicate()
+	input_landmarks = landmarks.duplicate()
+	attempt = attempt_index
 
 
 ## Each attempt's own seed, so a redraw never depends on how much an
@@ -132,7 +160,6 @@ func _link_errors(f: int, errors: PackedStringArray) -> void:
 		if w < 2 or w > 3:
 			errors.append("floor %d row %d: width %d" % [f, r, w])
 		var last: bool = r == rows_in_floor(f) - 1
-		var incoming: Dictionary[int, bool] = {}
 		for c: int in w:
 			var rm: Room = room(f, r, c)
 			if last:
@@ -145,7 +172,6 @@ func _link_errors(f: int, errors: PackedStringArray) -> void:
 			for to: int in rm.links:
 				if not allowed.has([c, to]):
 					errors.append("floor %d row %d: link %d>%d not allowed" % [f, r, c, to])
-				incoming[to] = true
 			# No crossings: a link a>b and c>d with a < c needs b <= d.
 			for other: int in range(c + 1, w):
 				for to: int in rm.links:
@@ -399,7 +425,11 @@ func _place_in_floor(rng: RngStreams, f: int, type: String, min_row: int) -> voi
 static func _draw_prize(config: Dictionary, rng: RngStreams, landmarks_left: Array[String]) -> Dictionary:
 	if not landmarks_left.is_empty():
 		return {"landmark": landmarks_left[rng.index(RngStreams.Stream.MAP, landmarks_left.size())]}
-	return {"resources": {"koban_coins": config["fallback_koban_coins"] as int, "driftwood": config["fallback_driftwood"] as int}}
+	var resources: Dictionary = {}
+	for key: String in ["a", "b"]:
+		var id: String = config["fallback_resource_" + key]
+		resources[id] = resources.get(id, 0) + (config["fallback_amount_" + key] as int)
+	return {"resources": resources}
 
 
 static func _valid_link_sets(from_width: int, to_width: int) -> Array:
@@ -475,6 +505,20 @@ static func template(config: Dictionary, rng: RngStreams, villagers_left: Array[
 		map.rescue_villager = villagers_left[rng.index(RngStreams.Stream.MAP, villagers_left.size())]
 	map.vault_prize = _draw_prize(config, rng, landmarks_left)
 	return map
+
+
+## What's wrong with the template under `config`, for every mix of empty
+## and full pools. CI fails on any of it, so a balance edit can't break
+## the safety net unnoticed.
+static func template_errors(config: Dictionary, villagers: Array[String], landmarks: Array[String]) -> PackedStringArray:
+	var out: PackedStringArray = []
+	var none: Array[String] = []
+	for pools: Array in [[villagers, landmarks], [none, landmarks], [villagers, none], [none, none]]:
+		var v: Array[String] = pools[0]
+		var l: Array[String] = pools[1]
+		for e: String in template(config, RngStreams.new(1), v, l).map_errors():
+			out.append("%d villagers, %d landmarks left: %s" % [v.size(), l.size(), e])
+	return out
 
 
 ## A compact text form for tests and bot reports: one line per row.

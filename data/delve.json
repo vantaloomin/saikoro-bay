@@ -10,7 +10,8 @@
 			"max_fight_streak": 3,
 			"reveal_rows": 2,
 			"redraw_attempts": 8,
-			"fallback_koban_coins": 3, "fallback_driftwood": 10
+			"fallback_resource_a": "koban_coins", "fallback_amount_a": 3,
+			"fallback_resource_b": "driftwood", "fallback_amount_b": 10
 		}
 	]
 }

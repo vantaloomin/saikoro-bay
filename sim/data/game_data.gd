@@ -54,7 +54,8 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"width_two_weight": "int", "width_three_weight": "int",
 		"fight_weight": "int", "treasure_weight": "int", "rest_weight": "int",
 		"max_fight_streak": "int", "reveal_rows": "int", "redraw_attempts": "int",
-		"fallback_koban_coins": "int", "fallback_driftwood": "int",
+		"fallback_resource_a": "ref:resources", "fallback_amount_a": "int",
+		"fallback_resource_b": "ref:resources", "fallback_amount_b": "int",
 	},
 	"resources": {
 		"id": "id", "name": "string",

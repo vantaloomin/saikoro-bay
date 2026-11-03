@@ -96,4 +96,45 @@ func test_the_validator_catches_broken_maps() -> void:
 func test_the_template_passes_the_validator() -> void:
 	var config: Dictionary = data.row("delve", "slice")
 	assert_eq(DelveMap.template(config, RngStreams.new(1), VILLAGERS, LANDMARKS).map_errors(), PackedStringArray())
-	assert_eq(DelveMap.template(config, RngStreams.new(1), [] as Array[String], [] as Array[String]).map_errors(), PackedStringArray())
+	assert_eq(DelveMap.template_errors(config, VILLAGERS, LANDMARKS), PackedStringArray(), "every pool mix")
+
+
+func test_a_config_that_breaks_the_template_is_caught() -> void:
+	var config: Dictionary = data.row("delve", "slice").duplicate()
+	config["max_fight_streak"] = 2
+	var errors: PackedStringArray = DelveMap.template_errors(config, VILLAGERS, LANDMARKS)
+	assert_eq(errors.size() > 0, true, "a streak of 2 is shorter than the template's")
+	assert_string_contains(errors[0], "fights in a row")
+
+
+func test_mixed_pools_draw_valid_maps() -> void:
+	var none: Array[String] = []
+	for s: int in range(1, 101):
+		var lonely: DelveMap = _map(s, none, LANDMARKS)
+		assert_eq(lonely.map_errors(), PackedStringArray(), "no villagers, seed %d" % s)
+		assert_eq(lonely.rescue_villager, "")
+		var plain: DelveMap = _map(s, VILLAGERS, none)
+		assert_eq(plain.map_errors(), PackedStringArray(), "no landmarks, seed %d" % s)
+		assert_true(plain.vault_prize.has("resources"))
+
+
+func test_the_map_records_its_replay_inputs() -> void:
+	var villagers: Array[String] = ["shipwright", "pearl_diver"]
+	var map: DelveMap = _map(42, villagers, ["hot_spring"] as Array[String])
+	assert_eq(map.inputs(), {
+		"seed": "42", "config": "slice", "attempt": map.attempt,
+		"villagers_left": ["shipwright", "pearl_diver"], "landmarks_left": ["hot_spring"],
+	})
+	villagers.append("onsen_keeper")
+	assert_eq((map.inputs()["villagers_left"] as Array).size(), 2, "a copy, not the caller's list")
+
+
+func test_fallback_prize_ids_are_checked_at_load() -> void:
+	var texts: Dictionary[String, String] = {}
+	for table: String in GameData.TABLES:
+		texts[table] = FileAccess.get_file_as_string("res://data/%s.json" % table)
+	texts["delve"] = texts["delve"].replace("\"koban_coins\"", "\"koban\"")
+	var broken: GameData = GameData.new()
+	broken.load_texts(texts)
+	assert_false(broken.is_valid())
+	assert_string_contains("\n".join(broken.errors), "koban")
