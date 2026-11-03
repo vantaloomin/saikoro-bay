@@ -34,9 +34,20 @@ const PAN_SLACK: float = 1.0
 ## (TownDiorama draws it), so villagers can walk there and nowhere else
 ## in the sea.
 const DOCK_CELLS: int = 5
-## How far a villager walks while fading out of sight, or back in, across
-## a hop that has no way round.
+## How far a villager walks while fading out of sight before going into a
+## wall, or back in after coming out, across a hop that has no way round.
 const FADE_DISTANCE: float = 0.25
+## The strip of sand along the front of the land (TownDiorama draws it):
+## walkable, unlike the water past it.
+const BEACH_DEPTH: float = 0.3
+## Room between a home's wall and the villager standing by it, past the
+## half width a walk keeps clear (Imogen's #59 audit: the spot must never
+## fall inside its own home's walk box, whatever the sprite's width).
+const HOME_GAP: float = 0.05
+## A walk that never goes into a wall (hidden_stretch), and how far past
+## a wall's face a walker stays hidden.
+const NOT_HIDDEN: Vector2 = Vector2(-1.0, -1.0)
+const HIDDEN_PAD: float = 0.02
 
 var map: TownMap
 var size: Vector2 = Vector2(1920, 1080)
@@ -261,12 +272,13 @@ func home_spot(data: GameData, town: Town, villager: String) -> Vector3:
 		Vector2i(0, 1): Vector2i(mid.x, rect.end.y), Vector2i(1, 0): Vector2i(rect.end.x, mid.y),
 		Vector2i(-1, 0): Vector2i(rect.position.x - 1, mid.y), Vector2i(0, -1): Vector2i(mid.x, rect.position.y - 1),
 	}
+	var step: float = VILLAGER_SIZE.x / 2.0 - INSET + HOME_GAP
 	for side: Vector2i in sides:
 		var cell: Vector2i = sides[side]
 		if map.in_bounds(cell) and map.ground(cell) != TownMap.Ground.SEA and town.building_at(data, cell).is_empty():
-			return center + Vector3(side.x * (rect.size.x / 2.0 + 0.2), 0.0, side.y * (rect.size.y / 2.0 + 0.2))
+			return center + Vector3(side.x * (rect.size.x / 2.0 + step), 0.0, side.y * (rect.size.y / 2.0 + step))
 	# Walled in on every side: stand on the doorstep anyway.
-	return center + Vector3(0.0, 0.0, rect.size.y / 2.0 + 0.2)
+	return center + Vector3(0.0, 0.0, rect.size.y / 2.0 + step)
 
 
 ## Every villager in town and where they stand: housed ones by their home,
@@ -292,8 +304,9 @@ func villager_spots(data: GameData, state: GameState) -> Dictionary[String, Vect
 ## villager's half width of room. An end standing in a building (a
 ## walled-in doorstep) still gets a route out. When the goal is walled off
 ## altogether (a dense lot can close a pocket), the route goes as near as
-## it can and the last hop is blocked: blocked_leg finds it, and the walk
-## fades the villager out and back in across it (Imogen's #53 audit).
+## it can and the last hop is blocked: hidden_stretch finds where it goes
+## into a wall and comes out, and the walk fades the villager out and back
+## in around that (Imogen's #53 and #59 audits).
 func walk_route(data: GameData, town: Town, from: Vector3, to: Vector3) -> PackedVector3Array:
 	var straight: PackedVector3Array = [from, to]
 	var boxes: Array[AABB] = _walk_boxes(data, town, VILLAGER_SIZE.x / 2.0)
@@ -340,35 +353,51 @@ func walk_route(data: GameData, town: Town, from: Vector3, to: Vector3) -> Packe
 	return out
 
 
-## The first leg of `route` that goes through a wall or over the water,
-## or -1 when it's clear all the way. Only a walled-off goal has one.
-func blocked_leg(data: GameData, town: Town, route: PackedVector3Array) -> int:
+## Where along `route` (in distance walked) it first goes into a wall or
+## the water and where it last comes out, or NOT_HIDDEN when it never
+## does. Only a walled-off goal, or a walled-in doorstep, has one.
+func hidden_stretch(data: GameData, town: Town, route: PackedVector3Array) -> Vector2:
 	var walls: Array[AABB] = _walk_boxes(data, town, 0.0)
+	var into: float = INF
+	var out_of: float = -INF
+	var walked: float = 0.0
 	for i: int in range(1, route.size()):
-		if not _clear_line(route[i - 1], route[i], walls):
-			return i - 1
-	return -1
+		var a: Vector3 = Vector3(route[i - 1].x, 0.0, route[i - 1].z)
+		var b: Vector3 = Vector3(route[i].x, 0.0, route[i].z)
+		var leg: float = route[i - 1].distance_to(route[i])
+		var flat: float = a.distance_to(b)
+		for box: AABB in walls:
+			var enter: Variant = a if box.has_point(a) else box.intersects_segment(a, b)
+			var leave: Variant = b if box.has_point(b) else box.intersects_segment(b, a)
+			if enter == null or leave == null:
+				continue
+			# Flat distances, scaled onto the leg (the step's bob is only height).
+			var scale: float = leg / flat if flat > 0.0 else 0.0
+			into = minf(into, walked + a.distance_to(enter as Vector3) * scale)
+			out_of = maxf(out_of, walked + a.distance_to(leave as Vector3) * scale)
+		walked += leg
+	# A hair either side, so a step landing right on a wall's face is hidden too.
+	return Vector2(maxf(into - HIDDEN_PAD, 0.0), out_of + HIDDEN_PAD) if into <= out_of else NOT_HIDDEN
 
 
 ## How visible a villager is `t` of the way along `route` (0 to 1): fully,
-## except across leg `blocked`, where they fade out over FADE_DISTANCE
-## as it starts and back in as it ends. 1 everywhere when `blocked` is -1.
-static func walk_opacity(route: PackedVector3Array, blocked: int, t: float) -> float:
-	if blocked < 0 or blocked >= route.size() - 1:
+## except inside the `hidden` stretch (from hidden_stretch), with a fade
+## over up to FADE_DISTANCE just before it and just after it, so they're
+## never seen in a wall. 1 everywhere for NOT_HIDDEN.
+static func walk_opacity(route: PackedVector3Array, hidden: Vector2, t: float) -> float:
+	if hidden == NOT_HIDDEN:
 		return 1.0
 	var total: float = 0.0
-	var leg_start: float = 0.0
 	for i: int in range(1, route.size()):
-		if i - 1 == blocked:
-			leg_start = total
 		total += route[i - 1].distance_to(route[i])
-	var leg_end: float = leg_start + route[blocked].distance_to(route[blocked + 1])
 	var walked: float = clampf(t, 0.0, 1.0) * total
-	if walked < leg_start or walked > leg_end:
-		return 1.0
-	var fading_out: float = (leg_start + FADE_DISTANCE - walked) / FADE_DISTANCE
-	var fading_in: float = (walked - (leg_end - FADE_DISTANCE)) / FADE_DISTANCE
-	return clampf(maxf(fading_out, fading_in), 0.0, 1.0)
+	if walked >= hidden.x and walked <= hidden.y:
+		return 0.0
+	if walked < hidden.x:
+		var before: float = minf(FADE_DISTANCE, hidden.x)
+		return 1.0 if before <= 0.0 else clampf((hidden.x - walked) / before, 0.0, 1.0)
+	var after: float = minf(FADE_DISTANCE, total - hidden.y)
+	return 1.0 if after <= 0.0 else clampf((walked - hidden.y) / after, 0.0, 1.0)
 
 
 ## The point `t` of the way (0 to 1) along a route, by distance walked.
@@ -396,7 +425,8 @@ func _walk_boxes(data: GameData, town: Town, room: float) -> Array[AABB]:
 		box.position.y = -1.0
 		box.size.y = 2.0
 		out.append(box.grow(room))
-	var sea: AABB = AABB(Vector3(DOCK_CELLS, -1.0, map.land_rows), Vector3(map.width - DOCK_CELLS, 2.0, map.height - map.land_rows))
+	var sea: AABB = AABB(Vector3(DOCK_CELLS, -1.0, map.land_rows + BEACH_DEPTH),
+		Vector3(map.width - DOCK_CELLS, 2.0, map.height - map.land_rows - BEACH_DEPTH))
 	out.append(sea.grow(room))
 	return out
 

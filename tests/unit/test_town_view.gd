@@ -163,7 +163,7 @@ func _point_problem(state: GameState, at: Vector3) -> String:
 		if TownView.block_box(data, placed).has_point(feet):
 			return "walks through the %s at %s" % [placed["building"], at]
 	var on_dock: bool = at.z < map.land_rows + 1.1 and at.x < TownView.DOCK_CELLS + 0.3
-	if at.x < 0.0 or at.x > map.width or at.z < 0.0 or (at.z > map.land_rows and not on_dock):
+	if at.x < 0.0 or at.x > map.width or at.z < 0.0 or (at.z > map.land_rows + TownView.BEACH_DEPTH and not on_dock):
 		return "walks off the land at %s" % at
 	return ""
 
@@ -244,35 +244,67 @@ func test_a_walled_off_goal_fades_across_the_last_hop() -> void:
 	var view: TownView = TownView.make(map, Vector2(1920, 1080))
 	var to: Vector3 = Vector3(1.5, 0.0, 6.5)
 	var route: PackedVector3Array = view.walk_route(data, state.town, Vector3(6.5, 0.0, 4.5), to)
-	var blocked: int = view.blocked_leg(data, state.town, route)
-	assert_eq(blocked, route.size() - 2, "only the last hop goes through")
+	var hidden: Vector2 = view.hidden_stretch(data, state.town, route)
+	var before: float = 0.0
+	for i: int in range(1, route.size() - 1):
+		before += route[i - 1].distance_to(route[i])
+	assert_gte(hidden.x, before, "only the last hop goes through")
 	assert_eq(route[route.size() - 1], to, "and still ends there")
-	assert_eq(TownView.walk_opacity(route, blocked, 0.0), 1.0)
-	assert_eq(TownView.walk_opacity(route, blocked, 1.0), 1.0, "back in view at the end")
-	assert_eq(_unseen_problem(view, state, route, blocked), "")
+	assert_eq(TownView.walk_opacity(route, hidden, 0.0), 1.0)
+	assert_eq(TownView.walk_opacity(route, hidden, 1.0), 1.0, "back in view at the end")
+	assert_eq(_unseen_problem(view, state, route, hidden), "")
+
+
+func test_a_villager_fades_around_the_wall_not_the_whole_hop() -> void:
+	# Imogen's #59 audit: timed from the hop's ends, the fade let a villager
+	# show inside a wall that stands close to where the hop ends.
+	var route: PackedVector3Array = [Vector3(0, 0, 0), Vector3(4, 0, 0)]
+	var hidden: Vector2 = Vector2(1.0, 3.9)
+	assert_eq(TownView.walk_opacity(route, hidden, 0.0), 1.0)
+	assert_almost_eq(TownView.walk_opacity(route, hidden, 0.75 / 4.0), 1.0, 0.0001, "fading starts a step before the wall")
+	assert_almost_eq(TownView.walk_opacity(route, hidden, 0.875 / 4.0), 0.5, 0.0001)
+	assert_eq(TownView.walk_opacity(route, hidden, 2.0 / 4.0), 0.0, "out of sight inside")
+	assert_eq(TownView.walk_opacity(route, hidden, 3.9 / 4.0), 0.0, "until the very edge")
+	assert_almost_eq(TownView.walk_opacity(route, hidden, 3.95 / 4.0), 0.5, 0.0001, "then back in over what's left")
+	assert_eq(TownView.walk_opacity(route, hidden, 1.0), 1.0)
+	assert_eq(TownView.walk_opacity(route, TownView.NOT_HIDDEN, 0.5), 1.0)
+
+
+func test_a_home_spot_never_falls_inside_its_own_walk_room() -> void:
+	var state: GameState = _state(["pearl_diver", "shipwright", "onsen_keeper"] as Array[String])
+	_place(state, "cottage", Vector2i(0, 7), "pearl_diver")
+	_place(state, "cottage", Vector2i(5, 3), "shipwright")
+	_place(state, "boat_shed", Vector2i(9, 0), "onsen_keeper")
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var room: Array[AABB] = view._walk_boxes(data, state.town, TownView.VILLAGER_SIZE.x / 2.0)
+	for villager: String in state.town.homes:
+		var spot: Vector3 = view.home_spot(data, state.town, villager)
+		for box: AABB in room:
+			assert_false(box.has_point(Vector3(spot.x, 0.0, spot.z)), "%s at %s is clear of %s" % [villager, spot, box])
 
 
 ## Like _walk_problem, but a walker who is out of sight may pass anywhere.
-func _unseen_problem(view: TownView, state: GameState, route: PackedVector3Array, blocked: int) -> String:
+func _unseen_problem(view: TownView, state: GameState, route: PackedVector3Array, hidden: Vector2) -> String:
 	for i: int in 201:
 		var t: float = i / 200.0
-		if TownView.walk_opacity(route, blocked, t) <= 0.0:
+		if TownView.walk_opacity(route, hidden, t) <= 0.0:
 			continue
 		var problem: String = _point_problem(state, TownView.along(route, t))
 		if not problem.is_empty():
-			return "%s, seen at %.2f" % [problem, TownView.walk_opacity(route, blocked, t)]
+			return "%s, seen at %.2f" % [problem, TownView.walk_opacity(route, hidden, t)]
 	return ""
 
 
 func test_in_random_towns_nobody_is_seen_in_a_wall_or_the_sea() -> void:
-	# Imogen's #53 probe as a test: legal towns, walks between open cells and the dock.
+	# Imogen's #53 and #59 probes as a test: legal towns, walks between open
+	# cells, home spots and the dock.
 	var ids: PackedStringArray = data.ids("buildings")
 	var view: TownView = TownView.make(map, Vector2(1920, 1080))
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 53
 	var walks: int = 0
 	var faded: int = 0
-	for town_index: int in 60:
+	for town_index: int in 80:
 		var state: GameState = _state()
 		for attempt: int in 40:
 			var building: String = ids[rng.randi_range(0, ids.size() - 1)]
@@ -286,18 +318,23 @@ func test_in_random_towns_nobody_is_seen_in_a_wall_or_the_sea() -> void:
 					open.append(_cell_center(Vector2i(x, y)))
 		for i: int in 4:
 			open.append(view.dock_spot(i))
+		# And where someone living in each building would stand (Imogen's #59 probe).
+		for placed: Dictionary in state.town.placed:
+			state.town.homes["probe_%d" % placed["uid"]] = placed["uid"]
+			open.append(view.home_spot(data, state.town, "probe_%d" % placed["uid"]))
+		state.town.homes.clear()
 		for walk: int in 8:
 			var from: Vector3 = open[rng.randi_range(0, open.size() - 1)]
 			var to: Vector3 = open[rng.randi_range(0, open.size() - 1)]
 			var route: PackedVector3Array = view.walk_route(data, state.town, from, to)
-			var blocked: int = view.blocked_leg(data, state.town, route)
-			var problem: String = _unseen_problem(view, state, route, blocked)
+			var hidden: Vector2 = view.hidden_stretch(data, state.town, route)
+			var problem: String = _unseen_problem(view, state, route, hidden)
 			walks += 1
-			faded += 1 if blocked >= 0 else 0
+			faded += 1 if hidden != TownView.NOT_HIDDEN else 0
 			if not problem.is_empty():
 				fail_test("town %d, %s to %s: %s" % [town_index, from, to, problem])
 				return
-	assert_eq(walks, 480)
+	assert_eq(walks, 640)
 	assert_gt(faded, 0, "some of those walks had a goal walled off")
 
 
