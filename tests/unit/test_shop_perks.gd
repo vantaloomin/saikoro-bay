@@ -306,6 +306,16 @@ func test_chum_pays_once_per_resource_however_many_locks_pay_it() -> void:
 	room.end_turn()
 	assert_eq(room.payout, {"driftwood": 5 + 2 + 1} as Dictionary[String, int])
 
+	# A second turn (treasure has one; this forces one) where a lock pays
+	# driftwood again.
+	room.state = DiceRoom.State.PLAYER_TURN
+	room.turns = 2
+	room._start_turn()
+	room.hand[0].value = 3
+	room.place(0, "small_lock")
+	room.end_turn()
+	assert_eq(room.payout["driftwood"], 8 + 3, "a later turn's lock gets no second Chum: once per room")
+
 
 func test_only_one_perk_may_swap_die_zero() -> void:
 	var texts: Dictionary[String, String] = _texts()

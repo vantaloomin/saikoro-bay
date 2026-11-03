@@ -51,6 +51,9 @@ var payout: Dictionary[String, int] = {}
 ## Chum: this much more of each resource a slot pays here, and who gave it.
 var chum_amount: int = 0
 var chum_source: String = ""
+## Resources Chum has already added to in this room: once per room, as the
+## spec says, even if locks paying one resource open on different turns.
+var chummed: Array[String] = []
 
 var table: DiceTable
 var events: Array[Dictionary] = []
@@ -203,10 +206,13 @@ func end_turn() -> bool:
 						paid.append(resource_id)
 			"open":
 				events.append({"type": "open", "source": "slot:" + s.id})
-	# Chum: once per resource paid this turn, however many locks paid it,
+	# Chum: once per resource the room pays, however many locks pay it,
 	# after the draws and an amount only (Imogen's rule 5 and #50 audit).
 	if chum_amount > 0:
 		for resource_id: String in paid:
+			if chummed.has(resource_id):
+				continue
+			chummed.append(resource_id)
 			payout[resource_id] += chum_amount
 			events.append({"type": "perk", "perk": CHUM_PERK, "source": chum_source,
 				"resource": resource_id, "amount": chum_amount})
@@ -275,6 +281,7 @@ func planning_copy() -> DiceRoom:
 	copy.payout = payout.duplicate()
 	copy.chum_amount = chum_amount
 	copy.chum_source = chum_source
+	copy.chummed = chummed.duplicate()
 	copy.table = table.copy(copy.events, copy.moves)
 	copy.start_rng = start_rng.duplicate(true)
 	copy.start_hp = start_hp
