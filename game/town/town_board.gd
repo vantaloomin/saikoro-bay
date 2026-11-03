@@ -102,10 +102,10 @@ var home_villager: String = ""
 ## A little paper burst over a new landmark: seconds left, and where.
 var _party_left: float = 0.0
 var _party_at: Vector3 = Vector3.ZERO
-## The gathering: where each villager walks from and to, seconds left of
-## the walk, of the pop and of the stay, and each mood before the landmark.
-var _walk_from: Dictionary[String, Vector3] = {}
-var _walk_to: Dictionary[String, Vector3] = {}
+## The gathering: the way each villager walks (round buildings, not
+## through them), seconds left of the walk, of the pop and of the stay,
+## and each mood before the landmark.
+var _routes: Dictionary[String, PackedVector3Array] = {}
 var _walk_left: float = 0.0
 var _going_home: bool = false
 var _pop_left: float = 0.0
@@ -324,10 +324,9 @@ func gather_at(uid: int, moods_before: Dictionary[String, Town.Mood]) -> void:
 			unchanged.append(villager)
 	names.append_array(unchanged)
 	var to: Array[Vector3] = view.gather_spots(_data, _state.town, building, names.size())
-	_walk_from = from
-	_walk_to.clear()
+	_routes.clear()
 	for i: int in names.size():
-		_walk_to[names[i]] = to[i]
+		_routes[names[i]] = view.walk_route(_data, _state.town, from[names[i]], to[i])
 	_going_home = false
 	_walk_left = WALK_SECONDS
 
@@ -342,9 +341,8 @@ func advance_gathering(seconds: float) -> void:
 	if _walk_left > 0.0:
 		_walk_left = maxf(_walk_left - seconds, 0.0)
 		var t: float = smoothstep(0.0, 1.0, 1.0 - _walk_left / WALK_SECONDS)
-		for villager: String in _walk_to:
-			var start: Vector3 = _walk_from.get(villager, _walk_to[villager])
-			var spot: Vector3 = start.lerp(_walk_to[villager], t)
+		for villager: String in _routes:
+			var spot: Vector3 = TownView.along(_routes[villager], t)
 			# A little bob in the step, so it reads as a walk.
 			spot.y += absf(sin(t * PI * 6.0)) * 0.05 if _walk_left > 0.0 else 0.0
 			view.walking[villager] = spot
@@ -395,11 +393,13 @@ func _pop_done() -> void:
 
 
 func _walk_home() -> void:
-	_walk_from = view.walking.duplicate()
 	var walking: Dictionary[String, Vector3] = view.walking
 	view.walking = {}
-	_walk_to = view.villager_spots(_data, _state)
+	var homes: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
 	view.walking = walking
+	_routes.clear()
+	for villager: String in homes:
+		_routes[villager] = view.walk_route(_data, _state.town, walking.get(villager, homes[villager]), homes[villager])
 	_going_home = true
 	_walk_left = WALK_SECONDS
 

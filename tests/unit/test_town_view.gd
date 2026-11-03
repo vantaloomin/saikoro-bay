@@ -118,6 +118,85 @@ func test_villagers_with_no_home_wait_on_the_dock() -> void:
 		{"kind": "villager", "villager": "shipwright"})
 
 
+# --- Walking -----------------------------------------------------------------------------
+
+## Whether a walk along `route` ever steps into a building, checked every
+## few centimetres, and whether it ever leaves the land or the dock.
+func _walk_problem(view: TownView, state: GameState, route: PackedVector3Array) -> String:
+	for i: int in 401:
+		var at: Vector3 = TownView.along(route, i / 400.0)
+		var feet: Vector3 = Vector3(at.x, 0.05, at.z)
+		for placed: Dictionary in state.town.placed:
+			if TownView.block_box(data, placed).has_point(feet):
+				return "walks through the %s at %s" % [placed["building"], at]
+		var on_dock: bool = at.z < map.land_rows + 1.1 and at.x < TownView.DOCK_CELLS + 0.3
+		if at.x < 0.0 or at.x > map.width or at.z < 0.0 or (at.z > map.land_rows and not on_dock):
+			return "walks off the land at %s" % at
+	return ""
+
+
+func test_open_ground_is_crossed_in_one_stroke() -> void:
+	var state: GameState = _state()
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var route: PackedVector3Array = view.walk_route(data, state.town, Vector3(0.5, 0.0, 0.5), Vector3(10.5, 0.0, 6.5))
+	assert_eq(route, PackedVector3Array([Vector3(0.5, 0.0, 0.5), Vector3(10.5, 0.0, 6.5)]))
+
+
+func test_a_walk_goes_round_a_building_not_through_it() -> void:
+	var state: GameState = _state()
+	_place(state, "hot_spring", Vector2i(5, 5))
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var from: Vector3 = Vector3(6.5, 0.0, 4.5)
+	var to: Vector3 = Vector3(6.5, 0.06, 7.5)
+	var route: PackedVector3Array = view.walk_route(data, state.town, from, to)
+	assert_ne(_walk_problem(view, state, PackedVector3Array([from, to])), "", "the straight line would cut through")
+	assert_eq(_walk_problem(view, state, route), "")
+	assert_eq(route[0], from, "starts where they stand")
+	assert_eq(route[route.size() - 1], to, "and ends where they're going")
+	assert_lt(route.size(), 6, "a few corners, not a staircase")
+
+
+func test_a_walk_threads_a_row_of_houses_from_the_dock() -> void:
+	var state: GameState = _state()
+	for x: int in 4:
+		_place(state, "cottage", Vector2i(x, 7))
+	_place(state, "net_shed", Vector2i(5, 7))
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var to: Vector3 = Vector3(1.5, 0.06, 6.5)
+	for i: int in 4:
+		var route: PackedVector3Array = view.walk_route(data, state.town, view.dock_spot(i), to)
+		assert_eq(_walk_problem(view, state, route), "", "from dock spot %d" % i)
+
+
+func test_every_gathering_walk_stays_out_of_buildings() -> void:
+	var state: GameState = _state(["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"] as Array[String])
+	_place(state, "cottage", Vector2i(0, 7), "pearl_diver")
+	_place(state, "cottage", Vector2i(2, 5), "shipwright")
+	_place(state, "cottage", Vector2i(9, 2), "onsen_keeper")
+	_place(state, "net_shed", Vector2i(5, 6))
+	_place(state, "boat_shed", Vector2i(9, 5))
+	_place(state, "tea_stall", Vector2i(1, 2))
+	var landmark: int = _place(state, "hot_spring", Vector2i(5, 0))
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var homes: Dictionary[String, Vector3] = view.villager_spots(data, state)
+	var spots: Array[Vector3] = view.gather_spots(data, state.town, state.town.entry(landmark), homes.size())
+	var i: int = 0
+	for villager: String in homes:
+		var there: PackedVector3Array = view.walk_route(data, state.town, homes[villager], spots[i])
+		assert_eq(_walk_problem(view, state, there), "", "%s on the way there" % villager)
+		var back: PackedVector3Array = view.walk_route(data, state.town, spots[i], homes[villager])
+		assert_eq(_walk_problem(view, state, back), "", "%s on the way home" % villager)
+		i += 1
+
+
+func test_a_point_along_a_route_goes_by_distance() -> void:
+	var route: PackedVector3Array = [Vector3(0, 0, 0), Vector3(3, 0, 0), Vector3(3, 0, 1)]
+	assert_eq(TownView.along(route, 0.0), Vector3(0, 0, 0))
+	assert_eq(TownView.along(route, 0.75), Vector3(3, 0, 0), "three of the four steps are the first leg")
+	assert_eq(TownView.along(route, 1.0), Vector3(3, 0, 1))
+	assert_eq(TownView.along(PackedVector3Array([Vector3.ONE]), 0.5), Vector3.ONE)
+
+
 # --- Shells and the hold button -------------------------------------------------------------
 
 func test_shells_show_kept_fresh_and_spent() -> void:
