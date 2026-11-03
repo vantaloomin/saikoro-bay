@@ -8,6 +8,10 @@ extends Node
 ## transition runs.
 
 signal save_failed(error: Error)
+## A delve began (after the save, as the tide starts rising).
+signal delve_started(number: int, seed_value: int)
+## The player left delve `number` for town.
+signal returned_to_town(number: int)
 
 const TOWN_SCENE: String = "res://game/town/town.tscn"
 const DELVE_SCENE: String = "res://game/delve/delve.tscn"
@@ -70,6 +74,7 @@ func go_down() -> bool:
 	if SceneFlow.busy or not state.start_delve():
 		return false
 	save()
+	delve_started.emit(state.delve_count, state.current_delve_seed())
 	SceneFlow.change_half(DELVE_SCENE, TideTransition.Direction.DOWN)
 	return true
 
@@ -79,6 +84,7 @@ func come_up() -> bool:
 	if SceneFlow.busy or not state.end_delve():
 		return false
 	save()
+	returned_to_town.emit(state.delve_count)
 	SceneFlow.change_half(TOWN_SCENE, TideTransition.Direction.UP)
 	return true
 

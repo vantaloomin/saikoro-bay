@@ -43,6 +43,12 @@ godot --headless --path . -s res://tools/check_scripts.gd   # every script compi
 godot --headless --path . -s res://addons/gut/gut_cmdln.gd  # tests (GUT)
 ```
 
+The balance bot plays a scenario across thousands of seeds and prints a JSON report (win rate, turns, depth reached, and a determinism check). Until M1 brings real fights it runs a stand-in scenario:
+
+```
+godot --headless --path . -s res://tools/run_bot.gd -- --scenario=coin_delve --seeds=10000
+```
+
 Tests live in `tests/` and use [GUT](https://github.com/bitwes/Gut) (vendored in `addons/gut`, MIT). In the editor, the GUT panel runs them too.
 
 ## Builds
@@ -60,6 +66,10 @@ godot --headless --path . --export-release "Windows SFW" build/sfw/windows/Saiko
 The `build/` folder holds a `.gdignore` so Godot never imports its own exports.
 
 **itch.io:** the manual "Publish to itch.io" workflow pushes a commit's CI builds with butler to the `windows` and `windows-sfw` channels. It needs a `BUTLER_API_KEY` secret and an `ITCH_PROJECT` variable (for example `user/saikoro-bay`) in the repository's Actions settings.
+
+## Playtest log
+
+Start the game with `-- --playtest` (or export with the `playtest` feature tag) to write a local log to `user://playtest/<session>.jsonl`: delve starts and ends, time in town, and whether each delve started after an observer prompt. Observers press **F9** whenever they give the player any hint. Nothing is sent over the network.
 
 ## Repository layout
 
