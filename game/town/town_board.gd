@@ -106,9 +106,10 @@ var _party_at: Vector3 = Vector3.ZERO
 ## through them), seconds left of the walk, of the pop and of the stay,
 ## and each mood before the landmark.
 var _routes: Dictionary[String, PackedVector3Array] = {}
-## Each route's leg with no way round (-1 for none), and how visible each
-## walker is right now; a villager missing from it is fully visible.
-var _blocked: Dictionary[String, int] = {}
+## Where each route goes through a wall (TownView.NOT_HIDDEN for nowhere),
+## and how visible each walker is right now; a villager missing from it is
+## fully visible.
+var _hidden: Dictionary[String, Vector2] = {}
 var walker_opacity: Dictionary[String, float] = {}
 var _walk_left: float = 0.0
 var _going_home: bool = false
@@ -347,7 +348,7 @@ func advance_gathering(seconds: float) -> void:
 		var t: float = smoothstep(0.0, 1.0, 1.0 - _walk_left / WALK_SECONDS)
 		for villager: String in _routes:
 			var spot: Vector3 = TownView.along(_routes[villager], t)
-			var seen: float = TownView.walk_opacity(_routes[villager], _blocked[villager], t) if _walk_left > 0.0 else 1.0
+			var seen: float = TownView.walk_opacity(_routes[villager], _hidden[villager], t) if _walk_left > 0.0 else 1.0
 			if seen < 1.0:
 				walker_opacity[villager] = seen
 			else:
@@ -416,7 +417,7 @@ func _walk_home() -> void:
 
 func _set_route(villager: String, from: Vector3, to: Vector3) -> void:
 	_routes[villager] = view.walk_route(_data, _state.town, from, to)
-	_blocked[villager] = view.blocked_leg(_data, _state.town, _routes[villager])
+	_hidden[villager] = view.hidden_stretch(_data, _state.town, _routes[villager])
 
 
 func _still_there(hit: Dictionary) -> bool:
