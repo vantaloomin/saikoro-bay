@@ -898,3 +898,38 @@ func test_a_town_with_nothing_to_play_starts_ready() -> void:
 	var town: TownScreen = _open()
 	assert_eq(town.arrival, "")
 	assert_eq(town.gains, {} as Dictionary[String, int])
+
+
+## Mara's #62 review: each arrival says they're home with their wish, and
+## the kit strip shows the perk they bring.
+func test_a_rescued_villager_reaching_home_says_so_and_pulses_the_kit() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	var line: String = TownScreen.arrival_line(Game.data, Game.state, "pearl_diver")
+	assert_eq(line, "The Pearl diver is home and happy", "the cottage at (0, 7) is by the sea")
+	town._end_count()
+	assert_false(_notice_says(town, line), "not before they get there")
+	(town.get_node("%Board") as TownBoard).advance_gathering(TownBoard.ARRIVE_SECONDS)
+	assert_true(_notice_says(town, line))
+	assert_eq(town._kit_strip.pulse, "+1 perk")
+	town._end_pulse()
+	assert_eq(town._kit_strip.pulse, "")
+
+
+func test_an_unhappy_arrival_names_their_wish() -> void:
+	Game.state._villagers.append("pearl_diver")
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 6))
+	assert_eq(TownScreen.arrival_line(Game.data, Game.state, "pearl_diver"),
+		"The Pearl diver is home · wishes to be next to the sea")
+
+
+func test_arrivals_walk_at_a_pace_one_after_another() -> void:
+	_came_back(["pearl_diver", "shipwright"] as Array[String])
+	Game.state.town.homes["shipwright"] = Game.state.town.place("cottage", Vector2i(4, 4))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town._end_count()
+	assert_eq(board._arrive_delay, {"pearl_diver": 0.0, "shipwright": TownBoard.ARRIVE_STAGGER} as Dictionary[String, float])
+	for villager: String in board._arrive_time:
+		assert_lte(board._arrive_time[villager], TownBoard.ARRIVE_SECONDS, "never longer than the cap")
+	assert_lte(board._walk_seconds, TownBoard.ARRIVE_SECONDS + TownBoard.ARRIVE_STAGGER)

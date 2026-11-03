@@ -72,6 +72,9 @@ class Strip:
 	## One {"small", "changed", "new"} per die.
 	var dice: Array[Dictionary] = []
 	var perks_text: String = ""
+	## A teal "+1 perk" chip for a moment after a rescued villager reaches
+	## home: the bridge made visible (Mara's #62 review). "" for none.
+	var pulse: String = ""
 
 	func _init() -> void:
 		flat = true
@@ -110,6 +113,12 @@ class Strip:
 		var label_size: Vector2 = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, TownStyle.SMALL)
 		draw_string(font, Vector2(x - label_size.x - 14.0, baseline), label, HORIZONTAL_ALIGNMENT_LEFT, -1,
 			TownStyle.SMALL, TownStyle.INK)
+		if not pulse.is_empty():
+			var chip_size: Vector2 = font.get_string_size(pulse, HORIZONTAL_ALIGNMENT_LEFT, -1, TownStyle.SMALL) + Vector2(16, 4)
+			var chip: Rect2 = Rect2(Vector2(x - label_size.x - 26.0 - chip_size.x, y + (MINI - chip_size.y) / 2.0), chip_size)
+			draw_rect(chip, TownStyle.HAPPY)
+			draw_string(font, Vector2(chip.position.x + 8.0, baseline), pulse, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				TownStyle.SMALL, TownStyle.WASHI)
 		for d: Dictionary in dice:
 			var side: float = MINI * (0.72 if d["small"] else 1.0)
 			var rect: Rect2 = Rect2(Vector2(x + (MINI - side) / 2.0, y + MINI - side), Vector2(side, side))

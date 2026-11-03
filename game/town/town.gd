@@ -150,6 +150,9 @@ var _ledger_amounts: Dictionary[String, Label] = {}
 var _count_tween: Tween
 ## A press skipped the arrival: the shells light at once.
 var _skipped: bool = false
+## "The Pearl diver is home…", newest first, posted as each reaches home.
+var _arrived_lines: PackedStringArray = []
+var _perks_joined: int = 0
 
 
 func _ready() -> void:
@@ -189,6 +192,7 @@ func _ready() -> void:
 	_board.spot_refused.connect(sounds.play.bind("refuse").unbind(1))
 	_board.gathered.connect(_on_gathered)
 	_board.walked_in.connect(_on_walked_in)
+	_board.villager_home.connect(_on_villager_home)
 	_board.home_chosen.connect(_on_home_chosen)
 	_board.cancelled.connect(back)
 	_card.resized.connect(_aim_leader)
@@ -282,6 +286,42 @@ func _rescued() -> Array[String]:
 		if Game.state.villagers().has(str(villager)):
 			rescued.append(str(villager))
 	return rescued
+
+
+## A rescued villager reached home: the notice board says so with what
+## they wish for, and the kit strip pulses the perk they bring.
+func _on_villager_home(villager: String) -> void:
+	if not Game.state.town.homes.has(villager):
+		# The homeless line and its Build a Cottage button already say it.
+		return
+	_arrived_lines.insert(0, arrival_line(Game.data, Game.state, villager))
+	if not str(Game.data.row("villagers", villager).get("perk", "")).is_empty():
+		_perks_joined += 1
+		_kit_strip.pulse = "+%d perk%s" % [_perks_joined, "" if _perks_joined == 1 else "s"]
+		_kit_strip.queue_redraw()
+		get_tree().create_timer(GAIN_SECONDS).timeout.connect(_end_pulse)
+	if arrival.is_empty() or _notice.visible:
+		_show_notice(false)
+
+
+func _end_pulse() -> void:
+	_perks_joined = 0
+	if is_instance_valid(_kit_strip):
+		_kit_strip.pulse = ""
+		_kit_strip.queue_redraw()
+
+
+## "The Pearl diver is home · wishes to be next to the sea", or "…is home
+## and happy": the rain cloud reads as a next step (Mara's #62 review).
+static func arrival_line(data: GameData, state: GameState, villager: String) -> String:
+	var row: Dictionary = data.row("villagers", villager)
+	var role: String = str(row.get("role", villager))
+	if state.mood(data, villager) == Town.Mood.HAPPY:
+		return "The %s is home and happy" % role
+	var wish: String = str(row.get("wish_text", ""))
+	if wish.is_empty():
+		return "The %s is home" % role
+	return "The %s is home · wishes to be %s" % [role, wish.substr(0, 1).to_lower() + wish.substr(1)]
 
 
 func _on_walked_in() -> void:
@@ -389,6 +429,8 @@ func _show_notice(folded: bool) -> void:
 	if Game.fake_town:
 		# Its own line, so a save (or a save failing) never replaces it.
 		lines.append(FakeTown.NOTICE)
+	for i: int in range(_arrived_lines.size() - 1, -1, -1):
+		lines.insert(0, _arrived_lines[i])
 	if not _cheer.is_empty():
 		lines.insert(0, _cheer)
 	if folded and lines.size() > 1:
