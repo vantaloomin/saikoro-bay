@@ -15,12 +15,34 @@ The two halves should feel like different games, and each one feeds the other.
 
 ## Status
 
-Early pre-production. The engine and stack are still being chosen, so this repository currently holds only project scaffolding.
+Building the vertical slice. Milestone 0 (foundations) is in progress.
+
+## Stack
+
+- **Engine:** [Godot 4.6](https://godotengine.org/) (pinned to 4.6.x, standard build, not .NET), 2D, GL Compatibility renderer.
+- **Language:** statically typed GDScript. Untyped declarations and unsafe access are errors, not warnings.
+- **Git LFS** for large source art, audio, fonts and video (see `.gitattributes`). Git for Windows includes it; run `git lfs install` once per machine.
+
+## Running it
+
+Open the folder in the Godot 4.6 editor and press Play, or from a terminal:
+
+```
+godot --path .
+```
 
 ## Repository layout
 
 ```
-.github/          PR and issue templates, labels, workflows
+sim/            Game rules as plain classes with no scene or node references.
+                Dice, delve, town economy, RNG. Runs headless for tests and the bot.
+game/           Scenes, nodes and UI that present the sim to the player.
+content/sfw/    Game data and assets that are safe for every build.
+content/adult/  Adult-only assets. Excluded from SFW builds.
+dialogue/       Dialogue and scene scripts.
+tests/          Automated tests.
+tools/          Scripts for CI, linting and the balance bot.
+.github/        PR and issue templates, labels, workflows.
 ```
 
 ## How work happens here
