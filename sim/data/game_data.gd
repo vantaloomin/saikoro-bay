@@ -46,7 +46,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"icon_shape": "string",
 	},
 	"enemies": {
-		"id": "id", "name": "string", "hp": "int", "intents": "string_list",
+		"id": "id", "name": "string", "tier": "enum:regular|elite", "hp": "int", "intents": "string_list",
 		"twist": "enum:none|house_lock|snake_eyes", "twist_text": "string?",
 	},
 	"delve": {
@@ -56,6 +56,10 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"max_fight_streak": "int", "reveal_rows": "int", "redraw_attempts": "int",
 		"fallback_resource_a": "ref:resources", "fallback_amount_a": "int",
 		"fallback_resource_b": "ref:resources", "fallback_amount_b": "int",
+	},
+	"loot": {
+		"id": "id", "room": "ref:rooms", "resource": "ref:resources",
+		"chance_percent": "int", "min": "int", "max": "int",
 	},
 	"resources": {
 		"id": "id", "name": "string",
@@ -232,6 +236,12 @@ func _check_rows() -> void:
 		if (slot_row["min_dice"] as int) < 1 or (slot_row["min_dice"] as int) > (slot_row["max_dice"] as int):
 			errors.append("slots \"%s\": needs 1 <= min_dice <= max_dice, got %d and %d" % [
 				id, slot_row["min_dice"], slot_row["max_dice"]])
+	for id: String in ids("loot"):
+		var loot_row: Dictionary = row("loot", id)
+		if (loot_row["chance_percent"] as int) < 0 or (loot_row["chance_percent"] as int) > 100:
+			errors.append("loot \"%s\": chance_percent must be 0 to 100" % id)
+		if (loot_row["min"] as int) < 0 or (loot_row["min"] as int) > (loot_row["max"] as int):
+			errors.append("loot \"%s\": needs 0 <= min <= max" % id)
 
 
 func _check_refs() -> void:

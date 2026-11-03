@@ -22,16 +22,19 @@ const PERK_SETS: Dictionary[String, Array] = {
 		{"perk": "mend", "source": "onsen_keeper"},
 	],
 }
+## The enemies the fixtures were recorded against. Fixed here, so a new
+## enemy in the data doesn't change what the fixtures cover.
+const ENEMIES: Array[String] = ["card_shark", "hermit_croupier", "snake_eyes_eel"]
 ## Seeds per bot, enemy and perk set.
 const SEEDS: Dictionary[String, int] = {"none": 50, "all": 20}
 
 
 ## Every case to play, in a fixed order.
-static func cases(data: GameData) -> Array[Dictionary]:
+static func cases(_data: GameData) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for perk_set: String in PERK_SETS:
 		for bot: String in BOTS:
-			for enemy: String in data.ids("enemies"):
+			for enemy: String in ENEMIES:
 				for s: int in range(1, SEEDS[perk_set] + 1):
 					out.append({"bot": bot, "enemy": enemy, "perks": perk_set, "seed": s})
 	return out

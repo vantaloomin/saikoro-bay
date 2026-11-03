@@ -1,21 +1,26 @@
 {
 	"schema": 1,
-	"note": "Intents cycle in order. Each intent is parts joined by '+': attack:N, guard:N. Placeholder numbers, tuned with the bots (see tools/run_bot.gd).",
+	"note": "tier: regular enemies turn up in fight rooms, the elite in the elite room. Intents cycle in order. Each intent is parts joined by '+': attack:N, guard:N. Placeholder numbers, tuned with the bots (see tools/run_bot.gd).",
 	"items": [
 		{
-			"id": "card_shark", "name": "Card Shark", "hp": 34,
+			"id": "card_shark", "name": "Card Shark", "tier": "regular", "hp": 34,
 			"intents": ["attack:8", "attack:5+guard:5"],
 			"twist": "none", "twist_text": ""
 		},
 		{
-			"id": "hermit_croupier", "name": "Hermit Croupier", "hp": 30,
+			"id": "hermit_croupier", "name": "Hermit Croupier", "tier": "regular", "hp": 30,
 			"intents": ["attack:6", "attack:7"],
 			"twist": "house_lock", "twist_text": "House lock: your highest die is locked each turn."
 		},
 		{
-			"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "hp": 34,
+			"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "tier": "regular", "hp": 34,
 			"intents": ["attack:6", "attack:7", "attack:12"],
 			"twist": "snake_eyes", "twist_text": "Snake eyes: each unplaced 1 bites for 1."
+		},
+		{
+			"id": "pit_boss_octopus", "name": "Pit Boss Octopus", "tier": "elite", "hp": 46,
+			"intents": ["attack:9", "attack:6+guard:6", "attack:11"],
+			"twist": "house_lock", "twist_text": "House lock: your highest die is locked each turn."
 		}
 	]
 }

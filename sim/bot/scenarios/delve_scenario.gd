@@ -38,7 +38,7 @@ func name() -> String:
 
 func play(rng: RngStreams) -> BotScenario.Outcome:
 	var outcome: BotScenario.Outcome = BotScenario.Outcome.new()
-	var enemies: Array = Array(data.ids("enemies"))
+	var enemies: Array = Array(DelveRun.enemy_pool(data, "regular"))
 	var hp: int = -1
 	for i: int in fights:
 		var enemy_id: String = rng.pick(RngStreams.Stream.ENEMIES, enemies) as String
