@@ -27,6 +27,8 @@ func after_each() -> void:
 	Game.store = _original_store
 	Game.state = _original_state
 	Game.save_problem = _original_problem
+	Game.settlement = {}
+	Settings.reduce_motion = false
 
 
 func _open() -> TownScreen:
@@ -344,8 +346,10 @@ func test_putting_a_landmark_off_shows_the_budget() -> void:
 	Game.state._landmarks.append("hot_spring")
 	var town: TownScreen = _open()
 	town.close_sheet()
-	assert_false((town.get_node("%GoDown") as Button).disabled, "Later: the shells and Go down are back")
 	assert_eq(town.staging, "")
+	assert_true((town.get_node("%GoDown") as Button).disabled, "Later: Go down waits while the shells fill")
+	await wait_seconds(TownScreen.SHELLS_FILL_SECONDS + 0.2)
+	assert_false((town.get_node("%GoDown") as Button).disabled, "then the shells and Go down are back")
 
 
 func test_carrying_mid_gathering_sends_everyone_home() -> void:
@@ -777,3 +781,155 @@ func test_a_move_tag_says_what_a_perk_gains_or_loses() -> void:
 		assert_false((tag["rect"] as Rect2).intersects(carried), "%s keeps off the move tag" % tag["text"])
 	board.carry_cell = Vector2i(6, 5)
 	assert_eq(board.move_tag(), {"text": "Free", "mood": Town.Mood.HAPPY, "icon": false})
+
+
+## Coming back with `rescued` and `landmark` from a delve that brought 6
+## driftwood (specs/bridge.md section 6).
+func _came_back(rescued: Array[String] = [], landmark: String = "") -> void:
+	var before: Dictionary = {}
+	for id: String in Game.data.ids("resources"):
+		before[id] = Game.state.resource(id)
+	Game.state.add_resource("driftwood", 6)
+	var after: Dictionary = before.duplicate()
+	after["driftwood"] = int(before["driftwood"]) + 6
+	for villager: String in rescued:
+		Game.state._villagers.append(villager)
+		Game.state.town.homes[villager] = Game.state.town.place("cottage", Vector2i(0, 7))
+	if not landmark.is_empty():
+		Game.state._landmarks.append(landmark)
+	Game.settlement = {"delve": 1, "outcome": Haul.SURFACED, "kept": {}, "lost": {}, "rescued": rescued,
+		"landmark": landmark, "before": before, "after": after}
+
+
+func _ledger_text(town: TownScreen, id: String) -> String:
+	return town._ledger_amounts[id].text
+
+
+func _gain_labels(town: TownScreen) -> Array:
+	return (town.get_node("%Ledger") as Control).find_children("Gain", "Label", true, false).filter(
+		func(node: Node) -> bool: return (node as Label).is_visible_in_tree()).map(
+		func(node: Node) -> String: return (node as Label).text)
+
+
+func test_coming_back_counts_up_walks_in_then_fills_the_shells() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	assert_true(Game.settlement.is_empty(), "played once")
+	assert_eq(town.arrival, "count")
+	assert_eq(_ledger_text(town, "driftwood"), "0", "from what the town had")
+	assert_eq(_gain_labels(town), ["+6"], "with what came up beside it")
+	assert_true((town.get_node("%GoDown") as Button).disabled)
+	assert_eq(town._shells.lit, 0, "the shells wait")
+	town._show_count(0.5)
+	assert_eq(_ledger_text(town, "driftwood"), "3")
+	town._end_count()
+	assert_eq(_ledger_text(town, "driftwood"), "6")
+	assert_eq(town.arrival, "walk")
+	assert_true(board.is_walking_in())
+	assert_eq(board.view.villager_spots(Game.data, Game.state)["pearl_diver"], board.view.arrival_spot(0),
+		"the rescued step off the end of the dock")
+	assert_true((town.get_node("%GoDown") as Button).disabled)
+	board.advance_gathering(TownBoard.ARRIVE_SECONDS)
+	assert_eq(town.arrival, "")
+	assert_eq(board.view.villager_spots(Game.data, Game.state)["pearl_diver"],
+		board.view.home_spot(Game.data, Game.state.town, "pearl_diver"), "and walk home")
+	assert_true((town.get_node("%GoDown") as Button).disabled, "Go down waits for the shells to fill")
+	await wait_seconds(TownScreen.SHELLS_FILL_SECONDS + 0.2)
+	assert_false((town.get_node("%GoDown") as Button).disabled)
+	assert_eq(town._shells.lit, -1)
+	assert_eq(_gain_labels(town), ["+6"], "+N stays a moment after")
+	town._clear_gains()
+	assert_eq(_gain_labels(town), [])
+
+
+func test_one_press_skips_coming_back() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	var press: InputEventKey = InputEventKey.new()
+	press.keycode = KEY_SPACE
+	press.pressed = true
+	town._input(press)
+	assert_eq(town.arrival, "", "the count, the walk-in and the fill all skip")
+	assert_eq(_ledger_text(town, "driftwood"), "6")
+	assert_false((town.get_node("%Board") as TownBoard).is_walking_in())
+	assert_eq(town._shells.lit, -1)
+	assert_false((town.get_node("%GoDown") as Button).disabled)
+
+
+func test_a_press_mid_walk_skips_the_rest() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	town._end_count()
+	assert_true((town.get_node("%Board") as TownBoard).is_walking_in())
+	var press: InputEventMouseButton = InputEventMouseButton.new()
+	press.button_index = MOUSE_BUTTON_LEFT
+	press.pressed = true
+	town._input(press)
+	assert_eq(town.arrival, "")
+	assert_false((town.get_node("%Board") as TownBoard).is_walking_in())
+	assert_false((town.get_node("%GoDown") as Button).disabled, "the shells lit at once")
+
+
+func test_a_won_landmark_is_staged_after_the_walk_in() -> void:
+	_came_back(["pearl_diver"] as Array[String], "hot_spring")
+	var town: TownScreen = _open()
+	assert_eq(town.staging, "", "not while the ledger counts")
+	town._end_count()
+	assert_eq(town.staging, "", "nor while the rescued walk in")
+	(town.get_node("%Board") as TownBoard).advance_gathering(TownBoard.ARRIVE_SECONDS)
+	assert_eq(town.staging, "hot_spring", "then the landmark comes first")
+	assert_eq(town.sheet, {"kind": "building", "id": "hot_spring"})
+
+
+func test_with_reduce_motion_coming_back_is_instant() -> void:
+	Settings.reduce_motion = true
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	await wait_process_frames(2)
+	assert_eq(town.arrival, "")
+	assert_eq(_ledger_text(town, "driftwood"), "6")
+	assert_eq(_gain_labels(town), ["+6"], "the gain still shows")
+	assert_false((town.get_node("%Board") as TownBoard).is_walking_in())
+	Settings.reduce_motion = false
+
+
+func test_a_town_with_nothing_to_play_starts_ready() -> void:
+	var town: TownScreen = _open()
+	assert_eq(town.arrival, "")
+	assert_eq(town.gains, {} as Dictionary[String, int])
+
+
+## Mara's #62 review: each arrival says they're home with their wish, and
+## the kit strip shows the perk they bring.
+func test_a_rescued_villager_reaching_home_says_so_and_pulses_the_kit() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	var line: String = TownScreen.arrival_line(Game.data, Game.state, "pearl_diver")
+	assert_eq(line, "The Pearl diver is home and happy", "the cottage at (0, 7) is by the sea")
+	town._end_count()
+	assert_false(_notice_says(town, line), "not before they get there")
+	(town.get_node("%Board") as TownBoard).advance_gathering(TownBoard.ARRIVE_SECONDS)
+	assert_true(_notice_says(town, line))
+	assert_eq(town._kit_strip.pulse, "+1 perk")
+	town._end_pulse()
+	assert_eq(town._kit_strip.pulse, "")
+
+
+func test_an_unhappy_arrival_names_their_wish() -> void:
+	Game.state._villagers.append("pearl_diver")
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 6))
+	assert_eq(TownScreen.arrival_line(Game.data, Game.state, "pearl_diver"),
+		"The Pearl diver is home and wishes to be next to the sea")
+
+
+func test_arrivals_walk_at_a_pace_one_after_another() -> void:
+	_came_back(["pearl_diver", "shipwright"] as Array[String])
+	Game.state.town.homes["shipwright"] = Game.state.town.place("cottage", Vector2i(4, 4))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town._end_count()
+	assert_eq(board._arrive_delay, {"pearl_diver": 0.0, "shipwright": TownBoard.ARRIVE_STAGGER} as Dictionary[String, float])
+	for villager: String in board._arrive_time:
+		assert_lte(board._arrive_time[villager], TownBoard.ARRIVE_SECONDS, "never longer than the cap")
+	assert_lte(board._walk_seconds, TownBoard.ARRIVE_SECONDS + TownBoard.ARRIVE_STAGGER)

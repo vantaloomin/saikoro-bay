@@ -255,6 +255,12 @@ func dock_spot(index: int) -> Vector3:
 	return Vector3(0.8 + index * 1.1, 0.06, map.land_rows + 0.75)
 
 
+## Where the `index`th villager rescued on the last delve steps ashore:
+## the far end of the dock, a little apart from each other.
+func arrival_spot(index: int) -> Vector3:
+	return Vector3(DOCK_CELLS - 0.5 - index * 0.6, 0.06, map.land_rows + 0.75)
+
+
 ## Where a villager with a home stands: just outside it, on the first open
 ## side (the sea side first, so they face the camera), never inside another
 ## building.

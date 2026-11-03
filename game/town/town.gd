@@ -27,6 +27,12 @@ extends Control
 ## the changed bubbles pop, and only then does the notice board say
 ## everyone came out, with the shells after it.
 ##
+## Coming back (M4 PR 3b, specs/bridge.md section 6): after the delve's
+## tally, the ledger counts up to what was banked with "+N" beside each
+## gain, then anyone rescued walks in from the dock, then a won landmark is
+## staged, then the shells fill. One press skips to the end; Go down waits
+## for the shells. It plays Game.settlement once and clears it.
+##
 ## The kit (M4 PR 2, specs/bridge.md section 5): a third tab, "Kit" (K, or
 ## the shoulders), shows the dice the next delve takes, plain ones grouped
 ## into one "Standard" row and each changed one a strip of its faces with
@@ -78,6 +84,9 @@ const MUSIC_PATH: String = "res://content/sfw/music/town_loop.ogg"
 const MUSIC_DB: float = -14.0
 const MUSIC_FADE_SECONDS: float = 1.5
 const SHELLS_FILL_SECONDS: float = 0.5
+## The ledger's count-up on coming back, and how long "+N" stays after.
+const COUNT_SECONDS: float = 0.8
+const GAIN_SECONDS: float = 3.0
 ## The widest a ledger amount gets: the stamp's spend preview.
 const AMOUNT_ROOM: String = "00 → 00"
 
@@ -126,6 +135,24 @@ var _gathering: Dictionary = {}
 ## Shells lit from the left while they fill in after the staging; -1 is all.
 var _shells_lit: int = -1
 var _shells_waited: bool = false
+## True while the shells fill in: Go down waits for them.
+var _shells_filling: bool = false
+## Coming back: "count" while the ledger counts up, "walk" while the
+## rescued walk in, "" once it's done (or there was nothing to play).
+var arrival: String = ""
+## The settlement being played (Game.settlement, taken on arrival).
+var _settled: Dictionary = {}
+## What the ledger shows mid-count, by resource; empty once it's done.
+var _ledger_shown: Dictionary[String, int] = {}
+## "+N" beside each resource the delve brought, until GAIN_SECONDS pass.
+var gains: Dictionary[String, int] = {}
+var _ledger_amounts: Dictionary[String, Label] = {}
+var _count_tween: Tween
+## A press skipped the arrival: the shells light at once.
+var _skipped: bool = false
+## "The Pearl diver is home…", newest first, posted as each reaches home.
+var _arrived_lines: PackedStringArray = []
+var _perks_joined: int = 0
 
 
 func _ready() -> void:
@@ -164,22 +191,165 @@ func _ready() -> void:
 	_board.spot_chosen.connect(_on_spot_chosen)
 	_board.spot_refused.connect(sounds.play.bind("refuse").unbind(1))
 	_board.gathered.connect(_on_gathered)
+	_board.walked_in.connect(_on_walked_in)
+	_board.villager_home.connect(_on_villager_home)
 	_board.home_chosen.connect(_on_home_chosen)
 	_board.cancelled.connect(back)
 	_card.resized.connect(_aim_leader)
 	_card.visibility_changed.connect(_aim_leader)
 	get_viewport().size_changed.connect(_fit_hud)
 	_show_hint()
+	_settled = Game.settlement
+	# Played once: a town opened again (a load, the pause menu) doesn't replay it.
+	Game.settlement = {}
+	if not _settled.is_empty():
+		_start_arrival()
+	else:
+		_stage_landmark()
+	refresh()
+	_fit_hud.call_deferred()
+	SceneFlow.focus_default()
+	if arrival == "count":
+		_board.wait_at_dock(_rescued())
+		_count_up()
+	# A landmark won on the last delve is the first thing on arrival (LM-5).
+	if not staging.is_empty():
+		_focus_first.call_deferred()
+
+
+## A landmark won and not yet placed opens first (LM-5).
+func _stage_landmark() -> void:
 	var waiting: Array[String] = Game.state.landmarks_waiting()
 	if not waiting.is_empty():
 		staging = waiting[0]
 		sheet = {"kind": "building", "id": staging}
+
+
+# --- Coming back (specs/bridge.md section 6) ------------------------------------------------
+
+func _start_arrival() -> void:
+	var before: Dictionary = _settled.get("before", {}) as Dictionary
+	var after: Dictionary = _settled.get("after", {}) as Dictionary
+	for id: String in Game.data.ids("resources"):
+		var gain: int = int(after.get(id, 0)) - int(before.get(id, 0))
+		if gain > 0:
+			gains[id] = gain
+	if not gains.is_empty():
+		get_tree().create_timer(GAIN_SECONDS).timeout.connect(_clear_gains)
+	if gains.is_empty() or Settings.reduce_motion:
+		arrival = "walk"
+		_walk_in.call_deferred()
+		return
+	arrival = "count"
+	for id: String in Game.data.ids("resources"):
+		_ledger_shown[id] = int(before.get(id, Game.state.resource(id)))
+
+
+## The ledger counts from what the town had to what it has now.
+func _count_up() -> void:
+	_count_tween = create_tween()
+	_count_tween.tween_method(_show_count, 0.0, 1.0, COUNT_SECONDS)
+	_count_tween.tween_callback(_end_count)
+
+
+func _show_count(t: float) -> void:
+	var before: Dictionary = _settled.get("before", {}) as Dictionary
+	for id: String in _ledger_shown:
+		var from: int = int(before.get(id, Game.state.resource(id)))
+		_ledger_shown[id] = from + roundi((Game.state.resource(id) - from) * t)
+		if _ledger_amounts.has(id) and is_instance_valid(_ledger_amounts[id]):
+			_ledger_amounts[id].text = str(_ledger_shown[id])
+
+
+func _end_count() -> void:
+	if arrival != "count":
+		return
+	if _count_tween != null and _count_tween.is_valid():
+		_count_tween.kill()
+	_ledger_shown.clear()
+	arrival = "walk"
+	_show_hud()
+	_walk_in()
+
+
+## Anyone rescued walks in from the dock; the board says when they're home.
+func _walk_in() -> void:
+	if arrival != "walk":
+		return
+	_board.walk_in([] as Array[String] if _skipped else _rescued())
+
+
+## Who the delve rescued, if they're in town.
+func _rescued() -> Array[String]:
+	var rescued: Array[String] = []
+	for villager: Variant in _settled.get("rescued", []) as Array:
+		if Game.state.villagers().has(str(villager)):
+			rescued.append(str(villager))
+	return rescued
+
+
+## A rescued villager reached home: the notice board says so with what
+## they wish for, and the kit strip pulses the perk they bring.
+func _on_villager_home(villager: String) -> void:
+	if not Game.state.town.homes.has(villager):
+		# The homeless line and its Build a Cottage button already say it.
+		return
+	_arrived_lines.insert(0, arrival_line(Game.data, Game.state, villager))
+	if not str(Game.data.row("villagers", villager).get("perk", "")).is_empty():
+		_perks_joined += 1
+		_kit_strip.pulse = "+%d perk%s" % [_perks_joined, "" if _perks_joined == 1 else "s"]
+		_kit_strip.queue_redraw()
+		get_tree().create_timer(GAIN_SECONDS).timeout.connect(_end_pulse)
+	if arrival.is_empty() or _notice.visible:
+		_show_notice(false)
+
+
+func _end_pulse() -> void:
+	_perks_joined = 0
+	if is_instance_valid(_kit_strip):
+		_kit_strip.pulse = ""
+		_kit_strip.queue_redraw()
+
+
+## "The Pearl diver is home and wishes to be next to the sea", or "…is home
+## and happy": the rain cloud reads as a next step (Mara's #62 review).
+static func arrival_line(data: GameData, state: GameState, villager: String) -> String:
+	var row: Dictionary = data.row("villagers", villager)
+	var role: String = str(row.get("role", villager))
+	if state.mood(data, villager) == Town.Mood.HAPPY:
+		return "The %s is home and happy" % role
+	var wish: String = str(row.get("wish_text", ""))
+	if wish.is_empty():
+		return "The %s is home" % role
+	# One sentence, so a wrap never strands a dot (Mara's #62 review).
+	return "The %s is home and wishes to be %s" % [role, wish.substr(0, 1).to_lower() + wish.substr(1)]
+
+
+func _on_walked_in() -> void:
+	if arrival != "walk":
+		return
+	arrival = ""
+	_stage_landmark()
 	refresh()
-	_fit_hud.call_deferred()
-	SceneFlow.focus_default()
-	# A landmark won on the last delve is the first thing on arrival (LM-5).
 	if not staging.is_empty():
 		_focus_first.call_deferred()
+
+
+## One press skips what's left of coming back (bridge spec section 6).
+func skip_arrival() -> void:
+	_skipped = true
+	if arrival == "count":
+		_end_count()
+	elif arrival == "walk":
+		_board.stop_gathering()
+
+
+func _clear_gains() -> void:
+	if gains.is_empty():
+		return
+	gains.clear()
+	if is_inside_tree():
+		_show_hud()
 
 
 ## Redraws everything from the sim.
@@ -211,16 +381,22 @@ func _show_hud() -> void:
 ## stays but its shells wait faded (Mara's #46 review), then fill in one by
 ## one when the notice line lands. It's a fade, so reduce motion keeps it.
 func _show_tray() -> void:
-	# Go down waits too, so nobody leaves without seeing what they'd lose.
-	_go_down.disabled = not staging.is_empty()
-	if not staging.is_empty():
+	# Go down waits too, so nobody leaves without seeing what they'd lose,
+	# and for the shells to fill after coming back.
+	_go_down.disabled = not staging.is_empty() or not arrival.is_empty() or _shells_filling
+	if not staging.is_empty() or not arrival.is_empty():
 		_shells.lit = 0
 		_shells_waited = true
 		return
 	_shells.lit = _shells_lit
 	if _shells_waited:
 		_shells_waited = false
+		if _skipped:
+			_light_shells(-1.0)
+			return
 		_shells_lit = 0
+		_shells_filling = true
+		_go_down.disabled = true
 		var tween: Tween = create_tween()
 		tween.tween_method(_light_shells, 0.0, float(_shells.tokens.size()), SHELLS_FILL_SECONDS)
 		tween.tween_callback(_light_shells.bind(-1.0))
@@ -231,6 +407,9 @@ func _light_shells(count: float) -> void:
 	if _shells != null and is_instance_valid(_shells):
 		_shells.lit = _shells_lit
 		_shells.queue_redraw()
+	if count < 0.0 and _shells_filling:
+		_shells_filling = false
+		_go_down.disabled = not staging.is_empty() or not arrival.is_empty()
 
 
 static func _is_press(event: InputEvent) -> bool:
@@ -251,6 +430,8 @@ func _show_notice(folded: bool) -> void:
 	if Game.fake_town:
 		# Its own line, so a save (or a save failing) never replaces it.
 		lines.append(FakeTown.NOTICE)
+	for i: int in range(_arrived_lines.size() - 1, -1, -1):
+		lines.insert(0, _arrived_lines[i])
 	if not _cheer.is_empty():
 		lines.insert(0, _cheer)
 	if folded and lines.size() > 1:
@@ -324,6 +505,14 @@ func _show_tabs() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if arrival == "count" and _is_press(event):
+		skip_arrival()
+		get_viewport().set_input_as_handled()
+		return
+	if _board.is_walking_in() and _is_press(event):
+		skip_arrival()
+		get_viewport().set_input_as_handled()
+		return
 	if _board.is_gathering() and _is_press(event):
 		# Any press skips the gathering to its end (Mara's #46 review).
 		_board.stop_gathering()
@@ -807,6 +996,7 @@ func _ledger_rows(spending: String = "") -> Array[Control]:
 	if not spending.is_empty():
 		cost = TownMap.parse_cost(Game.data.row("buildings", spending)["cost"] as Array)
 	var rows: Array[Control] = []
+	_ledger_amounts.clear()
 	for id: String in Game.data.ids("resources"):
 		var row: HBoxContainer = HBoxContainer.new()
 		row.add_theme_constant_override("separation", 16)
@@ -815,14 +1005,29 @@ func _ledger_rows(spending: String = "") -> Array[Control]:
 		# "Driftwood 20 → 16" broke the name in two (the M3 exit frames).
 		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		row.add_child(name_label)
-		var have: int = Game.state.resource(id)
+		var have: int = int(_ledger_shown.get(id, Game.state.resource(id)))
+		# Always room for "00 → 00", so the stamp's preview never moves the
+		# sheet's edge while the player checks the numbers (Mara's #47
+		# review); "+N" after coming back sits in the same room.
+		var cell: HBoxContainer = HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 10)
+		cell.custom_minimum_size.x = _amount_width
+		if gains.has(id):
+			# What the delve brought, kept a moment after the count (bridge
+			# spec section 6), in the gain mark's teal.
+			var gain: Label = TownStyle.label("+%d" % gains[id], TownStyle.BODY, TownStyle.HAPPY)
+			gain.name = "Gain"
+			gain.autowrap_mode = TextServer.AUTOWRAP_OFF
+			gain.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			gain.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			cell.add_child(gain)
 		var amount: Label = TownStyle.label(str(have) if not cost.has(id) else "%d → %d" % [have, have - int(cost[id])])
+		_ledger_amounts[id] = amount
 		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		amount.autowrap_mode = TextServer.AUTOWRAP_OFF
-		# Always room for "00 → 00", so the stamp's preview never moves the
-		# sheet's edge while the player checks the numbers (Mara's #47 review).
-		amount.custom_minimum_size.x = _amount_width
-		row.add_child(amount)
+		amount.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		cell.add_child(amount)
+		row.add_child(cell)
 		rows.append(row)
 	return rows
 
