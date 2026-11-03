@@ -25,7 +25,7 @@
 		{
 			"id": "pot_raiser_crab", "name": "Pot-Raiser Crab", "tier": "regular", "hp": 40,
 			"intents": ["attack:6", "attack:7"],
-			"twist": "rising_stakes", "twist_text": "Rising stakes: each attack hits 1 harder than the last."
+			"twist": "rising_stakes", "twist_text": "Rising stakes: its attacks grow by 1 every turn."
 		},
 		{
 			"id": "pit_boss_octopus", "name": "Pit Boss Octopus", "tier": "elite", "hp": 46,

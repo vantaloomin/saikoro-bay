@@ -222,8 +222,8 @@ func next_intent() -> Dictionary:
 	return _raised(_intents[(intent_index + 1) % _intents.size()], intent_index + 1)
 
 
-## Rising stakes: each attack is 1 bigger than the one before it, so the
-## n-th intent (from 0) attacks for n more. Other twists leave it as is.
+## Rising stakes: attacks grow by 1 every turn, on top of the cycle, so
+## the n-th intent (from 0) attacks for n more. Other twists leave it as is.
 func _raised(intent: Dictionary, index: int) -> Dictionary:
 	if twist != "rising_stakes" or not intent.has("attack") or index <= 0:
 		return intent
