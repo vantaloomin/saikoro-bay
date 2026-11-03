@@ -12,10 +12,11 @@ extends Control
 ## glows or pushes the player would spoil the "second delve unprompted"
 ## signal. Quit lives in the pause menu (Start or Esc), away from it.
 ##
-## Building (PR 5b): "Build" on the tray (X, or the B key) opens the build
-## list in the right column. A building's card says what it costs and why
-## it can't be built yet; "Pick a spot" carries it over the town, and a
-## costed build is confirmed with the hanko stamp, the town's only confirm.
+## Building (PR 5b): the right column has two tabs, "Notice board" and
+## "Build" (LB/RB, the B key, or X with nothing selected). A row you can
+## build picks it up at once; any other row opens its card, which says why
+## not yet. A costed build is confirmed with the hanko stamp, the town's
+## only confirm, with the shell and resources it would spend previewed.
 ## Free things never ask: placing a won landmark (the town celebrates),
 ## moving a building (with an undo for the last move), and moving a
 ## villager to another home.
@@ -34,10 +35,6 @@ const MOOD_WORDS: Dictionary[Town.Mood, String] = {
 	Town.Mood.UNHAPPY: "Not happy with their home yet",
 	Town.Mood.HOMELESS: "Has nowhere to live, so they wait on the dock",
 }
-## The short form, after a resident's name on a home's card.
-const MOOD_SHORT: Dictionary[Town.Mood, String] = {
-	Town.Mood.HAPPY: "happy", Town.Mood.UNHAPPY: "not happy yet", Town.Mood.HOMELESS: "",
-}
 ## The hint under "Go down", by the input last used. The button itself
 ## teaches the hold; the hint fades after the first real one.
 const HOLD_HINT_MOUSE: String = "Hold to go down"
@@ -47,9 +44,14 @@ const HOLD_HINT_PAD: String = "Hold"
 const HUD_TARGET_SCALE: float = 0.92
 const HUD_MAX_GROWTH: float = 1.3
 const PICK_A_SPOT: String = "Pick a spot"
-const CHEER: String = "Everyone came out to see the %s."
-## The build sheet's title, close button and margins, around its rows.
-const LIST_CHROME: float = 170.0
+## Until 5c stages the villagers walking over, the notice only says what
+## you can see (Mara's #42 review).
+const CHEER: String = "The %s is open."
+const MOVED_IN: String = "The %s moved into the new %s."
+const TAB_NOTICE: String = "Notice board"
+const TAB_BUILD: String = "Build"
+## The build sheet's margins, around its rows.
+const LIST_CHROME: float = 50.0
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -78,6 +80,7 @@ var last_move: Dictionary = {}
 ## Said on the notice board after a landmark is placed.
 var _cheer: String = ""
 var _stamp: HankoButton
+var _tabs: Dictionary[String, Button] = {}
 
 
 func _ready() -> void:
@@ -89,6 +92,7 @@ func _ready() -> void:
 	_menu_button.pressed.connect(_pause_menu.open)
 	_menu_button.focus_mode = Control.FOCUS_NONE
 	_pause_menu.closed.connect(SceneFlow.focus_default)
+	_make_tabs()
 	_board.setup(Game.data, GameState.town_map(Game.data))
 	_board.picked.connect(_on_picked)
 	_board.spot_chosen.connect(_on_spot_chosen)
@@ -110,30 +114,80 @@ func _ready() -> void:
 ## Redraws everything from the sim.
 func refresh() -> void:
 	_board.show_state(Game.state)
-	_fill(_ledger, "Ledger", _ledger_rows())
+	_show_right_column()
+
+
+## The ledger, the shell tray and "Go down". While the stamp is up, the
+## ledger and the tray preview what it would spend (Mara's #42 review).
+func _show_hud() -> void:
+	var spending: String = str(sheet.get("id", "")) if sheet.get("kind", "") == "confirm" else ""
+	_fill(_ledger, "Ledger", _ledger_rows(spending))
+	_shells = ShellTray.new()
+	var shells: int = int(Game.data.row("buildings", spending)["actions"]) if not spending.is_empty() else 0
+	_shells.show_state(Game.data, Game.state, shells)
+	var tray: Array[Control] = [_shells]
+	if Game.state.town.actions_left == 0:
+		# Said once, here, not on every card (spec section 3).
+		tray.append(TownStyle.label(ShellTray.describe(Game.state), TownStyle.SMALL))
+	_fill(_tray_panel, "Actions", tray)
+	_go_down.text = Game.state.go_down_label(Game.data)
+
+
+## The notice board: newest first after a change. While picking a home it
+## folds to its newest line, so the column keeps room for the pick's card.
+func _show_notice(folded: bool) -> void:
 	var notice: Array[Control] = []
 	var homeless: String = Game.state.homeless_line(Game.data)
 	var lines: PackedStringArray = notice_lines(Game.data, Game.state, Game.save_problem)
 	if not _cheer.is_empty():
 		lines.insert(0, _cheer)
+	if folded and lines.size() > 1:
+		lines = lines.slice(0, 1)
 	for line: String in lines:
 		notice.append(TownStyle.label(line))
-		if line == homeless:
+		if line == homeless and not folded:
 			# The shortcut sits right under the line it answers (VH-4).
-			notice.append(_button("Build a Cottage", open_building.bind("cottage")))
-	_fill(_notice, "Notice board", notice)
-	_shells = ShellTray.new()
-	_shells.show_state(Game.data, Game.state)
-	var build: Button = _button("Build", toggle_build_list)
-	build.name = "Build"
-	var tray: Array[Control] = [_shells]
-	if Game.state.town.actions_left == 0:
-		# Said once, here, not on every card (spec section 3).
-		tray.append(TownStyle.label(ShellTray.describe(Game.state), TownStyle.SMALL))
-	tray.append(build)
-	_fill(_tray_panel, "Actions", tray)
-	_go_down.text = Game.state.go_down_label(Game.data)
-	_show_right_column()
+			notice.append(_button("Build a Cottage", choose_building.bind("cottage")))
+	_fill(_notice, "", notice)
+
+
+## The column's header: "Notice board | Build" (Mara's #42 review), so the
+## build list opens where it's used and the board never just vanishes.
+func _make_tabs() -> void:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.name = "Tabs"
+	row.add_theme_constant_override("separation", 8)
+	for tab: String in [TAB_NOTICE, TAB_BUILD]:
+		var button: Button = Button.new()
+		button.text = tab
+		button.name = tab.replace(" ", "")
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		TownStyle.style_tab(button)
+		button.pressed.connect(show_tab.bind(tab))
+		row.add_child(button)
+		_tabs[tab] = button
+	_right_column.add_child(row)
+	_right_column.move_child(row, 0)
+
+
+func current_tab() -> String:
+	return TAB_BUILD if sheet.get("kind", "") in ["list", "building", "carry", "confirm"] else TAB_NOTICE
+
+
+func show_tab(tab: String) -> void:
+	if tab == TAB_BUILD:
+		if current_tab() != TAB_BUILD or sheet.get("kind", "") != "list":
+			open_build_list()
+	else:
+		close_sheet()
+	_show_tabs()
+
+
+func _show_tabs() -> void:
+	for tab: String in _tabs:
+		_tabs[tab].set_pressed_no_signal(tab == current_tab())
 
 
 func _input(event: InputEvent) -> void:
@@ -154,6 +208,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif button.button_index == JOY_BUTTON_START and button.pressed:
 		_pause_menu.open()
+		get_viewport().set_input_as_handled()
+	elif button.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER] and button.pressed:
+		show_tab(TAB_NOTICE if button.button_index == JOY_BUTTON_LEFT_SHOULDER else TAB_BUILD)
 		get_viewport().set_input_as_handled()
 	elif button.button_index == JOY_BUTTON_X and button.pressed:
 		# X is context (two-halves section 3): the selection's card buttons,
@@ -205,6 +262,16 @@ func toggle_build_list() -> void:
 		close_sheet()
 	elif sheet.get("kind", "") not in ["carry", "confirm"]:
 		open_build_list()
+
+
+## A row of the list (or the board's Cottage shortcut): picks up what you
+## can build at once (Mara's #42 review); anything else opens its card,
+## which says why not yet.
+func choose_building(building_id: String) -> void:
+	if BuildList.card_for(Game.data, Game.state, building_id)["can_place"]:
+		start_carry(building_id)
+	else:
+		open_building(building_id)
 
 
 func open_build_list() -> void:
@@ -301,6 +368,7 @@ func _on_stamped() -> void:
 
 ## Builds through the one sim call; on a refusal the stamp's card lists why.
 func _place(building: String, cell: Vector2i) -> void:
+	var homeless: Array[String] = Game.state.homeless()
 	var refusals: Array[Dictionary] = Game.build(building, cell)
 	if not refusals.is_empty():
 		if sheet.get("kind", "") == "confirm":
@@ -313,7 +381,12 @@ func _place(building: String, cell: Vector2i) -> void:
 		_finish_change({"kind": "building", "uid": uid}, CHEER % BuildList.card_for(Game.data, Game.state, building)["title"])
 		_board.celebrate(uid)
 	else:
-		_finish_change({"kind": "building", "uid": uid}, "")
+		var line: String = ""
+		for villager: String in homeless:
+			if Game.state.town.homes.get(villager, 0) == uid:
+				line = MOVED_IN % [Game.data.row("villagers", villager).get("role", villager),
+					BuildList.card_for(Game.data, Game.state, building)["title"]]
+		_finish_change({"kind": "building", "uid": uid}, line)
 
 
 func undo_move() -> void:
@@ -478,9 +551,12 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 			var lines: PackedStringArray = [str(row.get("text", ""))]
 			if row.get("kind", "") == "home":
 				var resident: String = state.town.resident(hit["uid"])
-				lines.append("Nobody lives here yet." if resident.is_empty()
-					else "Home of the %s\u00a0·\u00a0%s" % [data.row("villagers", resident).get("role", resident),
-						MOOD_SHORT[state.mood(data, resident)]])
+				if resident.is_empty():
+					lines.append("Nobody lives here yet.")
+				else:
+					# The mood gets its own line, so it never wraps mid-phrase.
+					lines.append("Home of the %s" % data.row("villagers", resident).get("role", resident))
+					lines.append(MOOD_WORDS[state.mood(data, resident)])
 			return {"title": str(row.get("name", building["building"])), "lines": lines, "chip": "", "quote": ""}
 		"villager":
 			var villager: String = str(hit["villager"])
@@ -498,14 +574,20 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 
 # --- Panels ---------------------------------------------------------------------------------
 
-func _ledger_rows() -> Array[Control]:
+## One row per resource. With `spending` (a building on the stamp), what
+## it would cost reads "3 → 2".
+func _ledger_rows(spending: String = "") -> Array[Control]:
+	var cost: Dictionary = {}
+	if not spending.is_empty():
+		cost = TownMap.parse_cost(Game.data.row("buildings", spending)["cost"] as Array)
 	var rows: Array[Control] = []
 	for id: String in Game.data.ids("resources"):
 		var row: HBoxContainer = HBoxContainer.new()
 		var name_label: Label = TownStyle.label(str(Game.data.row("resources", id).get("name", id)))
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(name_label)
-		var amount: Label = TownStyle.label(str(Game.state.resource(id)))
+		var have: int = Game.state.resource(id)
+		var amount: Label = TownStyle.label(str(have) if not cost.has(id) else "%d → %d" % [have, have - int(cost[id])])
 		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		amount.autowrap_mode = TextServer.AUTOWRAP_OFF
 		row.add_child(amount)
@@ -523,7 +605,8 @@ func _fill(panel: PanelContainer, title: String, children: Array[Control]) -> vo
 		old.queue_free()
 	var stack: VBoxContainer = VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 8)
-	stack.add_child(TownStyle.label(title, TownStyle.TITLE))
+	if not title.is_empty():
+		stack.add_child(TownStyle.label(title, TownStyle.TITLE))
 	for child: Control in children:
 		stack.add_child(child)
 	panel.add_child(stack)
@@ -533,7 +616,11 @@ func _fill(panel: PanelContainer, title: String, children: Array[Control]) -> vo
 ## selection's card. The build sheets take the notice board's room.
 func _show_right_column() -> void:
 	var kind: String = str(sheet.get("kind", ""))
-	_notice.visible = kind not in ["list", "building", "confirm"]
+	_show_hud()
+	_show_tabs()
+	_notice.visible = current_tab() == TAB_NOTICE
+	if _notice.visible:
+		_show_notice(kind == "home")
 	match kind:
 		"list":
 			_show_list()
@@ -551,19 +638,25 @@ func _show_right_column() -> void:
 
 
 ## The build list, scrolling if it's taller than the room above "Go down"
-## (on the Deck, with the HUD grown).
+## (on the Deck, with the HUD grown). What's all built folds into one line.
 func _show_list() -> void:
 	var rows: VBoxContainer = VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 8)
+	var built: PackedStringArray = []
 	for entry: Dictionary in BuildList.entries(Game.data, Game.state):
-		rows.add_child(_list_entry(entry))
+		if entry["done"]:
+			built.append(str(entry["name"]))
+		else:
+			rows.add_child(_list_entry(entry))
+	if not built.is_empty():
+		rows.add_child(TownStyle.label("Built: " + ", ".join(built), TownStyle.SMALL, TownStyle.DIM))
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.name = "Rows"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.follow_focus = true
 	scroll.add_child(rows)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fill(_card, "Build", [scroll, _button("Close", close_sheet)])
+	_fill(_card, "", [scroll])
 	_card.visible = true
 	_fit_list.call_deferred(scroll, rows)
 
@@ -578,26 +671,31 @@ func _fit_list(scroll: ScrollContainer, rows: VBoxContainer) -> void:
 	_focus_first()
 
 
-## One row of the build list: the name (with a padlock if it isn't
-## unlocked) over its cost, or over why not yet. Locked and all-built rows
-## are dimmed but still open their card, which says it all.
+## One row of the build list: the name over its cost, or over why not yet.
+## A row you can build is a filled button that picks it up; any other row
+## is only outlined (a padlock if it's locked) and opens its card (Mara's
+## #42 review: a different shape, not just grey text).
 func _list_entry(entry: Dictionary) -> Button:
-	var second: String = str(entry["status"]) if entry["locked"] or entry["done"] else str(entry["cost"])
+	var second: String = str(entry["cost"]) if entry["status"] == "" else str(entry["status"])
 	if str(entry["status"]) == BuildList.WAITING:
 		second = "%s · %s" % [entry["cost"], entry["status"]]
-	var row: Button = _button("%s\n%s" % [entry["name"], second], open_building.bind(str(entry["id"])))
+	var row: Button = _button("%s\n%s" % [entry["name"], second], choose_building.bind(str(entry["id"])))
 	row.name = str(entry["id"])
 	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var box: StyleBox = row.get_theme_stylebox(state)
+		var box: StyleBoxFlat = row.get_theme_stylebox(state) as StyleBoxFlat
 		box.content_margin_top = 8
 		box.content_margin_bottom = 8
+		if not entry["can_place"] and state != "focus":
+			box.draw_center = state == "hover"
+			box.bg_color = TownStyle.WASHI.darkened(0.04)
+			box.set_border_width_all(1)
 	if entry["locked"]:
 		var lock: Image = PixelArt.padlock()
 		lock.resize(lock.get_width() * 3, lock.get_height() * 3, Image.INTERPOLATE_NEAREST)
 		row.icon = ImageTexture.create_from_image(lock)
-	if entry["locked"] or entry["done"]:
+	if not entry["can_place"]:
 		for color_name: String in ["font_color", "font_hover_color", "font_focus_color"]:
 			row.add_theme_color_override(color_name, TownStyle.DIM)
 	return row
@@ -614,9 +712,10 @@ func _show_building(building_id: String) -> void:
 		children.append(place)
 		children.append(_button("Later", close_sheet))
 	else:
-		var pick: Button = _button(PICK_A_SPOT, start_carry.bind(building_id, 0))
-		pick.disabled = not card["can_place"]
-		children.append(pick)
+		# The list picks up what you can build, so this card is mostly for
+		# why not; "Pick a spot" shows only when it can be.
+		if card["can_place"]:
+			children.append(_button(PICK_A_SPOT, start_carry.bind(building_id, 0)))
 		children.append(_button("Back", open_build_list))
 	_fill(_card, str(card["title"]), children)
 	_card.visible = true

@@ -10,7 +10,8 @@ extends RefCounted
 
 const FREE: String = "Free"
 const WAITING: String = "Won · waiting for a spot"
-const ALL_BUILT: String = "All built"
+const BUILT: String = "Built"
+const ALL_BUILT: String = "All %d built"
 
 
 ## What building `building_id` costs, in shells and resources: "1 shell + 4
@@ -27,29 +28,39 @@ static func cost_text(data: GameData, building_id: String) -> String:
 	return FREE if parts.is_empty() else " + ".join(parts)
 
 
-## The build list's rows, in order: landmarks waiting for a spot first, then
-## every other building in data order. Each row is {"id", "name", "cost",
-## "status", "locked", "done"}: `locked` gets a padlock and is dimmed (an
-## unlock rule), `done` is dimmed (all of them built), and `status` says why.
+## The build list's rows, in order (Mara's #42 review): landmarks waiting
+## for a spot, then what you can build now, then what's short on
+## resources or actions, then what's locked, then what's all built. Each
+## row is {"id", "name", "cost", "status", "can_place", "locked", "done"}:
+## `locked` gets a padlock (an unlock rule), and `status` says why a row
+## can't be built.
 static func entries(data: GameData, state: GameState) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id: String in state.landmarks_waiting():
-		out.append({"id": id, "name": _name(data, id), "cost": FREE, "status": WAITING, "locked": false, "done": false})
+		out.append({"id": id, "name": _name(data, id), "cost": FREE, "status": WAITING, "can_place": true,
+			"locked": false, "done": false})
+	var groups: Array[Array] = [[], [], [], []]
 	for id: String in data.ids("buildings"):
-		if data.row("buildings", id)["kind"] == "landmark":
+		var row: Dictionary = data.row("buildings", id)
+		if row["kind"] == "landmark":
 			continue
-		var status: String = ""
-		var locked: bool = false
-		var done: bool = false
-		for refusal: Dictionary in state.build_refusals(data, id):
-			if refusal["kind"] == Town.Refusal.NOT_YET:
-				locked = true
-				status = refusal["text"]
-			elif refusal["kind"] == Town.Refusal.ALL_BUILT and not locked:
-				done = true
-				status = ALL_BUILT
-		out.append({"id": id, "name": _name(data, id), "cost": cost_text(data, id), "status": status,
-			"locked": locked, "done": done})
+		var refusals: Array[Dictionary] = state.build_refusals(data, id)
+		var kinds: Array = refusals.map(func(refusal: Dictionary) -> Town.Refusal: return refusal["kind"])
+		var entry: Dictionary = {"id": id, "name": _name(data, id), "cost": cost_text(data, id), "status": "",
+			"can_place": refusals.is_empty(), "locked": kinds.has(Town.Refusal.NOT_YET), "done": false}
+		if entry["locked"]:
+			entry["status"] = refusals[kinds.find(Town.Refusal.NOT_YET)]["text"]
+			groups[2].append(entry)
+		elif kinds.has(Town.Refusal.ALL_BUILT):
+			entry["done"] = true
+			var cap: int = row["max_count"]
+			entry["status"] = BUILT if cap == 1 else ALL_BUILT % cap
+			groups[3].append(entry)
+		else:
+			groups[0 if entry["can_place"] else 1].append(entry)
+	for group: Array in groups:
+		for entry: Dictionary in group:
+			out.append(entry)
 	return out
 
 

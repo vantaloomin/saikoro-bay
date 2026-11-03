@@ -69,7 +69,8 @@ func test_cards_for_buildings_and_villagers() -> void:
 	var empty: int = state.town.place("cottage", Vector2i(2, 2))
 	var home: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "building", "uid": cottage})
 	assert_eq(home["title"], "Cottage")
-	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver\u00a0·\u00a0happy"])
+	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver", TownScreen.MOOD_WORDS[Town.Mood.HAPPY]],
+		"the mood on its own line, so it never wraps mid-phrase")
 	assert_eq(Array(TownScreen.card_for(Game.data, state, {"kind": "building", "uid": empty})["lines"])[1],
 		"Nobody lives here yet.")
 	var diver: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "villager", "villager": "pearl_diver"})
@@ -192,7 +193,10 @@ func test_a_build_goes_list_card_carry_stamp() -> void:
 	assert_eq(Game.state.town.placed.size(), 0, "nothing is spent before the stamp")
 	assert_true(board.carry_held, "the ghost waits on its spot")
 	var stamp: HankoButton = town.find_child("Stamp", true, false) as HankoButton
+	assert_eq(town.find_child("Ledger", true, false).find_children("*", "Label", true, false).map(
+		func(label: Node) -> String: return (label as Label).text).has("20 → 16"), true, "the ledger previews the spend")
 	stamp.pressed.emit()
+	assert_true(stamp.disabled, "the stamp locks itself on the first press (Imogen's #42 audit)")
 	stamp.pressed.emit()
 	assert_eq(Game.state.town.placed.size(), 1, "one stamp, one build")
 	assert_eq(Game.state.town.actions_left, 3, "one shell spent, once")
@@ -234,8 +238,7 @@ func test_a_card_cant_be_carried_without_what_it_needs() -> void:
 	for node: Node in town.find_children("*", "Button", true, false):
 		if (node as Button).text == TownScreen.PICK_A_SPOT:
 			pick = node as Button
-	assert_not_null(pick)
-	assert_true(pick.disabled, "no driftwood, no carrying")
+	assert_null(pick, "no driftwood, no carrying: the card only says why")
 
 
 func test_a_won_landmark_waits_on_arrival_and_places_free() -> void:
@@ -335,3 +338,36 @@ func test_name_tags_never_cover_bubbles_or_each_other() -> void:
 		for other: Rect2 in taken:
 			assert_false(rect.intersects(other), "%s covers nothing" % tag["text"])
 		taken.append(rect)
+
+
+func test_the_build_tab_opens_the_list_and_affordable_rows_pick_up_at_once() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	assert_eq(town.current_tab(), TownScreen.TAB_NOTICE)
+	town.show_tab(TownScreen.TAB_BUILD)
+	assert_eq(town.sheet, {"kind": "list"})
+	assert_false((town.get_node("%Notice") as Control).visible, "the board is one tab away, not gone")
+	(town.find_child("cottage", true, false) as Button).pressed.emit()
+	assert_eq(town.sheet["kind"], "carry", "a row you can build picks it up at once")
+	assert_eq(board.carry_building, "cottage")
+	town.show_tab(TownScreen.TAB_NOTICE)
+	assert_eq(town.sheet, {})
+	assert_eq(board.mode, TownBoard.Mode.LOOK, "the notice tab puts it back")
+	town.show_tab(TownScreen.TAB_BUILD)
+	(town.find_child("bait_shop", true, false) as Button).pressed.emit()
+	assert_eq(town.sheet, {"kind": "building", "id": "bait_shop"}, "a locked row opens its card")
+
+
+func test_a_new_home_says_who_moved_in() -> void:
+	_rich()
+	Game.state._villagers.append("shrine_keeper")
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.start_carry("cottage")
+	board._pick_at(_cell_point(board, Vector2i(1, 1)))
+	(town.find_child("Stamp", true, false) as HankoButton).pressed.emit()
+	var said: bool = false
+	for label: Node in (town.get_node("%Notice") as Control).find_children("*", "Label", true, false):
+		said = said or (label as Label).text == TownScreen.MOVED_IN % ["Kitsune shrine keeper", "Cottage"]
+	assert_true(said)

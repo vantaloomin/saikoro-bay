@@ -125,6 +125,18 @@ func wish_met(data: GameData, map: TownMap, villager: String) -> bool:
 	return false
 
 
+## How a villager in town feels about where they live (spec section 5).
+func mood_of(data: GameData, map: TownMap, villager: String) -> Mood:
+	if not homes.has(villager):
+		return Mood.HOMELESS
+	return Mood.HAPPY if wish_met(data, map, villager) else Mood.UNHAPPY
+
+
+## Which of `villagers` have their wish met, in their order.
+func happy(data: GameData, map: TownMap, villagers: Array[String]) -> Array[String]:
+	return villagers.filter(func(villager: String) -> bool: return wish_met(data, map, villager))
+
+
 # --- Changing the layout ----------------------------------------------------------
 
 ## Stands a building on a spot already checked by the caller. Returns its uid.
@@ -133,6 +145,40 @@ func place(building_id: String, cell: Vector2i) -> int:
 	next_uid += 1
 	placed.append({"uid": uid, "building": building_id, "x": cell.x, "y": cell.y})
 	return uid
+
+
+## Moves each of `villagers` who has no home into a free one: first in the
+## list into the first home built. Returns who moved in.
+func settle(data: GameData, villagers: Array[String]) -> Array[String]:
+	var moved: Array[String] = []
+	for villager: String in villagers:
+		if homes.has(villager):
+			continue
+		for building: Dictionary in placed:
+			if data.row("buildings", building["building"]).get("kind", "") == "home" and resident(building["uid"]).is_empty():
+				homes[villager] = building["uid"]
+				moved.append(villager)
+				break
+	return moved
+
+
+## Moves `villager` into home `uid`. Whoever lived there swaps into the
+## villager's old home, or has none if the villager had none. Both move or
+## neither. Returns "" when done, or why not.
+func swap(data: GameData, villager: String, uid: int) -> String:
+	var target: Dictionary = entry(uid)
+	if target.is_empty() or data.row("buildings", target["building"]).get("kind", "") != "home":
+		return "Not a home"
+	if homes.get(villager, 0) == uid:
+		return "Already lives here"
+	var other: String = resident(uid)
+	if not other.is_empty():
+		if homes.has(villager):
+			homes[other] = homes[villager]
+		else:
+			homes.erase(other)
+	homes[villager] = uid
+	return ""
 
 
 ## Moves a placed building (free, TB-3). Checked with the building lifted,

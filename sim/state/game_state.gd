@@ -263,35 +263,67 @@ func build(data: GameData, building_id: String, cell: Vector2i) -> Array[Diction
 ## villagers with their wish met than now, counting anyone with nowhere to
 ## live who'd move into a new home. The cells the carry ghost lights up
 ## (spec section 2), derived from the same rules as mood, never stored.
+## Each spot is tried on a copy of the town; the live one is never touched
+## (Imogen's #42 audit).
 func wish_spots(data: GameData, building_id: String, lifted_uid: int = 0) -> Array[Vector2i]:
 	var map: TownMap = town_map(data)
-	var happy_now: int = _happy_count(data, map)
-	var real: Town = town
+	var happy_now: int = town.happy(data, map, _villagers).size()
 	var out: Array[Vector2i] = []
 	for y: int in map.land_rows:
 		for x: int in map.width:
 			var cell: Vector2i = Vector2i(x, y)
-			if not real.spot_problem(data, map, building_id, cell, lifted_uid).is_empty():
+			if not town.spot_problem(data, map, building_id, cell, lifted_uid).is_empty():
 				continue
-			town = Town.from_dict(real.to_dict())
-			if lifted_uid != 0:
-				town.move(data, map, lifted_uid, cell)
-			else:
-				town.place(building_id, cell)
-				settle_villagers(data)
-			var better: bool = _happy_count(data, map) > happy_now
-			town = real
-			if better:
+			var trial: Town = _trial_placing(data, map, building_id, cell, lifted_uid)
+			if trial != null and trial.happy(data, map, _villagers).size() > happy_now:
 				out.append(cell)
 	return out
 
 
-func _happy_count(data: GameData, map: TownMap) -> int:
-	var count: int = 0
-	for villager: String in _villagers:
-		if town.wish_met(data, map, villager):
-			count += 1
-	return count
+## Who'd lose their wish if `building_id` (new, or `lifted_uid` moved)
+## stood at `cell`, in rescue order: what the move ghost warns about
+## (Mara's #42 review), so a free move never hides its cost.
+func wish_losses(data: GameData, building_id: String, cell: Vector2i, lifted_uid: int = 0) -> Array[String]:
+	var map: TownMap = town_map(data)
+	if not town.spot_problem(data, map, building_id, cell, lifted_uid).is_empty():
+		return []
+	var trial: Town = _trial_placing(data, map, building_id, cell, lifted_uid)
+	if trial == null:
+		return []
+	var after: Array[String] = trial.happy(data, map, _villagers)
+	return town.happy(data, map, _villagers).filter(func(villager: String) -> bool: return not after.has(villager))
+
+
+## How the two villagers a swap touches would feel after it: {villager:
+## Town.Mood} for `villager` and whoever lives in `uid` now, or {} if the
+## swap can't happen. Tried on a copy; changes nothing.
+func swap_moods(data: GameData, villager: String, uid: int) -> Dictionary[String, Town.Mood]:
+	var out: Dictionary[String, Town.Mood] = {}
+	var trial: Town = Town.from_dict(town.to_dict())
+	if trial == null or not _villagers.has(villager):
+		return out
+	var other: String = town.resident(uid)
+	if trial.swap(data, villager, uid).is_empty():
+		var map: TownMap = town_map(data)
+		out[villager] = trial.mood_of(data, map, villager)
+		if not other.is_empty():
+			out[other] = trial.mood_of(data, map, other)
+	return out
+
+
+## A copy of the town with `building_id` placed (and anyone with nowhere
+## to live settled), or `lifted_uid` moved, to `cell`; null if the copy
+## can't be made.
+func _trial_placing(data: GameData, map: TownMap, building_id: String, cell: Vector2i, lifted_uid: int) -> Town:
+	var trial: Town = Town.from_dict(town.to_dict())
+	if trial == null:
+		return null
+	if lifted_uid != 0:
+		trial.move(data, map, lifted_uid, cell)
+	else:
+		trial.place(building_id, cell)
+		trial.settle(data, _villagers)
+	return trial
 
 
 ## Moves a placed building for free. Returns "" when it moved, or why not.
@@ -305,17 +337,7 @@ func move_building(data: GameData, uid: int, cell: Vector2i) -> String:
 ## into the first home built. Returns who moved in, for the walk there.
 ## Changes nothing when everyone is housed or there's no free home.
 func settle_villagers(data: GameData) -> Array[String]:
-	var moved: Array[String] = []
-	for villager: String in _villagers:
-		if town.homes.has(villager):
-			continue
-		for building: Dictionary in town.placed:
-			if data.row("buildings", building["building"]).get("kind", "") == "home" \
-					and town.resident(building["uid"]).is_empty():
-				town.homes[villager] = building["uid"]
-				moved.append(villager)
-				break
-	return moved
+	return town.settle(data, _villagers)
 
 
 ## Moves `villager` into home `uid` for free. Whoever lived there swaps
@@ -324,25 +346,11 @@ func settle_villagers(data: GameData) -> Array[String]:
 func swap_home(data: GameData, villager: String, uid: int) -> String:
 	if not _villagers.has(villager):
 		return "Not in town"
-	var target: Dictionary = town.entry(uid)
-	if target.is_empty() or data.row("buildings", target["building"]).get("kind", "") != "home":
-		return "Not a home"
-	if town.homes.get(villager, 0) == uid:
-		return "Already lives here"
-	var other: String = town.resident(uid)
-	if not other.is_empty():
-		if town.homes.has(villager):
-			town.homes[other] = town.homes[villager]
-		else:
-			town.homes.erase(other)
-	town.homes[villager] = uid
-	return ""
+	return town.swap(data, villager, uid)
 
 
 func mood(data: GameData, villager: String) -> Town.Mood:
-	if not town.homes.has(villager):
-		return Town.Mood.HOMELESS
-	return Town.Mood.HAPPY if town.wish_met(data, town_map(data), villager) else Town.Mood.UNHAPPY
+	return town.mood_of(data, town_map(data), villager)
 
 
 ## Villagers in town with nowhere to live, in rescue order.

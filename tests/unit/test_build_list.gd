@@ -52,7 +52,20 @@ func test_locked_and_all_built_rows_say_why() -> void:
 	for entry: Dictionary in BuildList.entries(data, state):
 		if entry["id"] == "net_shed":
 			assert_true(entry["done"])
-			assert_eq(entry["status"], BuildList.ALL_BUILT)
+			assert_eq(entry["status"], "Built", "a cap of one says Built")
+
+
+func test_the_list_puts_what_you_can_build_first() -> void:
+	var state: GameState = _state()
+	state.add_resource("pearls", 1)
+	state.town.place("tea_stall", Vector2i(1, 1))
+	for i: int in 4:
+		state.town.place("cottage", Vector2i(5 + i % 3, 5 + i / 3))
+	var order: Array = BuildList.entries(data, state).map(func(entry: Dictionary) -> String: return entry["id"])
+	assert_eq(order, ["lantern_post", "net_shed", "bait_shop", "boat_shed", "cottage", "tea_stall"],
+		"can build, short, locked, then built")
+	var cottage: Dictionary = BuildList.entries(data, state)[4]
+	assert_eq(cottage["status"], "All 4 built")
 
 
 func test_a_card_lists_every_reason_but_no_actions() -> void:
@@ -61,7 +74,7 @@ func test_a_card_lists_every_reason_but_no_actions() -> void:
 	var card: Dictionary = BuildList.card_for(data, state, "tea_stall")
 	assert_eq(card["title"], "Tea stall")
 	assert_eq(Array(card["lines"]), [
-		"Will feed a dice perk (M4).", "Costs 1 shell + 3 driftwood + 1 pearl",
+		"A shop. Its dice perk comes in a later update.", "Costs 1 shell + 3 driftwood + 1 pearl",
 		"Needs 2 more driftwood (you have 1) · found in fights and small locks below",
 		"Needs 1 more pearl (you have 0) · found in fights and pearl locks below",
 	])
