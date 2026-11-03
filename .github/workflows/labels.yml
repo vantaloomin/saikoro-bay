@@ -23,7 +23,7 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # On PRs this is a dry run that only reports what would change.
       - uses: EndBug/label-sync@v2
