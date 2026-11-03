@@ -184,6 +184,7 @@ func end_turn() -> bool:
 		moves.append({"move": "end_turn"})
 
 	# 1. Slots, in card order.
+	var paid: Array[String] = []
 	for s: Slot in slots:
 		if s.sealed or not s.is_complete():
 			continue
@@ -198,13 +199,17 @@ func end_turn() -> bool:
 				if amount > 0:
 					payout[resource_id] = payout.get(resource_id, 0) + amount
 					events.append({"type": "loot", "resource": resource_id, "amount": amount, "source": "slot:" + s.id})
-					if chum_amount > 0:
-						# After the draws, an amount only (Imogen's rule 5).
-						payout[resource_id] += chum_amount
-						events.append({"type": "perk", "perk": CHUM_PERK, "source": chum_source,
-							"resource": resource_id, "amount": chum_amount})
+					if not paid.has(resource_id):
+						paid.append(resource_id)
 			"open":
 				events.append({"type": "open", "source": "slot:" + s.id})
+	# Chum: once per resource paid this turn, however many locks paid it,
+	# after the draws and an amount only (Imogen's rule 5 and #50 audit).
+	if chum_amount > 0:
+		for resource_id: String in paid:
+			payout[resource_id] += chum_amount
+			events.append({"type": "perk", "perk": CHUM_PERK, "source": chum_source,
+				"resource": resource_id, "amount": chum_amount})
 
 	# 2. Success.
 	if open_all and open_count() == slots.size():

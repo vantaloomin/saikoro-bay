@@ -15,11 +15,20 @@ extends SceneTree
 ##
 ## Seeds are paired: seed S is the same map and the same rolls for every kit
 ## (per-die streams), so "lost" counts delves the plain kit cleared and this
-## kit didn't, and "gained" the reverse. A kit that loses no seed the plain
-## kit cleared, and gains some, is flagged "flat": it's a flat increase.
+## kit didn't, and "gained" the reverse. Paired delves drift apart once any
+## choice changes, so even a pure gain loses some seeds; a kit is flagged
+## "flat" by McNemar's test instead (Imogen's #50 audit): gained > lost,
+## (|gained - lost| - 1)^2 / (gained + lost) over FLAT_CHI2 (p < 0.01), and
+## clears up by more than FLAT_POINTS. The statistic is printed too.
 ## Every kit also reports the haul it banked, since Chum trades fights for
 ## treasure. Exits 1 if a delve got stuck or a fight stalemated, 2 on bad
 ## options.
+
+
+## McNemar's chi-squared (1 degree of freedom) at p < 0.01.
+const FLAT_CHI2: float = 6.63
+## And the clear rate up by more than this many points.
+const FLAT_POINTS: float = 3.0
 
 
 func _initialize() -> void:
@@ -74,8 +83,9 @@ func _initialize() -> void:
 		var row: Dictionary = _row(kit_perks, outcomes, base)
 		failed = failed or int(row["stuck"]) > 0 or int(row["stalemates"]) > 0
 		rows.append(row)
-		print("%-26s cleared %5s%%  lost %4d  gained %4d  haul %s%s" % ["+".join(kit_perks) if not kit_perks.is_empty() else "(plain kit)",
-			row["cleared_percent"], row["lost"], row["gained"], row["kept_per_delve"], "  FLAT" if row["flat"] else ""])
+		print("%-26s cleared %5s%%  lost %4d  gained %4d  chi2 %6s  haul %s%s" % [
+			"+".join(kit_perks) if not kit_perks.is_empty() else "(plain kit)", row["cleared_percent"], row["lost"],
+			row["gained"], row["mcnemar_chi2"], row["kept_per_delve"], "  FLAT" if row["flat"] else ""])
 	var report: Dictionary = {"bot": bot.name(), "seeds": seeds, "first_seed": first_seed, "kits": rows,
 		"seconds": "%.1f" % ((Time.get_ticks_msec() - started) / 1000.0)}
 	var text: String = JSON.stringify(report, "  ")
@@ -112,12 +122,15 @@ static func _row(kit_perks: Array, outcomes: Array[BotScenario.Outcome], base: A
 	for id: String in kept:
 		per_delve[id] = "%.2f" % (float(kept[id]) / maxi(1, outcomes.size()))
 	var bp: int = cleared * 10000 / maxi(1, outcomes.size())
+	var chi2: float = 0.0 if lost + gained == 0 else pow(absf(gained - lost) - 1.0, 2.0) / (gained + lost)
+	var points: float = (gained - lost) * 100.0 / maxi(1, outcomes.size())
 	return {
 		"perks": kit_perks,
 		"cleared_percent": "%d.%02d" % [bp / 100, bp % 100],
 		"lost": lost,
 		"gained": gained,
-		"flat": not kit_perks.is_empty() and lost == 0 and gained > 0,
+		"mcnemar_chi2": "%.2f" % chi2,
+		"flat": not kit_perks.is_empty() and gained > lost and chi2 > FLAT_CHI2 and points > FLAT_POINTS,
 		"kept_per_delve": per_delve,
 		"stuck": stuck,
 		"stalemates": stalemates,

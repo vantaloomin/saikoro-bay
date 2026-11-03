@@ -156,6 +156,29 @@ func test_two_pours_last_the_whole_fight() -> void:
 	assert_eq(fight.rerolls_left, 0, "and no reroll comes back either")
 
 
+## Imogen's #50 audit: the House lock runs again after a pour, as after a
+## reroll, so a die the pour rolls higher than the locked one takes the lock.
+func test_the_house_lock_moves_after_a_pour() -> void:
+	var moved: int = 0
+	for seed_value: int in 40:
+		var fight: Fight = _fight(POUR, seed_value, "hermit_croupier")
+		for i: int in 4:
+			fight.hand[i].value = [4, 1, 1, 1][i]
+		fight.table.apply_lock()
+		assert_true(fight.hand[0].locked)
+		assert_true(fight.pour())
+		assert_eq(fight.hand[0].value, 4, "the locked die isn't poured")
+		var highest: int = 0
+		for d: Fight.Die in fight.hand:
+			if d.value > fight.hand[highest].value:
+				highest = d.id
+		for d: Fight.Die in fight.hand:
+			assert_eq(d.locked, d.id == highest, "seed %d die %d" % [seed_value, d.id])
+		if highest != 0:
+			moved += 1
+	assert_gt(moved, 0, "some seed pours past the locked 4")
+
+
 func test_a_planning_copy_keeps_the_pour_count_but_cant_pour() -> void:
 	var fight: Fight = _fight(POUR)
 	fight.pour()
@@ -252,6 +275,48 @@ func test_chum_pays_one_more_of_each_resource_a_treasure_room_pays() -> void:
 	assert_eq(badges, [
 		{"type": "perk", "perk": "chum", "source": "bait_shop", "resource": "driftwood", "amount": 1},
 		{"type": "perk", "perk": "chum", "source": "bait_shop", "resource": "pearls", "amount": 1}])
+
+
+func _texts() -> Dictionary[String, String]:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	return texts
+
+
+## Imogen's #50 audit: +1 of each resource, not +1 per lock, even when two
+## locks pay the same resource.
+func test_chum_pays_once_per_resource_however_many_locks_pay_it() -> void:
+	var texts: Dictionary[String, String] = _texts()
+	var slots: Dictionary = JSON.parse_string(texts["slots"])
+	for item: Dictionary in slots["items"] as Array:
+		if item["id"] == "pearl_lock":
+			item["resource"] = "driftwood"
+	texts["slots"] = JSON.stringify(slots)
+	var two_wood: GameData = GameData.new()
+	two_wood.load_texts(texts)
+	assert_eq(two_wood.errors, PackedStringArray())
+	var kit: Kit = Kit.fresh(two_wood, CHUM)
+	var room: DiceRoom = DiceRoom.create(two_wood, Kit.LOADOUT, "treasure", RngStreams.new(5), kit.perks, 30, kit.die_specs())
+	for i: int in 4:
+		room.hand[i].value = [5, 4, 4, 2][i]
+	room.place(0, "small_lock")
+	room.place(1, "pearl_lock")
+	room.place(2, "pearl_lock")
+	room.end_turn()
+	assert_eq(room.payout, {"driftwood": 5 + 2 + 1} as Dictionary[String, int])
+
+
+func test_only_one_perk_may_swap_die_zero() -> void:
+	var texts: Dictionary[String, String] = _texts()
+	var perks: Dictionary = JSON.parse_string(texts["perks"])
+	for item: Dictionary in perks["items"] as Array:
+		if item["id"] == "spare_die":
+			item["kind"] = "die_faces"
+	texts["perks"] = JSON.stringify(perks)
+	var two_faces: GameData = GameData.new()
+	two_faces.load_texts(texts)
+	assert_eq(two_faces.errors, PackedStringArray(["perks: at most one die_faces perk (each swaps die 0), got weighted_die, spare_die"]))
 
 
 func test_chum_pays_nothing_more_outside_treasure_rooms() -> void:

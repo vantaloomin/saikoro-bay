@@ -343,6 +343,11 @@ func _check_perks() -> void:
 		for field: String in ["amount", "uses_per_turn", "happy_amount", "happy_uses_per_turn", "cost_amount"]:
 			if (perk_row[field] as int) < 0:
 				errors.append("perks \"%s\": %s can't be negative" % [id, field])
+	# Every die_faces perk swaps die 0, so two would fight over it.
+	var face_perks: Array = ids("perks") as Array
+	face_perks = face_perks.filter(func(id: Variant) -> bool: return row("perks", str(id))["kind"] == "die_faces")
+	if face_perks.size() > 1:
+		errors.append("perks: at most one die_faces perk (each swaps die 0), got %s" % ", ".join(face_perks))
 	# One giver per perk, villager or shop: a kit holds each perk once
 	# (Imogen's #49 audit). A shop gives one, and only one of it stands.
 	var perk_owner: Dictionary[String, String] = {}
