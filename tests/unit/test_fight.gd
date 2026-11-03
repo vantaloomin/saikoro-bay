@@ -505,6 +505,22 @@ func test_snake_eyes_kill_ends_before_the_enemy_attacks() -> void:
 		assert_ne(event["source"], "enemy", "a defeated player isn't hit again")
 
 
+func test_the_fight_and_its_table_share_one_log() -> void:
+	var fight: Fight = _fight()
+	assert_true(is_same(fight.events, fight.table.events))
+	assert_true(is_same(fight.moves, fight.table.moves))
+	var fresh_events: Array[Dictionary] = []
+	var fresh_moves: Array[Dictionary] = []
+	fight.events = fresh_events
+	fight.moves = fresh_moves
+	assert_true(is_same(fight.table.events, fresh_events), "reassigning rebinds the table")
+	assert_true(is_same(fight.table.moves, fresh_moves))
+	_set_hand(fight, [3, 3, 3, 3])
+	fight.place(0, "strike")
+	fight.end_turn()
+	assert_eq(fresh_moves, [{"move": "place", "die": 0, "slot": "strike"}, {"move": "end_turn"}] as Array[Dictionary])
+
+
 func test_planning_copy_matches_the_fight_and_cant_roll() -> void:
 	var fight: Fight = _fight("hermit_croupier", [{"perk": "nudge", "source": "pearl_diver"}, {"perk": "brace", "source": "shipwright"}])
 	_set_hand(fight, [4, 6, 2, 2])

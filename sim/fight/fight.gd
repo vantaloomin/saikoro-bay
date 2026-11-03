@@ -97,9 +97,19 @@ var nudges_left: int:
 var start_rng: Dictionary = {}
 var start_hp: int = 0
 
-var events: Array[Dictionary] = []
+## The table logs into these same arrays, so assigning a new one rebinds
+## the table too and the room keeps a single log.
+var events: Array[Dictionary] = []:
+	set(value):
+		events = value
+		if table != null:
+			table.events = value
 ## Every accepted move, in order: {"move": "place", "die": 0, "slot": "strike"}...
-var moves: Array[Dictionary] = []
+var moves: Array[Dictionary] = []:
+	set(value):
+		moves = value
+		if table != null:
+			table.moves = value
 
 var _unused_die_block: int = 0
 ## True on preview copies: end_turn stops before the next turn starts.
