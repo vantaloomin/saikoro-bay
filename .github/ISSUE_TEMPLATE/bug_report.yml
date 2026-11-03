@@ -1,0 +1,40 @@
+name: Bug report
+description: Something is broken or behaves wrongly
+title: "[Bug] "
+labels: ["type: bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      options:
+        - Town (above ground)
+        - Delve (below the tide)
+        - Menus / UI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a delve
+        2. Place a 6 on the ...
+        3. See ...
+  - type: input
+    id: build
+    attributes:
+      label: Build or commit
+      description: Version, build number or commit hash, if known.
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshots, clips or logs

@@ -1,0 +1,36 @@
+name: Design idea
+description: A mechanic, character, landmark or story idea to explore before building
+title: "[Design] "
+labels: ["type: design"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of idea
+      options:
+        - Mechanic / system
+        - Dice or delve content
+        - Town building or landmark
+        - Villager or romance
+        - Story / luck spirit
+        - Art, audio or mood
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: pitch
+    attributes:
+      label: The pitch
+      description: One or two sentences. What is it and why is it fun?
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: How it might work, how it connects the town and the delve, open questions.
+  - type: textarea
+    id: refs
+    attributes:
+      label: References
+      description: Games, art, sketches or links that capture the feel.
