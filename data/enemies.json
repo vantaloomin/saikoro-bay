@@ -23,7 +23,7 @@
 			"twist": "spines", "twist_text": "Spines: dice you leave unplaced give no block."
 		},
 		{
-			"id": "high_roller_crab", "name": "High-Roller Crab", "tier": "regular", "hp": 40,
+			"id": "pot_raiser_crab", "name": "Pot-Raiser Crab", "tier": "regular", "hp": 40,
 			"intents": ["attack:6", "attack:7"],
 			"twist": "rising_stakes", "twist_text": "Rising stakes: each attack hits 1 harder than the last."
 		},

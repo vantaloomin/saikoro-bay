@@ -37,6 +37,11 @@ class IntentView:
 			if current.has(kind):
 				BoardStyle.draw_intent_glyph(self, Rect2(x, 10, 72, 72), kind, BoardStyle.INK)
 				draw_string(font, Vector2(x + 80, 70), str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG, BoardStyle.INK)
+				if kind == "attack" and current.has("raised"):
+					# Rising stakes, shown climbing (Mara, #32).
+					_draw_raise(font, Vector2(x + 80 + font.get_string_size(str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG).x + 8, 70),
+						current["raised"] as int, BoardStyle.BODY, BoardStyle.AMBER)
+					x += 90
 				x += 190
 		draw_string(font, Vector2(0, 128), "next", HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL, BoardStyle.DIM)
 		x = 60
@@ -44,7 +49,20 @@ class IntentView:
 			if next.has(kind):
 				BoardStyle.draw_intent_glyph(self, Rect2(x, 104, 32, 32), kind, BoardStyle.DIM)
 				draw_string(font, Vector2(x + 36, 130), str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.DIM)
+				if kind == "attack" and next.has("raised"):
+					_draw_raise(font, Vector2(x + 36 + font.get_string_size(str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY).x + 6, 130),
+						next["raised"] as int, BoardStyle.SMALL, BoardStyle.DIM)
+					x += 70
 				x += 90
+
+	## "(+2)" after an attack raised by Rising stakes, with a small up arrow
+	## drawn in front so it reads as climbing, not as the base number.
+	func _draw_raise(font: Font, at: Vector2, amount: int, font_size: int, color: Color) -> void:
+		var h: float = font_size * 0.5
+		var tip: Vector2 = at + Vector2(h * 0.5, -font_size * 0.75)
+		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(h * 0.5, h * 0.6), tip + Vector2(-h * 0.5, h * 0.6)]), color)
+		draw_line(tip + Vector2(0, h * 0.5), tip + Vector2(0, h * 1.3), color, 3.0)
+		draw_string(font, at + Vector2(h + 4, 0), "(+%d)" % amount, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
 
 
 var fight: Fight
@@ -434,7 +452,11 @@ func _refresh_numbers() -> void:
 	_player_bar.ghost = _turn["lost"] if planning else 0
 	_player_hp.text = "HP %d / %d" % [_shown_player_hp, fight.player_max_hp]
 	var gain: int = _turn["block"] if planning else 0
+	var spined: int = _turn["spined"] if planning else 0
 	_player_block.text = "Block %d  (+%d)" % [_shown_player_block, gain] if gain > 0 else "Block %d" % _shown_player_block
+	if spined > 0:
+		# The cost of Spines sits on the stat it changes (Mara, #32).
+		_player_block.text = "Block %d  (+%d · spines stop %d)" % [_shown_player_block, gain, spined]
 
 
 func _set_preview(card: SlotCard, s: Fight.Slot) -> void:

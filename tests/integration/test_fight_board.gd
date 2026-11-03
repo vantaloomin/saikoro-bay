@@ -209,3 +209,27 @@ func test_every_cue_is_a_short_sound() -> void:
 		var wav: AudioStreamWAV = BoardSounds.stream(cue)
 		assert_not_null(wav, cue)
 		assert_between(wav.get_length(), 0.03, 0.6, cue)
+
+
+func test_spines_show_their_cost_on_the_block_line() -> void:
+	var puffer: Fight = Fight.create(data, "fresh", "pufferfish_bouncer", RngStreams.new(4))
+	var values: Array[int] = [1, 1, 4, 3]
+	for i: int in 4:
+		puffer.hand[i].value = values[i]
+	var other: FightBoard = BOARD.instantiate() as FightBoard
+	other.setup(puffer, data)
+	add_child_autofree(other)
+	other._on_die_pressed(2)
+	other._on_slot_pressed("guard")
+	assert_string_contains(other._player_block.text, "spines stop 3")
+	assert_string_contains(other.turn_preview()["detail"], "spines stop 3 block")
+
+
+func test_rising_stakes_mark_the_raise_on_the_intent() -> void:
+	var crab: Fight = Fight.create(data, "fresh", "pot_raiser_crab", RngStreams.new(4))
+	crab.intent_index = 2
+	var other: FightBoard = BOARD.instantiate() as FightBoard
+	other.setup(crab, data)
+	add_child_autofree(other)
+	assert_eq(other._intent.current["raised"], 2)
+	assert_eq(other._intent.next["raised"], 3)
