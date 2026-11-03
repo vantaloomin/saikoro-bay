@@ -1,0 +1,7 @@
+{
+	"schema": 1,
+	"note": "The slice's town map and action budget (specs/town.md sections 2 and 4). The land is cut into lots by the path columns and rows; the sea fills the bottom rows. A visit starts with base_actions plus up to keep_max kept from the last visit. Placeholder numbers, tuned in playtests.",
+	"items": [
+		{ "id": "saikoro_bay", "width": 12, "height": 9, "sea_rows": 1, "path_columns": [4, 8], "path_rows": [4], "base_actions": 4, "keep_max": 1 }
+	]
+}

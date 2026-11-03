@@ -1,34 +1,58 @@
 {
 	"schema": 1,
-	"note": "Working names and roles from the PRD. The shrine keeper's personality and bet are still open.",
+	"note": "Working names and roles from the PRD. The shrine keeper's personality and bet are still open. Each villager wishes for one thing about their home (specs/town.md section 5): next to the sea, or next to one of wish_buildings (sharing an edge).",
 	"items": [
 		{
 			"id": "pearl_diver",
 			"role": "Pearl diver",
 			"personality": "Bold, outdoorsy",
 			"bet_lost": "Their breath: they can no longer dive",
-			"perk": "nudge"
+			"perk": "nudge",
+			"wish": "sea",
+			"wish_buildings": [],
+			"wish_text": "Next to the sea",
+			"wish_line": "I can't dive any more, but I still want to hear the waves."
 		},
 		{
 			"id": "shipwright",
 			"role": "Shipwright",
 			"personality": "Gruff, dependable",
 			"bet_lost": "Their hands",
-			"perk": "brace"
+			"perk": "brace",
+			"wish": "next_to",
+			"wish_buildings": [
+				"boat_shed",
+				"net_shed"
+			],
+			"wish_text": "Next to the Boat shed or the Net shed",
+			"wish_line": "Put me near the boats. I sleep better with the smell of tar."
 		},
 		{
 			"id": "onsen_keeper",
 			"role": "Onsen keeper",
 			"personality": "Teasing, nurturing",
 			"bet_lost": "The hot spring itself",
-			"perk": "mend"
+			"perk": "mend",
+			"wish": "next_to",
+			"wish_buildings": [
+				"hot_spring",
+				"tea_stall"
+			],
+			"wish_text": "Next to the Hot Spring or a Tea stall",
+			"wish_line": "Somewhere warm, with tea close by. Is that so much to ask?"
 		},
 		{
 			"id": "shrine_keeper",
 			"role": "Kitsune shrine keeper",
 			"personality": "",
 			"bet_lost": "",
-			"perk": "foresight"
+			"perk": "foresight",
+			"wish": "next_to",
+			"wish_buildings": [
+				"lantern_post"
+			],
+			"wish_text": "Next to a Lantern post",
+			"wish_line": "A lantern by the door, please. Spirits like to know where I live."
 		}
 	]
 }
