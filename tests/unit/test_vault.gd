@@ -164,6 +164,53 @@ func test_a_vault_replays_from_its_seed_and_moves() -> void:
 	assert_eq(haul.to_dict(), vault.haul.to_dict())
 
 
+# --- Planning copies (Imogen, #27) ------------------------------------------------------
+
+func test_a_planning_copy_previews_a_round_on_its_own_haul() -> void:
+	var haul: Haul = _haul()
+	var rng: RngStreams = RngStreams.new(11)
+	var vault: Vault = Vault.create(data, "fresh", "koban", rng, [], haul)
+	vault.raise("driftwood")
+	vault.roll()
+	vault.house_hand.assign([1, 2, 4] as Array[int])
+	for i: int in 3:
+		vault.table.hand[i].value = 6
+		vault.place(i, vault.hand().id)
+	var rng_before: Dictionary = rng.to_dict()
+	var moves_before: int = vault.moves.size()
+	var copy: Vault = vault.planning_copy()
+	assert_true(copy.end_turn())
+	assert_eq(copy.rounds_won, 1)
+	assert_eq(copy.haul.resource("driftwood"), 25, "the copy's haul gets the stake back twice")
+	assert_eq(haul.resource("driftwood"), 15, "the run's haul still has the stake out")
+	assert_eq(copy.state, Vault.State.WAGER, "the round is scored")
+	assert_eq(copy.round_number, vault.round_number, "but the copy never starts the next one")
+	assert_false(copy.end_turn(), "a copy scores once")
+	assert_eq(rng.to_dict(), rng_before, "the preview draws nothing")
+	assert_eq(vault.moves.size(), moves_before)
+	assert_eq(vault.state, Vault.State.PLAYER_TURN)
+
+
+func test_a_planning_copy_cant_roll_or_reroll() -> void:
+	var haul: Haul = _haul()
+	var vault: Vault = _vault(haul)
+	var copy: Vault = vault.planning_copy()
+	assert_true(copy.raise("driftwood"), "a preview raise works on the copy")
+	assert_eq(haul.resource("driftwood"), 20, "and leaves the run's haul alone")
+	assert_false(copy.roll())
+	vault.roll()
+	assert_ne(vault.planning_copy().reroll_refusal(0), "")
+	assert_false(vault.planning_copy().reroll(0))
+
+
+func test_moves_before_the_roll_say_why() -> void:
+	var vault: Vault = _vault()
+	assert_eq(vault.place_refusal(0, vault.hand().id), "Roll first.")
+	assert_eq(vault.reroll_refusal(0), "Roll first.")
+	vault.roll()
+	assert_eq(vault.place_refusal(0, vault.hand().id), "")
+
+
 # --- The bot ---------------------------------------------------------------------------
 
 func test_the_bot_plays_its_best_three_dice() -> void:

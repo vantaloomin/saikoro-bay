@@ -5,9 +5,8 @@ extends Control
 ## the stakes in front of you. The haul strip stays along the top
 ## throughout.
 ##
-## Stand-in until its board exists: the vault bot plays Koban's vault. A
-## wash-up, surfacing or clearing the vault goes back to town, where the
-## haul is banked.
+## Koban's vault plays on the vault board. A wash-up, surfacing or clearing
+## the vault goes back to town, where the haul is banked.
 
 const BOARD_SCENE: PackedScene = preload("res://game/delve/board/fight_board.tscn")
 
@@ -16,6 +15,7 @@ var _map: MapView
 var _landing: LandingPanel
 var _board: FightBoard
 var _room_board: RoomBoard
+var _vault_board: VaultBoard
 var _head_up: Button
 ## What the fights since the last stop paid, for the map and the landing.
 var _notes: PackedStringArray = []
@@ -87,10 +87,9 @@ func _advance() -> void:
 					_show(_map)
 					_map.show_notes(["Koban's vault wouldn't open. Close the game to leave."])
 					return
-				# Stand-in until the vault board: the vault bot plays it.
-				VaultBot.new().play_vault(run.vault)
-				PlaytestLog.log_event("vault_played", {"won": run.vault.state == Vault.State.WON,
-					"rounds_won": run.vault.rounds_won, "rounds_lost": run.vault.rounds_lost})
+				if not run.vault.is_over():
+					_show_vault(run)
+					return
 				run.finish_vault()
 			_:
 				_show(null)
@@ -128,6 +127,37 @@ func _show_room(run: DelveRun) -> void:
 	add_child(_room_board)
 	move_child(_room_board, 1)
 	PlaytestLog.log_event("room_start", {"room": run.room_type, "floor": run.floor_index, "row": run.row})
+
+
+func _show_vault(run: DelveRun) -> void:
+	_show(null)
+	if _vault_board != null:
+		return
+	var prize: String = ""
+	var landmark: String = str(run.map.vault_prize.get("landmark", ""))
+	if Game.data.has_row("landmarks", landmark):
+		prize = str(Game.data.row("landmarks", landmark)["name"])
+	_vault_board = VaultBoard.new()
+	_vault_board.setup(run.vault, Game.data, prize)
+	_vault_board.top_inset = HaulStrip.HEIGHT
+	_vault_board.finished.connect(_on_vault_over)
+	add_child(_vault_board)
+	move_child(_vault_board, 1)
+	PlaytestLog.log_event("vault_start", {"floor": run.floor_index, "hp": run.hp})
+
+
+func _on_vault_over() -> void:
+	# Once only: a second emit (a double Continue) would find the run gone
+	# after come_up() (Imogen, #31).
+	if _vault_board == null or Game.run == null or Game.run.vault == null:
+		return
+	_vault_board.queue_free()
+	_vault_board = null
+	var played: Vault = Game.run.vault
+	PlaytestLog.log_event("vault_played", {"won": played.state == Vault.State.WON,
+		"rounds_won": played.rounds_won, "rounds_lost": played.rounds_lost})
+	Game.run.finish_vault()
+	_advance()
 
 
 func _on_room_over() -> void:
