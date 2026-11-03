@@ -146,6 +146,19 @@ func test_dice_rooms_are_room_types_with_turns_and_slots() -> void:
 		"dice_rooms \"rest\": rerolls and tide damage can't be negative"]))
 
 
+func test_vault_nudges_come_from_data_and_cant_be_negative() -> void:
+	assert_eq(GameData.load_dir().row("vaults", "koban")["nudges_per_vault"], 1)
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	var vaults: Dictionary = JSON.parse_string(texts["vaults"])
+	(vaults["items"] as Array)[0]["nudges_per_vault"] = -1
+	texts["vaults"] = JSON.stringify(vaults)
+	var data: GameData = GameData.new()
+	data.load_texts(texts)
+	assert_eq(data.errors, PackedStringArray(["vaults \"koban\": nudges_per_vault can't be negative"]))
+
+
 func test_a_slot_only_goes_where_its_effect_works() -> void:
 	var texts: Dictionary[String, String] = {}
 	for table_name: String in GameData.TABLES:

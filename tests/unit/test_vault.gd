@@ -184,6 +184,23 @@ func test_a_vault_allows_one_nudge_in_all() -> void:
 	assert_false(vault.nudge(0))
 
 
+func test_the_vault_reads_its_nudge_allowance_from_data() -> void:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	var vaults: Dictionary = JSON.parse_string(texts["vaults"])
+	(vaults["items"] as Array)[0]["nudges_per_vault"] = 0
+	texts["vaults"] = JSON.stringify(vaults)
+	var no_nudges: GameData = GameData.new()
+	no_nudges.load_texts(texts)
+	assert_eq(no_nudges.errors, PackedStringArray())
+	var vault: Vault = Vault.create(no_nudges, "fresh", "koban", RngStreams.new(5), NUDGE, _haul())
+	vault.roll()
+	vault.table.hand[0].value = 2
+	assert_eq(vault.nudges_per_vault, 0)
+	assert_false(vault.nudge(0), "a vault set to 0 nudges allows none")
+
+
 # --- Planning copies (Imogen, #27) ------------------------------------------------------
 
 func test_a_planning_copy_previews_a_round_on_its_own_haul() -> void:

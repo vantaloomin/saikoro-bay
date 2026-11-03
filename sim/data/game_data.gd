@@ -74,7 +74,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"vaults": {
 		"id": "id", "slots": "ref_list:slots", "house_dice": "ref_list:dice", "rounds_to_win": "int",
-		"rerolls_per_turn": "int", "raise_divisor": "int",
+		"rerolls_per_turn": "int", "raise_divisor": "int", "nudges_per_vault": "int",
 	},
 	"loadouts": {
 		"id": "id", "hp": "int", "dice": "ref_list:dice", "slots": "ref_list:slots",
@@ -278,6 +278,8 @@ func _check_rows() -> void:
 		if (vault_row["rounds_to_win"] as int) < 1 or (vault_row["raise_divisor"] as int) < 1 \
 				or (vault_row["rerolls_per_turn"] as int) < 0:
 			errors.append("vaults \"%s\": rounds_to_win and raise_divisor need to be at least 1" % id)
+		if (vault_row["nudges_per_vault"] as int) < 0:
+			errors.append("vaults \"%s\": nudges_per_vault can't be negative" % id)
 	for id: String in ids("dice_rooms"):
 		var room_row: Dictionary = row("dice_rooms", id)
 		if (room_row["turns"] as int) < 1 or (room_row["slots"] as Array).is_empty():

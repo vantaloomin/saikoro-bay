@@ -49,8 +49,8 @@ var house_hand: Array[int] = []
 ## This round's stake: {resource id: amount}, or {} before a raise.
 var stake: Dictionary[String, int] = {}
 var raise_divisor: int = 4
-## Nudges a whole vault allows (Koban's table, Koban's rules): 1, not one a
-## round. Fights keep their nudge every turn.
+## Nudges a whole vault allows (Koban's table, Koban's rules), from
+## vaults.json: not one a round. Fights keep their nudge every turn.
 var nudges_per_vault: int = 1
 var nudges_used: int = 0
 
@@ -93,6 +93,7 @@ static func create(data: GameData, loadout_id: String, vault_id: String, rng: Rn
 	vault.table.rerolls_per_turn = vault_row["rerolls_per_turn"] as int
 	vault.rounds_to_win = vault_row["rounds_to_win"] as int
 	vault.raise_divisor = vault_row["raise_divisor"] as int
+	vault.nudges_per_vault = vault_row["nudges_per_vault"] as int
 	for entry: Dictionary in perks:
 		if str(entry.get("perk", "")) == NUDGE_PERK and data.has_row("perks", NUDGE_PERK):
 			var nudge_row: Dictionary = data.row("perks", NUDGE_PERK)
