@@ -31,7 +31,8 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"villagers": {
 		"id": "id", "role": "string", "personality": "string?", "bet_lost": "string?",
-		"perk": "ref:perks",
+		"perk": "ref:perks", "wish": "enum:sea|next_to", "wish_buildings": "ref_list:buildings",
+		"wish_text": "string", "wish_line": "string?",
 	},
 	"rooms": {
 		"id": "id", "name": "string", "icon_shape": "string",
@@ -67,6 +68,15 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"landmarks": {
 		"id": "id", "name": "string",
+	},
+	"town": {
+		"id": "id", "width": "int", "height": "int", "sea_rows": "int",
+		"path_columns": "int_list", "path_rows": "int_list", "base_actions": "int", "keep_max": "int",
+	},
+	"buildings": {
+		"id": "id", "name": "string", "kind": "enum:home|shop|decor|landmark", "width": "int", "height": "int",
+		"cost": "string_list", "text": "string",
+		"unlock": "enum:always|buildings_placed|villager_in_town|won", "unlock_count": "int", "unlock_villager": "string?",
 	},
 	"dice_rooms": {
 		"id": "ref:rooms", "slots": "ref_list:slots", "turns": "int", "rerolls_per_turn": "int",
@@ -280,6 +290,7 @@ func _check_rows() -> void:
 			errors.append("vaults \"%s\": rounds_to_win and raise_divisor need to be at least 1" % id)
 		if (vault_row["nudges_per_vault"] as int) < 0:
 			errors.append("vaults \"%s\": nudges_per_vault can't be negative" % id)
+	_check_town()
 	for id: String in ids("dice_rooms"):
 		var room_row: Dictionary = row("dice_rooms", id)
 		if (room_row["turns"] as int) < 1 or (room_row["slots"] as Array).is_empty():
@@ -301,6 +312,86 @@ func _check_rows() -> void:
 			errors.append("loot \"%s\": chance_percent must be 0 to 100" % id)
 		if (loot_row["min"] as int) < 0 or (loot_row["min"] as int) > (loot_row["max"] as int):
 			errors.append("loot \"%s\": needs 0 <= min <= max" % id)
+
+
+## The town map, its buildings and villagers' wishes (specs/town.md).
+func _check_town() -> void:
+	if not _tables.has("town"):
+		return
+	if ids("town").size() != 1:
+		errors.append("town: needs exactly one row, got %d" % ids("town").size())
+		return
+	var town_row: Dictionary = row("town", ids("town")[0])
+	var width: int = town_row["width"]
+	var height: int = town_row["height"]
+	var sea: int = town_row["sea_rows"]
+	if width < 1 or height < 2 or sea < 1 or sea >= height:
+		errors.append("town: needs width >= 1 and 1 <= sea_rows < height")
+		return
+	if not _rising_within(town_row["path_columns"] as Array, width) \
+			or not _rising_within(town_row["path_rows"] as Array, height - sea):
+		errors.append("town: path columns and rows must rise and stay on the land")
+		return
+	if (town_row["base_actions"] as int) < 1 or (town_row["keep_max"] as int) < 0:
+		errors.append("town: needs base_actions >= 1 and keep_max >= 0")
+	var map: TownMap = TownMap.from_row(town_row)
+	if map.lots.is_empty():
+		errors.append("town: the paths leave no lots")
+		return
+	var homes: int = 0
+	for id: String in ids("buildings"):
+		var building: Dictionary = row("buildings", id)
+		var landmark: bool = building["kind"] == "landmark"
+		homes += 1 if building["kind"] == "home" else 0
+		if (building["width"] as int) < 1 or (building["height"] as int) < 1:
+			errors.append("buildings \"%s\": needs width and height of at least 1" % id)
+		elif not map.fits_one_lot(Rect2i(0, 0, building["width"], building["height"])):
+			errors.append("buildings \"%s\": %dx%d fits in no lot" % [id, building["width"], building["height"]])
+		var cost: Variant = TownMap.parse_cost(building["cost"] as Array)
+		if cost == null:
+			errors.append("buildings \"%s\": cost entries must be \"resource:amount\" with amounts of at least 1" % id)
+		else:
+			for resource: String in cost as Dictionary:
+				if not has_row("resources", resource):
+					errors.append("buildings \"%s\": cost names missing resource \"%s\"" % [id, resource])
+			if landmark != (cost as Dictionary).is_empty():
+				errors.append("buildings \"%s\": landmarks are free and everything else costs something" % id)
+		if landmark != (building["unlock"] == "won") or landmark != has_row("landmarks", id):
+			errors.append("buildings \"%s\": a landmark is a landmarks.json id and unlocks when won" % id)
+		_check_unlock(id, building)
+	for id: String in ids("landmarks"):
+		if not has_row("buildings", id):
+			errors.append("landmarks \"%s\": needs a buildings row (its footprint)" % id)
+	if _tables.has("buildings") and homes == 0:
+		errors.append("buildings: needs at least one home")
+	for id: String in ids("villagers"):
+		var villager: Dictionary = row("villagers", id)
+		if (villager["wish"] == "sea") != (villager["wish_buildings"] as Array).is_empty():
+			errors.append("villagers \"%s\": a sea wish names no buildings, a next_to wish names some" % id)
+
+
+func _check_unlock(id: String, building: Dictionary) -> void:
+	var count: int = building["unlock_count"]
+	var villager: String = building["unlock_villager"]
+	match building["unlock"]:
+		"buildings_placed":
+			if count < 1 or not villager.is_empty():
+				errors.append("buildings \"%s\": buildings_placed needs unlock_count >= 1 and no villager" % id)
+		"villager_in_town":
+			if count != 0 or not has_row("villagers", villager):
+				errors.append("buildings \"%s\": villager_in_town needs a real unlock_villager" % id)
+		_:
+			if count != 0 or not villager.is_empty():
+				errors.append("buildings \"%s\": unlock_count and unlock_villager are only for those unlocks" % id)
+
+
+static func _rising_within(values: Array, limit: int) -> bool:
+	var last: int = -1
+	for value: Variant in values:
+		if int(value) <= last or int(value) >= limit:
+			return false
+		last = int(value)
+	return true
 
 
 func _check_slot_effects(table: String, allowed: Array[String]) -> void:

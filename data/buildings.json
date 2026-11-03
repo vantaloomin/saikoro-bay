@@ -1,0 +1,14 @@
+{
+	"schema": 1,
+	"note": "Town buildings (specs/town.md section 3). cost is a list of \"resource:amount\". unlock is always, buildings_placed (unlock_count of them, landmarks included), villager_in_town (unlock_villager) or won (landmarks: won in Koban's vault, placed for free). What a shop does is wired in M4. Working names and placeholder costs.",
+	"items": [
+		{ "id": "cottage", "name": "Cottage", "kind": "home", "width": 1, "height": 1, "cost": ["driftwood:4"], "text": "A home for one villager.", "unlock": "always", "unlock_count": 0, "unlock_villager": "" },
+		{ "id": "net_shed", "name": "Net shed", "kind": "shop", "width": 2, "height": 1, "cost": ["driftwood:6"], "text": "Will feed a dice perk (M4).", "unlock": "always", "unlock_count": 0, "unlock_villager": "" },
+		{ "id": "tea_stall", "name": "Tea stall", "kind": "shop", "width": 1, "height": 1, "cost": ["driftwood:3", "pearls:1"], "text": "Will feed a dice perk (M4).", "unlock": "always", "unlock_count": 0, "unlock_villager": "" },
+		{ "id": "bait_shop", "name": "Bait shop", "kind": "shop", "width": 2, "height": 1, "cost": ["driftwood:5", "pearls:1"], "text": "Will feed a dice perk (M4).", "unlock": "buildings_placed", "unlock_count": 2, "unlock_villager": "" },
+		{ "id": "boat_shed", "name": "Boat shed", "kind": "shop", "width": 2, "height": 2, "cost": ["driftwood:8", "pearls:2"], "text": "Will feed a dice perk (M4).", "unlock": "villager_in_town", "unlock_count": 0, "unlock_villager": "shipwright" },
+		{ "id": "lantern_post", "name": "Lantern post", "kind": "decor", "width": 1, "height": 1, "cost": ["pearls:1"], "text": "Lights the way. Some villagers want one nearby.", "unlock": "always", "unlock_count": 0, "unlock_villager": "" },
+		{ "id": "cafe", "name": "Café", "kind": "landmark", "width": 3, "height": 2, "cost": [], "text": "A landmark, and a date spot (M5).", "unlock": "won", "unlock_count": 0, "unlock_villager": "" },
+		{ "id": "hot_spring", "name": "Hot Spring", "kind": "landmark", "width": 3, "height": 2, "cost": [], "text": "A landmark, and a date spot (M5).", "unlock": "won", "unlock_count": 0, "unlock_villager": "" }
+	]
+}
