@@ -256,6 +256,10 @@ func _check_rows() -> void:
 				errors.append("slots \"%s\": a resource slot needs a resource, got \"%s\"" % [id, pays])
 		elif not pays.is_empty():
 			errors.append("slots \"%s\": only a resource slot names a resource" % id)
+	# A slot's effect has to mean something where it's used: fights deal
+	# damage, block and heal; dice rooms heal, pay and open.
+	_check_slot_effects("loadouts", ["damage", "block", "heal"])
+	_check_slot_effects("dice_rooms", ["heal", "resource", "open"])
 	for id: String in ids("dice_rooms"):
 		var room_row: Dictionary = row("dice_rooms", id)
 		if (room_row["turns"] as int) < 1 or (room_row["slots"] as Array).is_empty():
@@ -277,6 +281,16 @@ func _check_rows() -> void:
 			errors.append("loot \"%s\": chance_percent must be 0 to 100" % id)
 		if (loot_row["min"] as int) < 0 or (loot_row["min"] as int) > (loot_row["max"] as int):
 			errors.append("loot \"%s\": needs 0 <= min <= max" % id)
+
+
+func _check_slot_effects(table: String, allowed: Array[String]) -> void:
+	for id: String in ids(table):
+		for slot_ref: Variant in row(table, id)["slots"] as Array:
+			if not has_row("slots", str(slot_ref)):
+				continue
+			var effect: String = row("slots", str(slot_ref))["effect"]
+			if not effect in allowed:
+				errors.append("%s \"%s\": slot \"%s\" has effect %s, which does nothing there" % [table, id, slot_ref, effect])
 
 
 func _check_refs() -> void:

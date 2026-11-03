@@ -242,3 +242,15 @@ func test_the_bot_plays_the_same_every_time() -> void:
 		RoomBot.new().play_room(first)
 		RoomBot.new().play_room(second)
 		assert_eq(first.moves, second.moves, room_id)
+
+
+func test_a_planning_copy_resolves_its_turn_once() -> void:
+	var room: DiceRoom = _room("treasure")
+	_set_hand(room, [6, 1, 2, 3])
+	var copy: DiceRoom = room.planning_copy()
+	copy.place(0, "small_lock")
+	assert_true(copy.end_turn())
+	assert_false(copy.end_turn(), "a second preview would pay again")
+	assert_eq(copy.payout, {"driftwood": 6} as Dictionary[String, int])
+	copy.start_rng["changed"] = true
+	assert_false(room.start_rng.has("changed"), "the copy shares nothing")

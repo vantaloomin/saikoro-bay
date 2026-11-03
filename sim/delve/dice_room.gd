@@ -52,8 +52,10 @@ var moves: Array[Dictionary] = []
 var start_rng: Dictionary = {}
 var start_hp: int = 0
 
-## True on planning copies: end_turn resolves the turn and stops there.
+## True on planning copies: end_turn resolves the turn and stops there,
+## once (a second call would pay the same slots again).
 var _is_preview: bool = false
+var _preview_spent: bool = false
 
 
 ## Builds the room with the loadout's dice, or returns null if the data is
@@ -163,9 +165,11 @@ func slot_amount(s: Slot) -> int:
 
 ## Commits the turn through the pipeline in the header.
 func end_turn() -> bool:
-	if state != State.PLAYER_TURN:
+	if state != State.PLAYER_TURN or _preview_spent:
 		return false
-	if not _is_preview:
+	if _is_preview:
+		_preview_spent = true
+	else:
 		moves.append({"move": "end_turn"})
 
 	# 1. Slots, in card order.
@@ -249,7 +253,7 @@ func planning_copy() -> DiceRoom:
 	copy.max_hp = max_hp
 	copy.payout = payout.duplicate()
 	copy.table = table.copy(copy.events, copy.moves)
-	copy.start_rng = start_rng
+	copy.start_rng = start_rng.duplicate(true)
 	copy.start_hp = start_hp
 	return copy
 

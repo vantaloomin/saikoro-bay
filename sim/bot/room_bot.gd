@@ -63,7 +63,8 @@ static func score(before: DiceRoom, after: DiceRoom) -> int:
 	var value: int = 0
 	if after.succeeded:
 		value += WIN_SCORE
-	value += (after.open_count() - before.open_count()) * OPEN_SCORE
+	if after.open_all:
+		value += (after.open_count() - before.open_count()) * OPEN_SCORE
 	value += (after.hp - before.hp) * HEAL_WORTH
 	for id: String in after.payout:
 		value += (after.payout[id] - before.payout.get(id, 0)) * RESOURCE_WORTH.get(id, 1)

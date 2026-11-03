@@ -144,3 +144,20 @@ func test_dice_rooms_are_room_types_with_turns_and_slots() -> void:
 		"dice_rooms \"sauna\": \"id\" points to missing rooms \"sauna\"",
 		"dice_rooms \"rest\": needs at least one turn and one slot",
 		"dice_rooms \"rest\": rerolls and tide damage can't be negative"]))
+
+
+func test_a_slot_only_goes_where_its_effect_works() -> void:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	var loadouts: Dictionary = JSON.parse_string(texts["loadouts"])
+	(loadouts["items"] as Array)[0]["slots"] = ["strike", "small_lock"]
+	texts["loadouts"] = JSON.stringify(loadouts)
+	var rooms: Dictionary = JSON.parse_string(texts["dice_rooms"])
+	(rooms["items"] as Array)[1]["slots"] = ["soak", "guard"]
+	texts["dice_rooms"] = JSON.stringify(rooms)
+	var data: GameData = GameData.new()
+	data.load_texts(texts)
+	assert_eq(data.errors, PackedStringArray([
+		"loadouts \"fresh\": slot \"small_lock\" has effect resource, which does nothing there",
+		"dice_rooms \"rest\": slot \"guard\" has effect block, which does nothing there"]))
