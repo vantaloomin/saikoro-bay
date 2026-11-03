@@ -1,9 +1,9 @@
 class_name TallyPanel
 extends Control
 ## The return-to-town tally (specs/bridge.md section 6), in delve style: how
-## the delve ended, then what was banked line by line, what the barrel took
-## hatched in the same layout, who you rescued with their perk, and the
-## landmark you won. It always waits for Continue, so nobody misses what the
+## the delve ended, then who you rescued with their perk, the landmark you
+## won, and what was banked, each resource with the barrel's share hatched
+## beside it. It always waits for Continue, so nobody misses what the
 ## barrel took (Mara's bridge review). It reads Game.settlement, which was
 ## banked and saved before it showed (Imogen's bridge review).
 
@@ -30,31 +30,35 @@ var _shown_at: int = 0
 var _rows: Array[Control] = []
 
 
-## A line the barrel took: drawn struck through and hatched, so a loss
-## reads in the same layout as a gain, not as a separate warning.
-class Struck:
+## What the barrel took from one resource, beside what you kept: hatched
+## like a spent shell, never struck through, so the numbers stay readable
+## (Mara's #58 review).
+class Barrel:
 	extends Control
 	var text: String = ""
 
 	func _init(words: String) -> void:
 		text = words
 		var font: Font = BoardStyle.theme().default_font
-		custom_minimum_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY) + Vector2(16, 12)
+		custom_minimum_size = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY) + Vector2(24, 14)
 		size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-		# The hatching runs past the corners; keep it inside the line.
+		size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		# The hatching runs past the corners; keep it inside the chip.
 		clip_contents = true
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
 		var font: Font = BoardStyle.theme().default_font
-		for step: int in range(0, int(size.x + size.y), 12):
-			draw_line(Vector2(step, 0), Vector2(step - size.y, size.y), Color(BoardStyle.DIM, 0.22), 2.0)
-		draw_string(font, Vector2(8, size.y * 0.72), text, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.DIM)
-		draw_line(Vector2(4, size.y * 0.52), Vector2(size.x - 4, size.y * 0.52), BoardStyle.DIM, 2.0)
+		for step: int in range(0, int(size.x + size.y), 10):
+			draw_line(Vector2(step, 0), Vector2(step - size.y, size.y), Color(BoardStyle.DIM, 0.18), 2.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Color(BoardStyle.DIM, 0.5), false, 1.0)
+		draw_string(font, Vector2(12, size.y * 0.7), text, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.INK)
 
 
-## The tally's lines, in order: {"kind", "text"}, where kind is "headline",
-## "note", "gain", "lost", "join" or "landmark".
+## The tally's lines, in order: people, then places, then resources (Mara's
+## #58 review). Each is {"kind", "text"}, where kind is "headline", "note",
+## "join", "landmark", "below" or "resource"; a resource line also has
+## "amount" ("+4"), "name" and "barrel" ("−5 to the barrel", or "").
 static func lines(game_data: GameData, settled: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var outcome: String = str(settled.get("outcome", ""))
@@ -65,23 +69,27 @@ static func lines(game_data: GameData, settled: Dictionary) -> Array[Dictionary]
 	var lost_resources: Dictionary = lost.get("resources", {}) as Dictionary
 	if outcome in [Haul.WASHED_UP, Haul.ABANDONED] and not _empty(lost):
 		out.append({"kind": "note", "text": BARREL})
-	for id: String in game_data.ids("resources"):
-		var banked: int = int(kept_resources.get(id, 0))
-		var taken: int = int(lost_resources.get(id, 0))
-		if banked > 0:
-			out.append({"kind": "gain", "text": "+%d %s" % [banked, GameState.amount_name(game_data, id, banked)]})
-		if taken > 0:
-			out.append({"kind": "lost", "text": "%d %s · the barrel" % [taken, GameState.amount_name(game_data, id, taken)]})
 	for villager: Variant in settled.get("rescued", []) as Array:
 		out.append({"kind": "join", "text": _joins(game_data, str(villager))})
-	for villager: Variant in lost.get("villagers", []) as Array:
-		out.append({"kind": "lost", "text": "%s · still below" % _role(game_data, str(villager))})
 	var landmark: String = str(settled.get("landmark", ""))
 	if not landmark.is_empty():
 		out.append({"kind": "landmark", "text": "%s · yours to place" % _landmark_name(game_data, landmark)})
+	for villager: Variant in lost.get("villagers", []) as Array:
+		out.append({"kind": "below", "text": "%s is still below · you can bring them up next delve"
+			% _role(game_data, str(villager))})
 	var lost_landmark: String = str(lost.get("landmark", ""))
 	if not lost_landmark.is_empty():
-		out.append({"kind": "lost", "text": "%s · still below" % _landmark_name(game_data, lost_landmark)})
+		out.append({"kind": "below", "text": "%s is still below · you can win it next delve"
+			% _landmark_name(game_data, lost_landmark)})
+	for id: String in game_data.ids("resources"):
+		var banked: int = int(kept_resources.get(id, 0))
+		var taken: int = int(lost_resources.get(id, 0))
+		if banked <= 0 and taken <= 0:
+			continue
+		var noun: String = GameState.amount_name(game_data, id, banked)
+		var barrel: String = "−%d to the barrel" % taken if taken > 0 else ""
+		out.append({"kind": "resource", "text": "+%d %s" % [banked, noun], "amount": "+%d" % banked, "name": noun,
+			"barrel": barrel})
 	if out.size() == 1:
 		out.append({"kind": "note", "text": NOTHING})
 	return out
@@ -157,15 +165,38 @@ func _ready() -> void:
 	continue_button.grab_focus.call_deferred()
 
 
-## Lines appear one after another; at once with reduced motion.
+## Lines appear one after another; at once with reduced motion. A
+## wash-up's barrel sounds as the first line it took from appears, or as
+## the panel opens with reduced motion (Mara's #58 review), so the town's
+## uncovering stays a relief.
 func _reveal() -> void:
+	var barrel_at: int = _barrel_row()
 	if Settings.reduce_motion:
+		if barrel_at >= 0:
+			_play_barrel()
 		return
 	for i: int in _rows.size():
 		_rows[i].modulate.a = 0.0
 		var tween: Tween = create_tween()
 		tween.tween_interval(i * LINE_SECONDS)
+		if i == barrel_at:
+			tween.tween_callback(_play_barrel)
 		tween.tween_property(_rows[i], "modulate:a", 1.0, LINE_SECONDS)
+
+
+## The row the barrel sounds on, or -1 when it doesn't (not a wash-up).
+func _barrel_row() -> int:
+	if str(settlement.get("outcome", "")) != Haul.WASHED_UP:
+		return -1
+	var shown: Array[Dictionary] = lines(data, settlement)
+	for i: int in shown.size():
+		if not str(shown[i].get("barrel", "")).is_empty():
+			return i
+	return 0
+
+
+func _play_barrel() -> void:
+	Soundscape.stinger(Soundscape.barrel_for(int(settlement.get("delve", 0))))
 
 
 func _row(line: Dictionary) -> Control:
@@ -177,20 +208,37 @@ func _row(line: Dictionary) -> Control:
 			var headline: Label = BoardStyle.label(text, BoardStyle.BIG, BoardStyle.INK if lost else BoardStyle.GOLD)
 			headline.add_theme_font_override("font", BoardStyle.title_font())
 			return headline
-		"note":
+		"note", "below":
 			var note: Label = BoardStyle.label(text, BoardStyle.SMALL, BoardStyle.DIM)
 			note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			note.custom_minimum_size = Vector2(696, 0)
 			return note
-		"lost":
-			return Struck.new(text)
 		"join", "landmark":
-			var joined: Label = BoardStyle.label(text, BoardStyle.BODY, BoardStyle.JADE)
+			# People and places at the resources' size: they're the bigger
+			# event (Mara's #58 review).
+			var joined: Label = BoardStyle.label(text, BoardStyle.NUMBER, BoardStyle.JADE)
 			joined.add_theme_font_override("font", BoardStyle.strong_font())
 			return joined
-	var gain: Label = BoardStyle.label(text, BoardStyle.NUMBER, BoardStyle.INK)
-	gain.add_theme_font_override("font", BoardStyle.strong_font())
-	return gain
+	return _resource_row(line)
+
+
+## "+4 driftwood ▨ −5 to the barrel": the amount right-aligned in tabular
+## figures, the barrel's share hatched on the same row.
+func _resource_row(line: Dictionary) -> Control:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	var font: Font = BoardStyle.strong_font()
+	var amount: Label = BoardStyle.label(str(line["amount"]), BoardStyle.NUMBER, BoardStyle.INK)
+	amount.add_theme_font_override("font", font)
+	amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	amount.custom_minimum_size.x = font.get_string_size("+88", HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.NUMBER).x
+	row.add_child(amount)
+	var noun: Label = BoardStyle.label(str(line["name"]), BoardStyle.NUMBER, BoardStyle.INK)
+	noun.add_theme_font_override("font", font)
+	row.add_child(noun)
+	if not str(line["barrel"]).is_empty():
+		row.add_child(Barrel.new(str(line["barrel"])))
+	return row
 
 
 func _on_continue() -> void:

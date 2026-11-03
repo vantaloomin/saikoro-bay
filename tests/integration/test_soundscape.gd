@@ -50,22 +50,6 @@ func test_the_tide_sounds_its_direction() -> void:
 	assert_eq(Soundscape.played.slice(-1), ["tide_up"] as Array[String])
 
 
-func test_the_barrel_lands_as_the_town_comes_back() -> void:
-	var original: Dictionary = Game.state.last_delve
-	Game.state.last_delve = {"delve": 4, "outcome": Haul.WASHED_UP, "kept": {}}
-	Soundscape._on_returned_to_town(4)
-	var before: int = Soundscape.played.size()
-	Soundscape._on_transition_finished(TideTransition.Direction.UP)
-	assert_eq(Soundscape.played.slice(-1), [Soundscape.barrel_for(4)] as Array[String])
-	Soundscape._on_transition_finished(TideTransition.Direction.UP)
-	assert_eq(Soundscape.played.size(), before + 1, "once per wash-up")
-	Game.state.last_delve = {"delve": 5, "outcome": Haul.SURFACED, "kept": {}}
-	Soundscape._on_returned_to_town(5)
-	Soundscape._on_transition_finished(TideTransition.Direction.UP)
-	assert_eq(Soundscape.played.size(), before + 1, "no barrel after surfacing")
-	Game.state.last_delve = original
-
-
 func test_the_barrel_takes_turns() -> void:
 	assert_eq([Soundscape.barrel_for(1), Soundscape.barrel_for(2), Soundscape.barrel_for(3), Soundscape.barrel_for(4)],
 		["barrel_2", "barrel_3", "barrel_1", "barrel_2"])
