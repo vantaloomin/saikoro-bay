@@ -1,0 +1,92 @@
+# Canonical label list for Saikoro Bay.
+# Synced to GitHub by .github/workflows/labels.yml on every push to main.
+# Edit this file instead of creating labels by hand. Labels not listed
+# here are left alone (GitHub's defaults are kept).
+
+# ---- Type: what kind of change (pick one) ----
+- name: "type: bug"
+  color: "d73a4a"
+  description: "Something is broken or behaves wrongly"
+  aliases: ["bug"]
+- name: "type: feature"
+  color: "1f6feb"
+  description: "New gameplay, content or capability"
+  aliases: ["enhancement"]
+- name: "type: polish"
+  color: "a371f7"
+  description: "Feel, juice, balance or UX improvements to something that works"
+- name: "type: chore"
+  color: "6e7781"
+  description: "Tooling, refactors, dependencies, repo upkeep"
+- name: "type: docs"
+  color: "0075ca"
+  description: "Documentation or design notes"
+  aliases: ["documentation"]
+- name: "type: design"
+  color: "fbca04"
+  description: "Game design idea or question to explore before building"
+
+# ---- Area: which part of the game (pick any) ----
+- name: "area: town"
+  color: "8fd694"
+  description: "Above ground: rebuilding, housing, town layout"
+- name: "area: delve"
+  color: "3b5ba5"
+  description: "Below the tide: dice runs through the casino palace"
+- name: "area: dice"
+  color: "5b8def"
+  description: "Dice, placement rules, rerolls and luck systems"
+- name: "area: romance"
+  color: "f49ac1"
+  description: "Dates, relationships and villager affinity"
+- name: "area: economy"
+  color: "e3b341"
+  description: "Resources, rewards and the town-to-delve feedback loop"
+- name: "area: narrative"
+  color: "c39bd3"
+  description: "Story, dialogue, characters and the luck spirit"
+- name: "area: ui"
+  color: "76d7c4"
+  description: "Menus, HUD, input and accessibility"
+- name: "area: art"
+  color: "ff9f7a"
+  description: "Sprites, tiles, animation, VFX"
+- name: "area: audio"
+  color: "f7c873"
+  description: "Music, SFX and ambience"
+- name: "area: tooling"
+  color: "8b949e"
+  description: "CI, build scripts, editor tools"
+
+# ---- Priority ----
+- name: "priority: high"
+  color: "b60205"
+  description: "Do next; blocks other work or a milestone"
+- name: "priority: medium"
+  color: "d93f0b"
+  description: "Should happen soon"
+- name: "priority: low"
+  color: "f9d0c4"
+  description: "Nice to have, whenever there is room"
+
+# ---- Status ----
+- name: "status: needs decision"
+  color: "fef2c0"
+  description: "Waiting on a design or direction call from Vanta"
+- name: "status: blocked"
+  color: "000000"
+  description: "Cannot proceed until something else lands"
+
+# ---- Other ----
+- name: "dependencies"
+  color: "0366d6"
+  description: "Dependency updates (used by Dependabot)"
+- name: "good first issue"
+  color: "7057ff"
+  description: "Small, well-scoped and a good place to start"
+- name: "wontfix"
+  color: "ffffff"
+  description: "Will not be worked on"
+- name: "duplicate"
+  color: "cfd3d7"
+  description: "Already tracked elsewhere"

@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------
+# Saikoro Bay .gitignore
+# Engine-specific rules are added once the engine is chosen.
+# ---------------------------------------------------------------
+
+# OS files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Editors and IDEs
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+
+# AI assistant files, prompts and local-only notes (kept out of the repo)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+prompts/
+*.prompt.md
+notes/
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
+tmp/
+temp/
+
+# Build output
+build/
+builds/
+dist/
+export/
+exports/

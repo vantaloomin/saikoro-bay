@@ -1,0 +1,29 @@
+name: Feature or task
+description: New gameplay, content, polish or tooling to build
+title: "[Feature] "
+labels: ["type: feature"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What should it do?
+      description: Describe the feature from the player's point of view if you can.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: What it adds to the town, the delve, or the loop between them.
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: How we know it is finished.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, references or mockups
