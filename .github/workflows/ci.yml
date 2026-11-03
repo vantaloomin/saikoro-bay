@@ -58,8 +58,14 @@ jobs:
       - name: Run tests
         run: godot --headless --path . -s res://addons/gut/gut_cmdln.gd
 
-      - name: Bot smoke run
-        run: godot --headless --path . -s res://tools/run_bot.gd -- --seeds=2000
+      # Balance band (plan section 8): a fresh kit should clear about 40-60% of
+      # delves. The greedy bot is the floor; the planner is the ceiling, and a
+      # ceiling near 100% means skill stops mattering.
+      - name: Balance band, greedy bot
+        run: godot --headless --path . -s res://tools/run_bot.gd -- --bot=greedy --seeds=2000 --min-win=40 --max-win=60
+
+      - name: Balance band, planner bot
+        run: godot --headless --path . -s res://tools/run_bot.gd -- --bot=planner --seeds=200 --min-win=60 --max-win=92
 
   build:
     name: Export Windows builds (full and SFW)

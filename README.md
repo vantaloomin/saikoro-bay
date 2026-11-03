@@ -43,10 +43,12 @@ godot --headless --path . -s res://tools/check_scripts.gd   # every script compi
 godot --headless --path . -s res://addons/gut/gut_cmdln.gd  # tests (GUT)
 ```
 
-The balance bot plays a scenario across thousands of seeds and prints a JSON report (win rate, turns, depth reached, and a determinism check). Until M1 brings real fights it runs a stand-in scenario:
+The balance bots play delves across thousands of seeds and print a JSON report (clear rate, turns, fights reached, HP lost per enemy, and a determinism check). `greedy` plays like a new player and is the floor; `planner` tries every placement and weighs rerolls, and is the ceiling. CI fails if either leaves its band.
 
 ```
-godot --headless --path . -s res://tools/run_bot.gd -- --scenario=coin_delve --seeds=10000
+godot --headless --path . -s res://tools/run_bot.gd -- --bot=greedy --seeds=10000
+godot --headless --path . -s res://tools/run_bot.gd -- --bot=planner --seeds=500 --perks=nudge
+godot --headless --path . -s res://tools/run_bot.gd -- --scenario=fight --enemy=hermit_croupier
 ```
 
 Tests live in `tests/` and use [GUT](https://github.com/bitwes/Gut) (vendored in `addons/gut`, MIT). In the editor, the GUT panel runs them too.

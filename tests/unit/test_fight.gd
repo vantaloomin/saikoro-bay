@@ -2,11 +2,30 @@ extends GutTest
 ## Fight: the dice fight rules (specs/dice-fight-rules.md), one rule per test.
 ## Most tests set die values by hand so each rule is checked on a known hand.
 
+## Rule tests use fixed enemies, so tuning data/enemies.json never breaks
+## them. Everything else comes from the shipped data files.
+const TEST_ENEMIES: Array[Dictionary] = [
+	{"id": "card_shark", "name": "Card Shark", "hp": 18, "intents": ["attack:6", "attack:4+guard:4"],
+		"twist": "none", "twist_text": ""},
+	{"id": "hermit_croupier", "name": "Hermit Croupier", "hp": 22, "intents": ["attack:5", "attack:7"],
+		"twist": "house_lock", "twist_text": "t"},
+	{"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "hp": 16, "intents": ["attack:4", "attack:4", "attack:9"],
+		"twist": "snake_eyes", "twist_text": "t"},
+]
+
 var data: GameData
+var shipped: GameData
 
 
 func before_all() -> void:
-	data = GameData.load_dir()
+	shipped = GameData.load_dir()
+	var texts: Dictionary[String, String] = {}
+	for table: String in GameData.TABLES:
+		texts[table] = FileAccess.get_file_as_string("%s/%s.json" % [GameData.DATA_DIR, table])
+	texts["enemies"] = JSON.stringify({"schema": GameData.SCHEMA, "items": TEST_ENEMIES})
+	data = GameData.new()
+	data.load_texts(texts)
+	assert_eq(data.errors, PackedStringArray())
 
 
 func _fight(enemy: String = "card_shark", perks: Array[Dictionary] = [], seed_value: int = 7) -> Fight:
@@ -579,14 +598,14 @@ func test_intents_parse_strictly() -> void:
 
 
 func test_shipped_enemies_and_kits_are_playable() -> void:
-	for enemy: String in data.ids("enemies"):
-		assert_eq(Fight.intent_errors(data.row("enemies", enemy)), PackedStringArray(), enemy)
-	for slot_id: String in data.ids("slots"):
-		var row: Dictionary = data.row("slots", slot_id)
+	for enemy: String in shipped.ids("enemies"):
+		assert_eq(Fight.intent_errors(shipped.row("enemies", enemy)), PackedStringArray(), enemy)
+	for slot_id: String in shipped.ids("slots"):
+		var row: Dictionary = shipped.row("slots", slot_id)
 		assert_between(row["dice_needed"] as int, 1, 4, slot_id)
 		assert_true((row["min"] as int) <= (row["max"] as int), slot_id)
-	for loadout: String in data.ids("loadouts"):
-		assert_gt((data.row("loadouts", loadout)["hp"] as int), 0, loadout)
+	for loadout: String in shipped.ids("loadouts"):
+		assert_gt((shipped.row("loadouts", loadout)["hp"] as int), 0, loadout)
 
 
 ## Places each die, in id order, in the first slot (card order) that takes it.
