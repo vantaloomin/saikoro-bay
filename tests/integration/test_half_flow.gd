@@ -84,7 +84,7 @@ func test_come_up_returns_to_town_and_saves() -> void:
 	assert_false(Game.tally_open)
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	assert_eq(get_tree().current_scene.scene_file_path, Game.TOWN_SCENE)
-	assert_false(Game.settlement.is_empty(), "kept for the town's count-up")
+	assert_true(Game.settlement.is_empty(), "the town took it to play its count-up, once")
 	assert_false(Game.leave_tally(), "and none from town after Continue")
 	assert_false(SceneFlow.busy, "no town-to-town tide")
 	var loaded: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])

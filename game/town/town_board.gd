@@ -29,6 +29,9 @@ signal cancelled
 ## The town has gathered round a new landmark and every changed bubble has
 ## popped: the screen can say so (gather_at).
 signal gathered
+## The villagers rescued on the last delve have walked in from the dock
+## (walk_in), or the walk was skipped.
+signal walked_in
 
 enum Mode { LOOK, CARRY, PICK_HOME }
 
@@ -48,6 +51,9 @@ const PARTY_SECONDS: float = 1.6
 const WALK_SECONDS: float = 1.2
 const POP_SECONDS: float = 0.35
 const GATHER_HOLD_SECONDS: float = 2.5
+## The walk in from the end of the dock after a rescue (specs/bridge.md
+## section 6), a little slower than a gathering: it's further.
+const ARRIVE_SECONDS: float = 2.0
 ## A name tag pushed down more than this many of its own heights goes
 ## above its owner's head instead.
 const FAR_PUSH: float = 2.0
@@ -111,6 +117,10 @@ var _routes: Dictionary[String, PackedVector3Array] = {}
 var _blocked: Dictionary[String, int] = {}
 var walker_opacity: Dictionary[String, float] = {}
 var _walk_left: float = 0.0
+## How long the walk under way takes in all.
+var _walk_seconds: float = WALK_SECONDS
+## True while rescued villagers walk in from the dock.
+var _walking_in: bool = false
 var _going_home: bool = false
 var _pop_left: float = 0.0
 var _stay_left: float = 0.0
@@ -332,7 +342,53 @@ func gather_at(uid: int, moods_before: Dictionary[String, Town.Mood]) -> void:
 	for i: int in names.size():
 		_set_route(names[i], from[names[i]], to[i])
 	_going_home = false
+	_walk_seconds = WALK_SECONDS
 	_walk_left = WALK_SECONDS
+
+
+## Rescued `villagers` walk from the end of the dock to where they now
+## stand (specs/bridge.md section 6), round buildings as the gathering
+## does, then `walked_in` fires. A press skips it like a gathering. With
+## reduce motion, or nobody to walk, it fires at once.
+func walk_in(villagers: Array[String]) -> void:
+	stop_gathering()
+	var spots: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
+	_routes.clear()
+	for i: int in villagers.size():
+		if spots.has(villagers[i]):
+			_set_route(villagers[i], view.arrival_spot(i), spots[villagers[i]])
+	if _routes.is_empty() or Settings.reduce_motion:
+		_routes.clear()
+		walked_in.emit()
+		return
+	for villager: String in _routes:
+		view.walking[villager] = _routes[villager][0]
+		diorama.move_villager(villager, _routes[villager][0], 1.0)
+	_walking_in = true
+	_going_home = true
+	_walk_seconds = ARRIVE_SECONDS
+	_walk_left = ARRIVE_SECONDS
+	redraw_marks()
+
+
+## Rescued `villagers` wait at the end of the dock until walk_in, so
+## nobody is seen at home before they've walked there.
+func wait_at_dock(villagers: Array[String]) -> void:
+	for i: int in villagers.size():
+		if _state.villagers().has(villagers[i]):
+			view.walking[villagers[i]] = view.arrival_spot(i)
+	diorama.show_town(_data, view, _state, 0)
+	redraw_marks()
+
+
+func is_walking_in() -> bool:
+	return _walking_in
+
+
+func _end_walk_in() -> void:
+	if _walking_in:
+		_walking_in = false
+		walked_in.emit()
 
 
 func is_gathering() -> bool:
@@ -344,7 +400,7 @@ func is_gathering() -> bool:
 func advance_gathering(seconds: float) -> void:
 	if _walk_left > 0.0:
 		_walk_left = maxf(_walk_left - seconds, 0.0)
-		var t: float = smoothstep(0.0, 1.0, 1.0 - _walk_left / WALK_SECONDS)
+		var t: float = smoothstep(0.0, 1.0, 1.0 - _walk_left / _walk_seconds)
 		for villager: String in _routes:
 			var spot: Vector3 = TownView.along(_routes[villager], t)
 			var seen: float = TownView.walk_opacity(_routes[villager], _blocked[villager], t) if _walk_left > 0.0 else 1.0
@@ -360,6 +416,7 @@ func advance_gathering(seconds: float) -> void:
 			if _going_home:
 				view.walking.clear()
 				diorama.show_town(_data, view, _state, carry_lifted if mode == Mode.CARRY else 0)
+				_end_walk_in()
 			else:
 				_pop_left = POP_SECONDS
 		redraw_marks()
@@ -390,6 +447,7 @@ func stop_gathering() -> void:
 			diorama.show_town(_data, view, _state, carry_lifted if mode == Mode.CARRY else 0)
 	if was_pending:
 		_pop_done()
+	_end_walk_in()
 	redraw_marks()
 
 
@@ -411,6 +469,7 @@ func _walk_home() -> void:
 	for villager: String in homes:
 		_set_route(villager, walking.get(villager, homes[villager]), homes[villager])
 	_going_home = true
+	_walk_seconds = WALK_SECONDS
 	_walk_left = WALK_SECONDS
 
 
