@@ -659,7 +659,7 @@ func _room_title() -> String:
 	return name
 
 
-func _button(text: String, height: int, primary: bool = false) -> Button:
+static func _button(text: String, height: int, primary: bool = false) -> Button:
 	var b: Button = Button.new()
 	b.text = text
 	b.add_theme_font_size_override("font_size", BoardStyle.BODY)

@@ -20,6 +20,9 @@ extends RefCounted
 ##
 ## Every move is logged in `moves`; the seed's streams plus the moves
 ## replay the vault, as for a fight.
+##
+## planning_copy() gives the board a vault to preview on (Imogen, #27): no
+## RNG, and its own Haul, so a preview can't roll or touch the run's haul.
 
 enum State { WAGER, PLAYER_TURN, WON, LOST }
 
@@ -56,6 +59,10 @@ var moves: Array[Dictionary] = []
 var _house_faces: Array[Array] = []
 var _rng: RngStreams
 var _hand_slot: String = ""
+## True on planning copies: end_turn scores the round, settles the stake on
+## the copy's own haul and stops there, once.
+var _is_preview: bool = false
+var _preview_spent: bool = false
 
 
 ## Opens the vault on `haul` (the run's own Haul). Returns null if the
@@ -160,9 +167,9 @@ func raise(resource_id: String) -> bool:
 	return true
 
 
-## Ends the wager and rolls your dice.
+## Ends the wager and rolls your dice. A planning copy can't roll.
 func roll() -> bool:
-	if state != State.WAGER:
+	if state != State.WAGER or _rng == null:
 		return false
 	moves.append({"move": "roll"})
 	state = State.PLAYER_TURN
@@ -172,12 +179,26 @@ func roll() -> bool:
 	return true
 
 
+## Why `die_id` can't go in `slot_id` now, or "" if it can.
+func place_refusal(die_id: int, slot_id: String) -> String:
+	if state != State.PLAYER_TURN:
+		return "Roll first."
+	return table.place_refusal(die_id, slot_id)
+
+
 func place(die_id: int, slot_id: String) -> bool:
 	return state == State.PLAYER_TURN and table.place(die_id, slot_id)
 
 
 func take_back(die_id: int) -> bool:
 	return state == State.PLAYER_TURN and table.take_back(die_id)
+
+
+## Why rerolling by discarding `discard_id` isn't allowed, or "" if it is.
+func reroll_refusal(discard_id: int) -> String:
+	if state != State.PLAYER_TURN:
+		return "Roll first."
+	return table.reroll_refusal(discard_id)
 
 
 func reroll(discard_id: int) -> bool:
@@ -191,9 +212,12 @@ func nudge(die_id: int) -> bool:
 ## Scores the round, settles the stake, and starts the next round or ends
 ## the vault.
 func end_turn() -> bool:
-	if state != State.PLAYER_TURN:
+	if state != State.PLAYER_TURN or _preview_spent:
 		return false
-	moves.append({"move": "end_turn"})
+	if _is_preview:
+		_preview_spent = true
+	else:
+		moves.append({"move": "end_turn"})
 	var yours: Array[int] = table.values_in(hand())
 	var won: bool = hand_score(yours) > hand_score(house_hand)
 	events.append({"type": "round", "round": round_number, "won": won, "yours": yours, "house": house_hand.duplicate()})
@@ -214,9 +238,33 @@ func end_turn() -> bool:
 	elif rounds_lost >= rounds_to_win:
 		state = State.LOST
 		events.append({"type": "lost"})
+	elif _is_preview:
+		# Scored; the next round would need Koban's roll, which a copy can't make.
+		state = State.WAGER
 	else:
 		_start_round()
 	return true
+
+
+## A copy to plan on (Imogen, #27): no RNG, so it can't roll, reroll or
+## start the next round, and its own copy of the haul, so a preview raise
+## or stake never touches the run's. Its end_turn settles the round on that
+## copy and stops, once.
+func planning_copy() -> Vault:
+	var copy: Vault = Vault.new()
+	copy._is_preview = true
+	copy.state = state
+	copy.round_number = round_number
+	copy.rounds_to_win = rounds_to_win
+	copy.rounds_won = rounds_won
+	copy.rounds_lost = rounds_lost
+	copy.house_hand = house_hand.duplicate()
+	copy.stake = stake.duplicate()
+	copy.raise_divisor = raise_divisor
+	copy.haul = haul.copy()
+	copy.table = table.copy(copy.events, copy.moves)
+	copy._hand_slot = _hand_slot
+	return copy
 
 
 ## Replays a move log. Returns false at the first move the vault refuses.

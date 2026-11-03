@@ -204,3 +204,35 @@ func test_dice_rooms_play_on_the_room_board() -> void:
 		assert_true(run.step in [DelveRun.Step.CHOOSE_ROOM, DelveRun.Step.LANDING, DelveRun.Step.WASHED_UP])
 		return
 	fail_test("no run reached a dice room")
+
+
+func test_kobans_vault_plays_on_the_vault_board() -> void:
+	for s: int in range(1, 80):
+		var run: DelveRun = _new_run(s)
+		for guard: int in 80:
+			match run.step:
+				DelveRun.Step.CHOOSE_ROOM:
+					run.choose(run.reachable()[0])
+				DelveRun.Step.IN_ROOM:
+					if run.fight != null:
+						PlannerBot.new().play_fight(run.fight)
+					if run.room != null:
+						RoomBot.new().play_room(run.room)
+					run.finish_room()
+					run.hp = maxi(run.hp, 12)
+				DelveRun.Step.LANDING:
+					run.go_deeper()
+		if run.step != DelveRun.Step.VAULT:
+			continue
+		var screen: Control = _screen(run)
+		var board: VaultBoard = screen.get("_vault_board")
+		assert_not_null(board)
+		assert_eq(board.top_inset, HaulStrip.HEIGHT)
+		assert_eq(board.vault, run.vault)
+		assert_eq(run.vault.round_number, 1, "the screen doesn't play the vault for you")
+		assert_false(run.vault.is_over())
+		VaultBot.new().play_vault(run.vault)
+		board.finished.emit()
+		assert_true(run.step in [DelveRun.Step.CLEARED, DelveRun.Step.WASHED_UP], "the vault's end ends the delve")
+		return
+	fail_test("no run reached the vault")
