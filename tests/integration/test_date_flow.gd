@@ -168,6 +168,18 @@ func test_the_date_reads_the_content_level_from_settings() -> void:
 	assert_eq(Game.begin_date("pearl_diver", "cafe").content_level, Settings.effective_content_level())
 
 
+func test_a_date_follows_the_setting_when_it_changes() -> void:
+	Settings.age_confirmed = false
+	var town: TownScreen = _open_card("pearl_diver")
+	var screen: DateScreen = await _start_date(town, "pearl_diver", "cafe")
+	assert_eq(screen.session.content_level, ContentLevel.Level.SFW)
+	Settings.age_confirmed = true
+	Settings.content_level = ContentLevel.Level.SUGGESTIVE
+	Settings.changed.emit()
+	assert_eq(screen.session.content_level, ContentLevel.Level.SUGGESTIVE)
+	assert_eq(screen.session.spot, "cafe", "and nothing else moves")
+
+
 func test_a_double_stamp_opens_one_date() -> void:
 	var town: TownScreen = _open_card("pearl_diver")
 	town.open_date("pearl_diver")

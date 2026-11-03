@@ -395,7 +395,7 @@ func _fade_leave() -> void:
 
 func _on_settings_changed() -> void:
 	if session != null and not session.finished:
-		session.content_level = Settings.effective_content_level()
+		session.follow_content_level(Settings.effective_content_level())
 
 
 func _close_after_result() -> void:
