@@ -494,7 +494,7 @@ func _effect_text(effect: String, amount: int, blocked: int, short: bool = false
 ## enemy_lost, state, detail (the full breakdown line).
 func turn_preview() -> Dictionary:
 	var preview: Dictionary = fight.preview_end_turn()
-	var t: Dictionary = {"dealt": 0, "into_guard": 0, "block": 0, "bites": 0, "hit": 0, "hit_taken": 0}
+	var t: Dictionary = {"dealt": 0, "into_guard": 0, "block": 0, "bites": 0, "hit": 0, "hit_taken": 0, "spined": 0}
 	for event: Dictionary in preview["events"] as Array[Dictionary]:
 		match event["type"] as String:
 			"damage":
@@ -509,6 +509,9 @@ func turn_preview() -> Dictionary:
 			"block":
 				if event["target"] == "player":
 					t["block"] += event["amount"] as int
+			"twist":
+				if event["twist"] == "spines":
+					t["spined"] += event["amount"] as int
 	t["lost"] = fight.player_hp - (preview["player_hp"] as int)
 	t["enemy_lost"] = fight.enemy_hp - (preview["enemy_hp"] as int)
 	t["state"] = preview["state"]
@@ -516,6 +519,8 @@ func turn_preview() -> Dictionary:
 	parts.append("Deal %d (%d into guard)" % [t["dealt"], t["into_guard"]] if (t["into_guard"] as int) > 0 else "Deal %d" % t["dealt"])
 	if (t["block"] as int) > 0:
 		parts.append("block +%d" % t["block"])
+	if (t["spined"] as int) > 0:
+		parts.append("spines stop %d block" % t["spined"])
 	if preview["state"] == Fight.State.WON:
 		parts.append("%s goes down first" % fight.enemy_name)
 	else:

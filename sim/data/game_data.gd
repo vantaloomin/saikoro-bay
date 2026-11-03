@@ -48,7 +48,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"enemies": {
 		"id": "id", "name": "string", "tier": "enum:regular|elite", "hp": "int", "intents": "string_list",
-		"twist": "enum:none|house_lock|snake_eyes", "twist_text": "string?",
+		"twist": "enum:none|house_lock|snake_eyes|rising_stakes|spines", "twist_text": "string?",
 	},
 	"delve": {
 		"id": "id", "floors": "int", "rows_per_floor": "int",

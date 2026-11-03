@@ -11,6 +11,10 @@ const TEST_ENEMIES: Array[Dictionary] = [
 		"twist": "house_lock", "twist_text": "t"},
 	{"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "tier": "regular", "hp": 16, "intents": ["attack:4", "attack:4", "attack:9"],
 		"twist": "snake_eyes", "twist_text": "t"},
+	{"id": "test_puffer", "name": "Test Puffer", "tier": "regular", "hp": 30, "intents": ["attack:9"],
+		"twist": "spines", "twist_text": "t"},
+	{"id": "test_crab", "name": "Test Crab", "tier": "regular", "hp": 30, "intents": ["attack:4", "attack:5"],
+		"twist": "rising_stakes", "twist_text": "t"},
 	{"id": "test_elite", "name": "Test Elite", "tier": "elite", "hp": 40, "intents": ["attack:8"],
 		"twist": "none", "twist_text": ""},
 ]
@@ -343,6 +347,39 @@ func test_snake_eyes_bites_through_block() -> void:
 		if event["source"] == "twist:snake_eyes":
 			bites += 1
 	assert_eq(bites, 2)
+
+
+func test_spines_stop_block_from_unused_dice() -> void:
+	var fight: Fight = _fight("test_puffer")
+	_set_hand(fight, [1, 1, 4, 3])
+	fight.place(2, "guard")
+	fight.place(3, "strike")
+	var preview: Dictionary = fight.preview_end_turn()
+	fight.end_turn()
+	# Guard 5 only, no unused-die block: 9 - 5 = 4 through.
+	assert_eq(fight.player_hp, 26)
+	assert_eq(preview["player_hp"], 26, "the preview runs the same rule")
+	var spined: Array[Dictionary] = _events_of(fight, "twist")
+	assert_eq(spined.size(), 1)
+	assert_eq(spined[0]["amount"], 2, "the block it stopped is in the event")
+	for event: Dictionary in _events_of(fight, "block"):
+		assert_ne(event["source"], "unused_dice")
+
+
+func test_rising_stakes_grow_each_attack_by_one() -> void:
+	var fight: Fight = _fight("test_crab")
+	var attacks: Array[int] = []
+	for t: int in 4:
+		attacks.append(fight.current_intent()["attack"] as int)
+		if t == 0:
+			assert_eq(fight.next_intent()["attack"], 6, "the next intent shows its raise too")
+		_set_hand(fight, [6, 6, 6, 6])
+		for d: int in 4:
+			fight.place(d, "guard") if d < 2 else fight.place(d, "strike")
+		fight.end_turn()
+		if fight.state != Fight.State.PLAYER_TURN:
+			break
+	assert_eq(attacks, [4, 6, 6, 8] as Array[int])
 
 
 func test_enemy_guard_protects_during_the_turn_its_shown() -> void:

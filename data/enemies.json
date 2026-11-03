@@ -18,6 +18,16 @@
 			"twist": "snake_eyes", "twist_text": "Snake eyes: each unplaced 1 bites for 1."
 		},
 		{
+			"id": "pufferfish_bouncer", "name": "Pufferfish Bouncer", "tier": "regular", "hp": 36,
+			"intents": ["attack:8", "attack:5+guard:6"],
+			"twist": "spines", "twist_text": "Spines: dice you leave unplaced give no block."
+		},
+		{
+			"id": "high_roller_crab", "name": "High-Roller Crab", "tier": "regular", "hp": 40,
+			"intents": ["attack:6", "attack:7"],
+			"twist": "rising_stakes", "twist_text": "Rising stakes: each attack hits 1 harder than the last."
+		},
+		{
 			"id": "pit_boss_octopus", "name": "Pit Boss Octopus", "tier": "elite", "hp": 46,
 			"intents": ["attack:9", "attack:6+guard:6", "attack:11"],
 			"twist": "house_lock", "twist_text": "House lock: your highest die is locked each turn."

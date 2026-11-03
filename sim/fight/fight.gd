@@ -11,7 +11,8 @@ extends RefCounted
 ## end_turn() runs one fixed pipeline (spec: specs/dice-fight-rules.md):
 ##   1. complete slots resolve in card order (all of them, even past 0 HP);
 ##      a half-filled Pair Bet doesn't fire and its die counts as unused
-##   2. each unused, unlocked die gives unused-die block
+##   2. each unused, unlocked die gives unused-die block (none against
+##      Spines)
 ##   3. win check: enemy at 0 HP wins; the enemy doesn't act, Mend fires
 ##   4. twist damage (Snake eyes: each unused 1 bites for 1, ignoring block;
 ##      a bite to 0 HP loses on the spot)
@@ -211,14 +212,25 @@ static func intent_errors(enemy: Dictionary) -> PackedStringArray:
 func current_intent() -> Dictionary:
 	if _intents.is_empty():
 		return {}
-	return _intents[intent_index % _intents.size()]
+	return _raised(_intents[intent_index % _intents.size()], intent_index)
 
 
 ## The intent after this one, for the small dimmed "next" display.
 func next_intent() -> Dictionary:
 	if _intents.is_empty():
 		return {}
-	return _intents[(intent_index + 1) % _intents.size()]
+	return _raised(_intents[(intent_index + 1) % _intents.size()], intent_index + 1)
+
+
+## Rising stakes: each attack is 1 bigger than the one before it, so the
+## n-th intent (from 0) attacks for n more. Other twists leave it as is.
+func _raised(intent: Dictionary, index: int) -> Dictionary:
+	if twist != "rising_stakes" or not intent.has("attack") or index <= 0:
+		return intent
+	var out: Dictionary = intent.duplicate()
+	out["attack"] = (intent["attack"] as int) + index
+	out["raised"] = index
+	return out
 
 
 func has_perk(perk_id: String) -> bool:
@@ -378,6 +390,10 @@ func end_turn() -> bool:
 	for d: Die in unused:
 		if not d.locked:
 			unused_block += _unused_die_block
+	if twist == "spines" and unused_block > 0:
+		# Spines: unused dice give no block.
+		events.append({"type": "twist", "twist": "spines", "amount": unused_block})
+		unused_block = 0
 	if unused_block > 0:
 		player_block += unused_block
 		events.append({"type": "block", "target": "player", "amount": unused_block, "source": "unused_dice"})
