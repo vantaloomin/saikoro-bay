@@ -7,12 +7,17 @@ extends SceneTree
 const SKIP_DIRS: PackedStringArray = ["res://addons", "res://.godot"]
 
 
-func _init() -> void:
+func _initialize() -> void:
+	# Check on the first frame, once autoloads (Game, SceneFlow) are registered.
+	process_frame.connect(_check_all, CONNECT_ONE_SHOT)
+
+
+func _check_all() -> void:
 	var files: PackedStringArray = []
 	_collect("res://", files)
 	var failed: int = 0
 	for path: String in files:
-		var script: Script = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as Script
+		var script: Script = ResourceLoader.load(path) as Script
 		if script == null or not script.can_instantiate():
 			printerr("FAILED: ", path)
 			failed += 1

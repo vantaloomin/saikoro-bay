@@ -1,2 +1,6 @@
 extends Control
-## Placeholder boot screen. Scene flow replaces this in a later Milestone 0 step.
+## First scene: loads the save and drops the player into the right half.
+
+
+func _ready() -> void:
+	SceneFlow.change_instant(Game.load_or_new())

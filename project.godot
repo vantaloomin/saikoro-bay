@@ -17,6 +17,11 @@ run/main_scene="res://game/boot/boot.tscn"
 config/features=PackedStringArray("4.6", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+SceneFlow="*res://game/autoload/scene_flow.gd"
+Game="*res://game/autoload/game.gd"
+
 [debug]
 
 gdscript/warnings/exclude_addons=true
