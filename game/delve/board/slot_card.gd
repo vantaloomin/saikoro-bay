@@ -22,6 +22,9 @@ var sockets: int = 1
 var placed_values: Array[int] = []
 ## Preview line for the held die, e.g. "8 damage (4 through guard)".
 var preview_text: String = ""
+## A gain on top of what the slot pays, in gold beside its title: Chum's
+## "+1 Chum" on a treasure lock (Mara's #52 review). "" for none.
+var bonus_text: String = ""
 ## How the footer reads: "ok", "wait" (allowed, needs more dice) or "error".
 var preview_tone: String = "ok"
 ## The value of the die being held (0 = none): a caret marks it on the ruler.
@@ -82,7 +85,13 @@ func _draw() -> void:
 	# Order badge, so "resolve top to bottom" is visible (Mara 10).
 	draw_rect(Rect2(12, 12, 40, 40), BoardStyle.GOLD)
 	draw_string(font, Vector2(23, 42), str(order), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.LACQUER)
-	draw_string(font, Vector2(64, 42), title, HORIZONTAL_ALIGNMENT_LEFT, size.x - 76, BoardStyle.BODY, BoardStyle.INK)
+	var bonus_width: float = 0.0
+	if not bonus_text.is_empty():
+		bonus_width = font.get_string_size(bonus_text, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL).x
+		draw_string(font, Vector2(size.x - 16 - bonus_width, 42), bonus_text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			BoardStyle.SMALL, BoardStyle.GOLD)
+		bonus_width += 12
+	draw_string(font, Vector2(64, 42), title, HORIZONTAL_ALIGNMENT_LEFT, size.x - 76 - bonus_width, BoardStyle.BODY, BoardStyle.INK)
 	draw_multiline_string(font, Vector2(16, 82), rule_text, HORIZONTAL_ALIGNMENT_LEFT, size.x - 32, BoardStyle.SMALL, 2, BoardStyle.DIM)
 
 	# Pip ruler: six cells, accepted faces filled.
