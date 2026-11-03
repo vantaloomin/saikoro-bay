@@ -164,6 +164,7 @@ func _ready() -> void:
 	_refresh()
 	_verb.grab_focus()
 	_reveal_house()
+	Soundscape.stinger("koban_vault")
 	PlaytestLog.log_event("vault_round_start", {"round": vault.round_number, "house": vault.house_hand.duplicate()})
 
 
@@ -596,6 +597,8 @@ func _show_panel(stake_events: Array) -> void:
 	_panel_shown_at = Time.get_ticks_msec()
 	_refresh()
 	_continue.grab_focus()
+	if vault.is_over():
+		Soundscape.stinger("koban_beaten" if vault.state == Vault.State.WON else "koban_wins")
 	PlaytestLog.log_event("vault_round", {"round": _round_event["round"], "won": _round_event["won"],
 		"yours": _round_event["yours"], "house": _round_event["house"], "over": vault.is_over()})
 

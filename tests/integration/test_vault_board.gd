@@ -162,6 +162,7 @@ func test_winning_twice_takes_the_vault() -> void:
 	assert_eq(board.vault.state, Vault.State.WON)
 	assert_string_contains(board._panel_text.text, "You win the Café. Your haul: 20 driftwood, 12 pearls.")
 	assert_true(finished[0])
+	assert_eq(Soundscape.played.slice(-1), ["koban_beaten"] as Array[String], "her loss has its own stinger")
 
 
 func test_a_short_hand_loses_and_says_so() -> void:
@@ -217,6 +218,7 @@ func test_losing_the_vault_names_the_barrel_and_what_you_keep() -> void:
 	assert_eq(board.vault.state, Vault.State.LOST)
 	assert_string_contains(board._panel_text.text, "Koban wins. You wash up in the barrel and keep half: 10 driftwood, 6 pearls.")
 	assert_eq(board._continue.text, "Continue")
+	assert_eq(Soundscape.played.slice(-1), ["koban_wins"] as Array[String])
 
 
 func test_a_raise_that_cant_be_made_never_rolls() -> void:
