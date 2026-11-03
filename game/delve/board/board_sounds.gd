@@ -27,6 +27,7 @@ func _ready() -> void:
 	for i: int in 4:
 		var player: AudioStreamPlayer = AudioStreamPlayer.new()
 		player.volume_db = -8.0
+		player.bus = &"SFX"
 		add_child(player)
 		_players.append(player)
 

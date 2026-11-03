@@ -56,6 +56,9 @@ const LIST_CHROME: float = 50.0
 const COLUMN_GAP: float = 16.0
 ## How far the tabs sit in from the sheet's sides, past its round corners.
 const TAB_INSET: int = 18
+const MUSIC_PATH: String = "res://content/sfw/music/town_loop.ogg"
+const MUSIC_DB: float = -14.0
+const MUSIC_FADE_SECONDS: float = 1.5
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -88,6 +91,8 @@ var _tabs: Dictionary[String, Button] = {}
 ## Between the notice board and a card under it. The tabs sit flush on
 ## whichever sheet is first.
 var _column_gap: Control
+var sounds: TownSounds
+var music: AudioStreamPlayer
 
 
 func _ready() -> void:
@@ -111,10 +116,15 @@ func _ready() -> void:
 	_menu_button.pressed.connect(_pause_menu.open)
 	_menu_button.focus_mode = Control.FOCUS_NONE
 	_pause_menu.closed.connect(SceneFlow.focus_default)
+	sounds = TownSounds.new()
+	sounds.name = "Sounds"
+	add_child(sounds)
+	_start_music()
 	_make_tabs()
 	_board.setup(Game.data, GameState.town_map(Game.data))
 	_board.picked.connect(_on_picked)
 	_board.spot_chosen.connect(_on_spot_chosen)
+	_board.spot_refused.connect(sounds.play.bind("refuse").unbind(1))
 	_board.home_chosen.connect(_on_home_chosen)
 	_board.cancelled.connect(back)
 	_card.resized.connect(_aim_leader)
@@ -210,6 +220,8 @@ func current_tab() -> String:
 
 
 func show_tab(tab: String) -> void:
+	if tab == TAB_NOTICE and current_tab() != TAB_NOTICE:
+		sounds.play("paper")
 	if tab == TAB_BUILD:
 		if current_tab() != TAB_BUILD or sheet.get("kind", "") != "list":
 			open_build_list()
@@ -281,6 +293,27 @@ func _on_go_down_held() -> void:
 	if Game.go_down():
 		Settings.set_go_down_learned()
 		_fade_hint()
+		_fade_music()
+
+
+## The town's loop (two-halves: major pentatonic, koto and marimba plucks,
+## waves underneath), faded in on arrival.
+func _start_music() -> void:
+	music = AudioStreamPlayer.new()
+	music.name = "Music"
+	# Loops by its import settings; tools/make_town_loop.py makes it seamless.
+	music.stream = load(MUSIC_PATH) as AudioStreamOggVorbis
+	music.bus = &"Music"
+	# Always faded in: a fade isn't motion (Mara's #45 review).
+	music.volume_db = -60.0
+	add_child(music)
+	music.play()
+	create_tween().tween_property(music, "volume_db", MUSIC_DB, MUSIC_FADE_SECONDS)
+
+
+func _fade_music() -> void:
+	if music != null and music.playing:
+		create_tween().tween_property(music, "volume_db", -60.0, MUSIC_FADE_SECONDS / 2.0)
 
 
 func _on_picked(_hit: Dictionary) -> void:
@@ -310,6 +343,7 @@ func choose_building(building_id: String) -> void:
 func open_build_list() -> void:
 	_board.stop_mode()
 	_board.select({})
+	sounds.play("paper")
 	sheet = {"kind": "list"}
 	_show_right_column()
 
@@ -319,6 +353,7 @@ func open_build_list() -> void:
 func open_building(building_id: String) -> void:
 	_board.stop_mode()
 	_board.select({})
+	sounds.play("paper")
 	sheet = {"kind": "building", "id": building_id}
 	_show_right_column()
 
@@ -336,6 +371,7 @@ func start_carry(building_id: String, uid: int = 0) -> void:
 	if using_pad:
 		_board.place_cursor(_board.view.to_screen(_board.view.target))
 	_board.start_carry(building_id, uid)
+	sounds.play("lift")
 	sheet = {"kind": "carry", "id": building_id, "uid": uid}
 	_show_right_column()
 	_board.grab_focus()
@@ -383,8 +419,10 @@ func _on_spot_chosen(cell: Vector2i) -> void:
 		var from: Dictionary = Game.state.town.entry(uid)
 		var was: Vector2i = Vector2i(from["x"], from["y"])
 		if not Game.move_building(uid, cell).is_empty():
+			sounds.play("refuse")
 			return
 		last_move = {"uid": uid, "cell": was} if was != cell else {}
+		sounds.play("set_down")
 		_finish_change({"kind": "building", "uid": uid}, "")
 	elif BuildList.cost_text(Game.data, building) == BuildList.FREE:
 		_place(building, cell)
@@ -404,13 +442,17 @@ func _place(building: String, cell: Vector2i) -> void:
 	var homeless: Array[String] = Game.state.homeless()
 	var refusals: Array[Dictionary] = Game.build(building, cell)
 	if not refusals.is_empty():
+		sounds.play("refuse")
 		if sheet.get("kind", "") == "confirm":
 			sheet["refusals"] = refusals
 			_show_right_column()
 		return
 	var uid: int = Game.state.town.placed.back()["uid"]
 	last_move = {}
+	# A stamped build sounds the stamp; a free one is set down.
+	sounds.play("stamp" if sheet.get("kind", "") == "confirm" else "set_down")
 	if Game.data.row("buildings", building)["kind"] == "landmark":
+		sounds.play("chimes")
 		_finish_change({"kind": "building", "uid": uid}, CHEER % BuildList.card_for(Game.data, Game.state, building)["title"])
 		_board.celebrate(uid)
 	else:
@@ -428,12 +470,14 @@ func undo_move() -> void:
 	var uid: int = last_move["uid"]
 	if Game.move_building(uid, last_move["cell"]).is_empty():
 		last_move = {}
+		sounds.play("set_down")
 		_finish_change({"kind": "building", "uid": uid}, "")
 
 
 func pick_home_for(villager: String) -> void:
 	_board.select({})
 	_board.start_home_pick(villager)
+	sounds.play("paper")
 	sheet = {"kind": "home", "villager": villager}
 	_show_right_column()
 	_board.grab_focus()
@@ -445,6 +489,7 @@ func _on_home_chosen(uid: int) -> void:
 	var villager: String = sheet["villager"]
 	if Game.swap_home(villager, uid).is_empty():
 		last_move = {}
+		sounds.play("set_down")
 		_finish_change({"kind": "villager", "villager": villager}, "")
 
 

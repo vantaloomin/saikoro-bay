@@ -22,6 +22,8 @@ extends Control
 
 signal picked(hit: Dictionary)
 signal spot_chosen(cell: Vector2i)
+## A spot the carried building can't go on was clicked; the tag says why.
+signal spot_refused(cell: Vector2i)
 signal home_chosen(uid: int)
 signal cancelled
 
@@ -439,6 +441,8 @@ func _pick_at(point: Vector2) -> void:
 			redraw_marks()
 			if carry_cell != TownView.NO_CELL and carry_problem.is_empty():
 				spot_chosen.emit(carry_cell)
+			elif carry_cell != TownView.NO_CELL:
+				spot_refused.emit(carry_cell)
 		Mode.PICK_HOME:
 			var hit: Dictionary = view.pick(point, _data, _state)
 			if hit.get("kind", "") == "building" and home_choices().has(hit["uid"]):
