@@ -66,7 +66,8 @@ func _get_drag_data(_at: Vector2) -> Variant:
 	var ghost: DieView = DieView.new()
 	ghost.value = value
 	ghost.modulate.a = 0.85
-	ghost.position = -ghost.custom_minimum_size / 2.0
+	# Above the cursor, so the slot footer and ruler caret stay visible.
+	ghost.position = Vector2(-ghost.custom_minimum_size.x / 2.0, -ghost.custom_minimum_size.y - 24)
 	var holder: Control = Control.new()
 	holder.add_child(ghost)
 	set_drag_preview(holder)
@@ -120,8 +121,11 @@ func _draw() -> void:
 		draw_rect(rect, Color(0, 0, 0, 0.45))
 		BoardStyle.draw_padlock(self, rect)
 	if discarded:
-		draw_line(rect.position, rect.end, BoardStyle.DANGER, 6.0)
-		draw_line(Vector2(rect.end.x, rect.position.y), Vector2(rect.position.x, rect.end.y), BoardStyle.DANGER, 6.0)
+		# Dark under red, so the cross reads in greyscale too.
+		for pass_color: Color in [BoardStyle.LACQUER, BoardStyle.DANGER]:
+			var width: float = 12.0 if pass_color == BoardStyle.LACQUER else 6.0
+			draw_line(rect.position, rect.end, pass_color, width)
+			draw_line(Vector2(rect.end.x, rect.position.y), Vector2(rect.position.x, rect.end.y), pass_color, width)
 	if bite_marker:
 		var font: Font = get_theme_default_font()
 		draw_rect(Rect2(rect.end.x - 40, rect.position.y - 6, 46, 30), BoardStyle.DANGER)
