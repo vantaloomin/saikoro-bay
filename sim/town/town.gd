@@ -14,6 +14,11 @@ extends RefCounted
 ## gap for SHORT, and "No actions left" once on the tray.
 enum Refusal { NOT_YET, ALL_BUILT, SHORT, NO_ACTIONS, SPOT }
 
+## How a villager feels about where they live (spec section 5). Two states
+## once housed; the screen shows each with a face and a shape, never color
+## alone. Derived from the layout, never saved.
+enum Mood { HAPPY, UNHAPPY, HOMELESS }
+
 ## Standing buildings in build order: {"uid": int, "building": id, "x": int, "y": int}.
 var placed: Array[Dictionary] = []
 ## The uid the next building gets. Uids are never reused.
@@ -82,6 +87,40 @@ func spot_problem(data: GameData, map: TownMap, building_id: String, cell: Vecto
 		if building["uid"] != lifted_uid and rect_of(data, building).intersects(rect):
 			return "Something's already here"
 	return ""
+
+
+## Whether two footprints share an edge: side by side with no gap, and no
+## diagonals (spec section 5). Buildings with a path between them don't.
+static func touches(a: Rect2i, b: Rect2i) -> bool:
+	if a.intersects(b):
+		return false
+	var rows_meet: bool = a.position.y < b.end.y and b.position.y < a.end.y
+	var columns_meet: bool = a.position.x < b.end.x and b.position.x < a.end.x
+	return (rows_meet and (a.end.x == b.position.x or b.end.x == a.position.x)) \
+		or (columns_meet and (a.end.y == b.position.y or b.end.y == a.position.y))
+
+
+## Who lives in home `uid`, or "".
+func resident(uid: int) -> String:
+	for villager: String in homes:
+		if homes[villager] == uid:
+			return villager
+	return ""
+
+
+## Whether a villager's home meets their wish: beside the sea, or sharing
+## an edge with one of the buildings they name. False without a home.
+func wish_met(data: GameData, map: TownMap, villager: String) -> bool:
+	if not homes.has(villager) or not data.has_row("villagers", villager):
+		return false
+	var home: Rect2i = rect_of(data, entry(homes[villager]))
+	var row: Dictionary = data.row("villagers", villager)
+	if row["wish"] == "sea":
+		return home.end.y == map.land_rows
+	for building: Dictionary in placed:
+		if (row["wish_buildings"] as Array).has(building["building"]) and touches(home, rect_of(data, building)):
+			return true
+	return false
 
 
 # --- Changing the layout ----------------------------------------------------------

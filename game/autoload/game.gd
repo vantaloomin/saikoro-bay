@@ -133,6 +133,17 @@ func move_building(uid: int, cell: Vector2i) -> String:
 	return problem
 
 
+## Moves a villager into another home for free (whoever lived there swaps
+## back), and saves. Returns "" when done, or why not.
+func swap_home(villager: String, uid: int) -> String:
+	if state.phase != GameState.Phase.TOWN:
+		return "Not in town"
+	var problem: String = state.swap_home(data, villager, uid)
+	if problem.is_empty():
+		save()
+	return problem
+
+
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
 func go_down() -> bool:
 	if SceneFlow.busy or not state.start_delve():
@@ -155,6 +166,9 @@ func come_up() -> bool:
 		return false
 	if not state.finish_delve(run.outcome(), run.haul):
 		return false
+	# Rescued villagers move into any free home before the save, so the
+	# town they arrive in is the one that's saved.
+	state.settle_villagers(data)
 	run = null
 	var error: Error = save()
 	if error != OK and error != ERR_BUSY and not saving_locked:

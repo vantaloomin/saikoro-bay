@@ -189,3 +189,18 @@ func test_building_in_town_saves_at_once() -> void:
 	saved = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
 	assert_eq([saved.town.placed[0]["x"], saved.town.placed[0]["y"]], [2, 2], "a free move is saved too")
 	assert_eq(Game.build("cottage", Vector2i(3, 3))[0]["text"], "Needs 4 more Driftwood (you have 0) · found in fights and small locks below")
+
+
+func test_a_rescued_villager_moves_into_a_free_home_before_the_save() -> void:
+	Game.state.town.actions_left = 1
+	Game.state.add_resource("driftwood", 4)
+	Game.build("cottage", Vector2i(0, 0))
+	assert_true(Game.go_down())
+	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+	Game.run.haul.villagers.append("pearl_diver")
+	Game.run.step = DelveRun.Step.SURFACED
+	assert_true(Game.come_up())
+	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq(saved.town.homes, {"pearl_diver": 1} as Dictionary[String, int])
+	assert_eq(Game.swap_home("pearl_diver", 1), "Already lives here")
+	await wait_for_signal(SceneFlow.transition_finished, 5.0)

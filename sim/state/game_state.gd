@@ -183,12 +183,80 @@ func build(data: GameData, building_id: String, cell: Vector2i) -> Array[Diction
 	town.actions_left -= row["actions"] as int
 	town.kept = mini(town.kept, town.actions_left)
 	town.place(building_id, cell)
+	if row["kind"] == "home":
+		settle_villagers(data)
 	return refusals
 
 
 ## Moves a placed building for free. Returns "" when it moved, or why not.
 func move_building(data: GameData, uid: int, cell: Vector2i) -> String:
 	return town.move(data, town_map(data), uid, cell)
+
+
+# --- Homes and wishes (specs/town.md section 5) ---------------------------------------
+
+## Moves villagers who have nowhere to live into free homes: first rescued
+## into the first home built. Returns who moved in, for the walk there.
+## Changes nothing when everyone is housed or there's no free home.
+func settle_villagers(data: GameData) -> Array[String]:
+	var moved: Array[String] = []
+	for villager: String in _villagers:
+		if town.homes.has(villager):
+			continue
+		for building: Dictionary in town.placed:
+			if data.row("buildings", building["building"]).get("kind", "") == "home" \
+					and town.resident(building["uid"]).is_empty():
+				town.homes[villager] = building["uid"]
+				moved.append(villager)
+				break
+	return moved
+
+
+## Moves `villager` into home `uid` for free. Whoever lived there swaps
+## into the villager's old home, or waits at the dock if the villager had
+## none. One call: it moves both or neither. Returns "" when done, or why not.
+func swap_home(data: GameData, villager: String, uid: int) -> String:
+	if not _villagers.has(villager):
+		return "Not in town"
+	var target: Dictionary = town.entry(uid)
+	if target.is_empty() or data.row("buildings", target["building"]).get("kind", "") != "home":
+		return "Not a home"
+	if town.homes.get(villager, 0) == uid:
+		return "Already lives here"
+	var other: String = town.resident(uid)
+	if not other.is_empty():
+		if town.homes.has(villager):
+			town.homes[other] = town.homes[villager]
+		else:
+			town.homes.erase(other)
+	town.homes[villager] = uid
+	return ""
+
+
+func mood(data: GameData, villager: String) -> Town.Mood:
+	if not town.homes.has(villager):
+		return Town.Mood.HOMELESS
+	return Town.Mood.HAPPY if town.wish_met(data, town_map(data), villager) else Town.Mood.UNHAPPY
+
+
+## Villagers in town with nowhere to live, in rescue order.
+func homeless() -> Array[String]:
+	return _villagers.filter(func(villager: String) -> bool: return not town.homes.has(villager))
+
+
+## The HUD line for villagers with nowhere to live, or "" when all are housed.
+func homeless_line(data: GameData) -> String:
+	var names: Array[String] = []
+	for villager: String in homeless():
+		names.append(str(data.row("villagers", villager).get("role", villager)))
+	match names.size():
+		0:
+			return ""
+		1:
+			return "The %s has nowhere to live" % names[0]
+		2:
+			return "The %s and the %s have nowhere to live" % names
+	return "%d villagers have nowhere to live" % names.size()
 
 
 ## Unlock rules only ever open (spec section 4): placed buildings and
