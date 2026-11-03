@@ -46,8 +46,8 @@ func test_the_whole_town_fits_the_screen() -> void:
 	for screen: Vector2 in [Vector2(1920, 1080), Vector2(1280, 800)]:
 		var view: TownView = TownView.make(map, screen)
 		var tall: float = TownView.BODY_HEIGHT["landmark"] + TownView.ROOF_HEIGHT["landmark"]
-		for corner: Vector3 in [Vector3(0, tall, 0), Vector3(map.width, tall, 0), Vector3(0, 0, map.height),
-				Vector3(map.width, 0, map.height)]:
+		for corner: Vector3 in [Vector3(0, tall, 0), Vector3(map.width, tall, 0), Vector3(0, 0, map.land_rows + 1.0),
+				Vector3(map.width, 0, map.land_rows + 1.0)]:
 			assert_true(Rect2(Vector2.ZERO, screen).has_point(view.to_screen(corner)), "%s on a %s screen" % [corner, screen])
 
 
@@ -159,17 +159,30 @@ func test_hold_button_fills_drains_and_fires_once() -> void:
 	assert_signal_emit_count(button, "held", 1, "a disabled button can't be held")
 
 
-func test_the_town_fits_inside_the_safe_area() -> void:
-	var safe: Rect2 = Rect2(360, 0, 1100, 1080)
-	var view: TownView = TownView.make(map, Vector2(1920, 1080), safe)
-	assert_true(safe.encloses(view.town_bounds()), "%s inside %s" % [view.town_bounds(), safe])
-	assert_almost_eq(view.town_bounds().get_center().x, safe.get_center().x, 4.0, "and centered in it")
+func _hud() -> Array[Rect2]:
+	return [Rect2(32, 32, 280, 200), Rect2(32, 900, 330, 148), Rect2(1468, 32, 420, 860), Rect2(1408, 920, 480, 128)]
+
+
+func test_the_land_is_framed_clear_of_the_hud() -> void:
+	var hud: Array[Rect2] = _hud()
+	var view: TownView = TownView.make(map, Vector2(1920, 1080), hud)
+	var outline: PackedVector2Array = view.land_outline()
+	for rect: Rect2 in hud:
+		var corners: PackedVector2Array = [rect.position, Vector2(rect.end.x, rect.position.y), rect.end,
+			Vector2(rect.position.x, rect.end.y)]
+		assert_eq(Geometry2D.intersect_polygons(outline, corners).size(), 0, "nothing of the land under %s" % rect)
+	var free: TownView = TownView.make(map, Vector2(1920, 1080))
+	assert_gt(view.distance, free.distance, "the HUD costs some size")
+	assert_lt(view.distance, free.distance * 1.6, "but panels may cover the sky and sea")
 
 
 func test_a_selection_is_kept_out_from_under_the_hud() -> void:
-	var safe: Rect2 = Rect2(360, 0, 1100, 1080)
-	var view: TownView = TownView.make(map, Vector2(1920, 1080), safe)
+	var hud: Array[Rect2] = _hud()
+	var view: TownView = TownView.make(map, Vector2(1920, 1080), hud)
 	var far_corner: Vector3 = Vector3(map.width - 0.5, 0.0, 0.5)
 	view.zoom_at(view.to_screen(Vector3(1.0, 0.0, map.land_rows - 1.0)), 2.0)
 	view.ensure_visible(far_corner)
-	assert_true(safe.has_point(view.to_screen(far_corner)))
+	var at: Vector2 = view.to_screen(far_corner)
+	assert_true(Rect2(Vector2.ZERO, view.size).has_point(at))
+	for rect: Rect2 in hud:
+		assert_false(rect.has_point(at), "not under %s" % rect)

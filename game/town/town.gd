@@ -38,8 +38,6 @@ const HOLD_HINT_PAD: String = "Hold"
 ## the HUD grows to keep body text near 24 px (SA-6, the Deck at 1280 × 800).
 const HUD_TARGET_SCALE: float = 0.92
 const HUD_MAX_GROWTH: float = 1.3
-## Gap between the HUD and the town's safe area.
-const SAFE_GAP: float = 16.0
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -184,15 +182,22 @@ func _fit_hud() -> void:
 	for part: Control in [_ledger, _right_column, _tray_panel, _actions]:
 		part.scale = Vector2(hud_scale, hud_scale)
 	_board.text_scale = hud_scale
-	_board.set_safe_area(safe_area())
+	_board.set_hud(hud_rects())
 	_aim_leader()
 
 
-## The board's space between the HUD's left and right columns.
-func safe_area() -> Rect2:
-	var left: float = maxf(_scaled_rect(_ledger).end.x, _scaled_rect(_tray_panel).end.x) + SAFE_GAP
-	var right: float = minf(_scaled_rect(_right_column).position.x, _scaled_rect(_actions).position.x) - SAFE_GAP
-	return Rect2(left, 0.0, maxf(right - left, 200.0), _board.size.y)
+## The HUD's panels in board pixels, for framing the town clear of them.
+## The right column is reserved down to "Go down", so a card opening later
+## never covers the land.
+func hud_rects() -> Array[Rect2]:
+	var to_board: Transform2D = _board.get_global_transform().affine_inverse() * get_global_transform()
+	var column: Rect2 = _scaled_rect(_right_column)
+	var actions: Rect2 = _scaled_rect(_actions)
+	column.size.y = actions.position.y - column.position.y
+	var out: Array[Rect2] = []
+	for rect: Rect2 in [_scaled_rect(_ledger), _scaled_rect(_tray_panel), column, actions, _scaled_rect(_menu_button)]:
+		out.append(to_board * rect)
+	return out
 
 
 static func _scaled_rect(part: Control) -> Rect2:

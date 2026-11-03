@@ -117,9 +117,10 @@ func select(hit: Dictionary) -> void:
 	redraw_marks()
 
 
-## The part of the board the HUD leaves clear. Reframes the whole town.
-func set_safe_area(area: Rect2) -> void:
-	view.safe = area
+## Where the HUD's panels sit on the board. Reframes the whole town clear
+## of them.
+func set_hud(rects: Array[Rect2]) -> void:
+	view.obstacles = rects
 	view.frame_town()
 	_view_changed()
 

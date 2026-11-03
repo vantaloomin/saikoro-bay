@@ -33,76 +33,104 @@ var target: Vector3 = Vector3.ZERO
 var distance: float = 20.0
 var min_distance: float = 8.0
 var max_distance: float = 30.0
-## The part of the screen the HUD leaves clear; empty means all of it.
-var safe: Rect2 = Rect2()
+## The HUD's panels on screen; the land is framed clear of them.
+var obstacles: Array[Rect2] = []
 
 
-## A view that fits the whole town on a `screen_size` screen. `safe` is
-## the part of the screen the HUD leaves clear (Mara's #41 review: frame the
-## town between the HUD columns); empty means the whole screen.
-static func make(town_map: TownMap, screen_size: Vector2, safe_area: Rect2 = Rect2()) -> TownView:
+## A view that fits the whole town on a `screen_size` screen, clear of the
+## HUD's `obstacles` (screen rects): the panels may cover blurred sky, sea
+## and scenery, but never the land (Mara's #41 review, for the Deck).
+static func make(town_map: TownMap, screen_size: Vector2, hud: Array[Rect2] = []) -> TownView:
 	var view: TownView = TownView.new()
 	view.map = town_map
 	view.size = screen_size
-	view.safe = safe_area
+	view.obstacles = hud
 	view.frame_town()
 	return view
 
 
 func middle() -> Vector3:
-	return Vector3(map.width / 2.0, 0.0, map.height / 2.0)
+	return Vector3(map.width / 2.0, 0.0, map.land_rows / 2.0)
 
 
-## The part of the screen the town should sit in.
-func safe_rect() -> Rect2:
-	return safe if safe.has_area() else Rect2(Vector2.ZERO, size)
-
-
-## Points that must be on screen: the land's corners, the shore, and the
-## tallest roofs along the back.
-func _outline_points() -> Array[Vector3]:
-	var tall: float = BODY_HEIGHT["landmark"] + ROOF_HEIGHT["landmark"]
-	return [
-		Vector3(0, tall, 0), Vector3(map.width, tall, 0), Vector3(0, 1.5, 0), Vector3(map.width, 1.5, 0),
-		Vector3(0, 0, map.height), Vector3(map.width, 0, map.height),
+## The land as it sits on screen, down to the dock: its ground corners, with the back
+## edge raised so roofs, villagers and bubbles along it count too.
+func land_outline() -> PackedVector2Array:
+	var lift: float = BODY_HEIGHT["landmark"] + ROOF_HEIGHT["landmark"]
+	var land: float = map.land_rows
+	var points: Array[Vector3] = [
+		Vector3(0, 0, land + 1.1), Vector3(map.width, 0, land + 1.1), Vector3(map.width, 0, 0),
+		Vector3(map.width, lift, 0), Vector3(0, lift, 0), Vector3(0, 0, 0),
 	]
-
-
-## The screen box around the whole town from here.
-func town_bounds() -> Rect2:
-	var points: Array[Vector3] = _outline_points()
-	var bounds: Rect2 = Rect2(to_screen(points[0]), Vector2.ZERO)
+	var screen: PackedVector2Array = []
 	for point: Vector3 in points:
-		bounds = bounds.expand(to_screen(point))
-	return bounds
+		screen.append(to_screen(point))
+	return Geometry2D.convex_hull(screen)
 
 
-## Fits and centers the whole town inside the safe area, and sets the zoom
-## limits around that.
+func _land_is_clear(margin: float) -> bool:
+	var outline: PackedVector2Array = land_outline()
+	var screen: Rect2 = Rect2(Vector2.ZERO, size).grow(-margin)
+	for point: Vector2 in outline:
+		if not screen.has_point(point):
+			return false
+	for rect: Rect2 in obstacles:
+		var grown: Rect2 = rect.grow(margin)
+		var corners: PackedVector2Array = [grown.position, Vector2(grown.end.x, grown.position.y), grown.end,
+			Vector2(grown.position.x, grown.end.y)]
+		if not Geometry2D.intersect_polygons(outline, corners).is_empty():
+			return false
+	return true
+
+
+## Where the land's middle should sit: halfway between the HUD on the
+## left and the HUD on the right, at mid height.
+func _free_center() -> Vector2:
+	var left: float = 0.0
+	var right: float = size.x
+	for rect: Rect2 in obstacles:
+		# Only side panels steer the middle; a button up top only costs size.
+		if rect.position.x < size.x * 0.25:
+			left = maxf(left, rect.end.x)
+		elif rect.end.x > size.x * 0.75:
+			right = minf(right, rect.position.x)
+	return Vector2((left + right) / 2.0, size.y / 2.0)
+
+
+func _outline_center() -> Vector2:
+	var outline: PackedVector2Array = land_outline()
+	var bounds: Rect2 = Rect2(outline[0], Vector2.ZERO)
+	for point: Vector2 in outline:
+		bounds = bounds.expand(point)
+	return bounds.get_center()
+
+
+## Fits the land as large as it goes with nothing of it under the HUD, and
+## sets the zoom limits around that.
 func frame_town() -> void:
-	var area: Rect2 = safe_rect()
-	var room: Vector2 = area.size * Vector2(0.96, 0.94)
-	target = middle()
 	distance = 6.0
 	while distance < 80.0:
-		var bounds: Rect2 = town_bounds()
-		if bounds.size.x <= room.x and bounds.size.y <= room.y:
+		# Start from the middle each time: up close, centering can run away.
+		target = middle()
+		for i: int in 3:
+			_pan_unclamped(_free_center() - _outline_center())
+		if _land_is_clear(12.0):
 			break
 		distance += 0.25
-	for i: int in 4:
-		_pan_unclamped(area.get_center() - town_bounds().get_center())
 	max_distance = distance * 1.25
 	min_distance = distance * 0.45
 
 
-## Pans just enough to bring a world point inside the safe area, so a
-## selection never hides under the HUD.
+## Pans just enough to bring a world point onto the screen and out from
+## under the HUD, so a selection never hides behind a panel.
 func ensure_visible(world: Vector3, margin: float = 48.0) -> void:
-	var area: Rect2 = safe_rect().grow(-margin)
 	var at: Vector2 = to_screen(world)
-	var inside: Vector2 = at.clamp(area.position, area.end)
-	if inside != at:
-		pan(inside - at)
+	var goal: Vector2 = at.clamp(Vector2(margin, margin), size - Vector2(margin, margin))
+	for rect: Rect2 in obstacles:
+		if rect.grow(margin).has_point(goal):
+			goal.x = rect.end.x + margin if rect.get_center().x < size.x / 2.0 else rect.position.x - margin
+	if goal != at:
+		pan(goal - at)
 
 
 # --- Camera -------------------------------------------------------------------------------

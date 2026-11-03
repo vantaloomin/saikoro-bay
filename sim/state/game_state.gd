@@ -257,6 +257,42 @@ func build(data: GameData, building_id: String, cell: Vector2i) -> Array[Diction
 	return refusals
 
 
+## Spots that would make someone happier: every top-left cell where
+## `building_id` (new, or `lifted_uid` being moved) fits and leaves more
+## villagers with their wish met than now, counting anyone with nowhere to
+## live who'd move into a new home. The cells the carry ghost lights up
+## (spec section 2), derived from the same rules as mood, never stored.
+func wish_spots(data: GameData, building_id: String, lifted_uid: int = 0) -> Array[Vector2i]:
+	var map: TownMap = town_map(data)
+	var happy_now: int = _happy_count(data, map)
+	var real: Town = town
+	var out: Array[Vector2i] = []
+	for y: int in map.land_rows:
+		for x: int in map.width:
+			var cell: Vector2i = Vector2i(x, y)
+			if not real.spot_problem(data, map, building_id, cell, lifted_uid).is_empty():
+				continue
+			town = Town.from_dict(real.to_dict())
+			if lifted_uid != 0:
+				town.move(data, map, lifted_uid, cell)
+			else:
+				town.place(building_id, cell)
+				settle_villagers(data)
+			var better: bool = _happy_count(data, map) > happy_now
+			town = real
+			if better:
+				out.append(cell)
+	return out
+
+
+func _happy_count(data: GameData, map: TownMap) -> int:
+	var count: int = 0
+	for villager: String in _villagers:
+		if town.wish_met(data, map, villager):
+			count += 1
+	return count
+
+
 ## Moves a placed building for free. Returns "" when it moved, or why not.
 func move_building(data: GameData, uid: int, cell: Vector2i) -> String:
 	return town.move(data, town_map(data), uid, cell)

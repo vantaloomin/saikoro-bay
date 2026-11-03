@@ -181,3 +181,31 @@ func test_nobody_is_homeless_beside_an_empty_home() -> void:
 				fail_test("run %d step %d: %s" % [run, step, state.town_problems(data)])
 				return
 	pass_test("40 random towns of 60 steps")
+
+
+func test_wish_spots_light_the_cells_that_make_someone_happier() -> void:
+	var state: GameState = _state(["onsen_keeper"] as Array[String])
+	state.build(data, "cottage", Vector2i(1, 1))
+	var before: Dictionary = state.town.to_dict()
+	var spots: Array[Vector2i] = state.wish_spots(data, "tea_stall")
+	assert_eq(state.town.to_dict(), before, "looking changes nothing")
+	assert_eq(spots.size(), 4, "the four cells around her home: %s" % [spots])
+	for cell: Vector2i in [Vector2i(0, 1), Vector2i(2, 1), Vector2i(1, 0), Vector2i(1, 2)]:
+		assert_has(spots, cell)
+
+
+func test_wish_spots_for_a_new_home_count_who_would_move_in() -> void:
+	var state: GameState = _state(["pearl_diver"] as Array[String])
+	var spots: Array[Vector2i] = state.wish_spots(data, "cottage")
+	assert_gt(spots.size(), 0)
+	for cell: Vector2i in spots:
+		assert_eq(cell.y, GameState.town_map(data).land_rows - 1, "a cottage on the shore, for the pearl diver")
+
+
+func test_wish_spots_for_a_move_lift_the_building() -> void:
+	var state: GameState = _state(["pearl_diver"] as Array[String])
+	state.build(data, "cottage", Vector2i(1, 1))
+	var uid: int = state.town.homes["pearl_diver"]
+	var spots: Array[Vector2i] = state.wish_spots(data, "cottage", uid)
+	assert_has(spots, Vector2i(1, 7), "moving her home to the shore")
+	assert_does_not_have(spots, Vector2i(1, 1), "where it already is changes nothing")

@@ -143,14 +143,13 @@ func test_the_hold_hint_follows_the_input() -> void:
 	assert_eq(town.hint_text(), TownScreen.HOLD_HINT_MOUSE)
 
 
-func test_the_town_is_framed_between_the_hud_columns() -> void:
+func test_the_land_is_framed_clear_of_the_hud() -> void:
 	var town: TownScreen = _open()
 	await wait_physics_frames(2)
 	town._fit_hud()
-	var safe: Rect2 = town.safe_area()
-	var ledger: Rect2 = (town.get_node("%Ledger") as Control).get_global_rect()
-	var notice: Rect2 = (town.get_node("%Notice") as Control).get_global_rect()
-	assert_gt(safe.position.x, ledger.end.x - 1.0, "right of the ledger")
-	assert_lt(safe.end.x, notice.position.x + 1.0, "left of the notice board and card")
 	var board: TownBoard = town.get_node("%Board") as TownBoard
-	assert_true(safe.grow(1.0).encloses(board.view.town_bounds()))
+	var outline: PackedVector2Array = board.view.land_outline()
+	for rect: Rect2 in town.hud_rects():
+		var corners: PackedVector2Array = [rect.position, Vector2(rect.end.x, rect.position.y), rect.end,
+			Vector2(rect.position.x, rect.end.y)]
+		assert_eq(Geometry2D.intersect_polygons(outline, corners).size(), 0, "nothing of the land under %s" % rect)
