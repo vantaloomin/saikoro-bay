@@ -1,0 +1,155 @@
+# Kitsune shrine keeper: Akane, 34. A fox spirit and a grown woman. Her stated age is 34
+# everywhere; no centuries-old framing in any line (Nori's art review, store risk).
+# Vain, flirty, dry, a show-off. Speaks like a grown woman who's sure of herself.
+# Never cutesy, no childish tics, no sibling-style address to the player.
+# Kept the fox shrine on the hill above the town.
+# Bet lost: her tails. After Tama lost the town, Akane went down to win it back. She bet
+# eight of her nine tails against the deed and cheated with a fox's glamour on her dice.
+# Koban caught her. Cheats forfeit the stake and themselves, so the House kept her tails
+# and her. Koban now wears the eight tails as a stole. Akane has one tail left.
+# Koban's seal: a gold coin mark at the root of her remaining tail, where the others were.
+# Perk: Foresight (see one extra room ahead). One tail's worth of sight. Fourth to be rescued.
+# Speaker id: shrine_keeper. Faces: neutral, happy, tease, flustered, sad, surprised.
+
+~ rescue_start
+
+A gilded cage hangs from the ceiling like a jewelry box, with a velvet cushion inside. A woman with fox ears lounges on it, one red tail curled round her, looking down at you as if you're late. [#face=happy]
+shrine_keeper: Ah. A visitor. Finally, someone worth performing for. [#face=tease]
+shrine_keeper: You'll want to stare at the tail. Everyone does. Stare at the face instead. It's the better feature. [#face=happy]
+- Are you all right up there?
+	shrine_keeper: I'm bored, dusty and humiliated, but my posture is excellent. [#face=sad]
+- Is that your only tail?
+	shrine_keeper: For now. Don't make me cry in front of the locks. [#face=sad]
+shrine_keeper: Three locks. I could tell you which dice you'll roll, once. These days I can only tell you the water's coming. [#face=neutral]
+shrine_keeper: Be quick, and be clever. Quick is optional. [#face=tease]
+=> END
+
+~ rescue_turn
+
+% shrine_keeper: The water's at my cushion. That cushion was silk. [#face=tease]
+% shrine_keeper: Close! I'd have cheated that one. You're doing it honestly. Admirable. Slow. [#face=tease]
+% shrine_keeper: I can see one room ahead, and in it, you open this lock. Make me right. [#face=happy]
+=> END
+
+~ rescue_won
+
+The third lock opens and the cage door swings down like a drawbridge. She steps out onto it, unhurried, and offers you her hand as if you're the one being rescued. [#face=happy]
+shrine_keeper: Beautifully done. Akane, keeper of the fox shrine on the hill, and the best-looking thing in this palace. Present company possibly excepted. [#face=tease]
+- What happened to your tails?
+	shrine_keeper: Straight to the wound. I like you. [#face=happy]
+- You look well, for someone in a cage.
+	shrine_keeper: I've been moisturizing out of spite. Thank you for noticing. [#face=tease]
+shrine_keeper: When your grandmother lost the town, I went down to win it back. Eight tails against the deed. [#face=neutral]
+shrine_keeper: And I cheated, naturally. A little fox glamour on the dice, so every one looked like a six. [#face=tease]
+shrine_keeper: She caught me on the first roll. A cheat forfeits the stake and herself, so the House kept my tails, and me. [#face=sad]
+shrine_keeper: She wears them now. As a stole. Over one shoulder, on the nights she wants me to see it. [#face=sad]
+She turns so you can see the root of her last tail. A small gold coin mark sits there, where the others used to be.
+shrine_keeper: Do you know how she caught me so fast? She knew exactly what to look for. Think about that, the next time she rolls a six. [#face=happy]
+shrine_keeper: Nine tails saw a year ahead. One sees a room or so. That room is yours, whenever you go down. [#face=happy]
+=> END
+
+~ rescue_failed
+
+The water reaches the last lock. The cage rises back into the dark on its chain, and she waves with two fingers as it goes. [#face=happy]
+shrine_keeper: Don't look so tragic. I've waited in worse company. I once spent a whole winter with a tanuki. [#face=tease]
+shrine_keeper: Come back next tide. I'll be up here, being decorative. [#face=happy]
+=> END
+
+~ move_in
+
+shrine_keeper: A cottage. Small. Plain. I've lived in grander. I've also lived in a cage, so I'll take it. [#face=neutral]
+if villager_happy
+	shrine_keeper: And a lantern at the door. Spirits like to know where I live. So do admirers. [#face=tease]
+else
+	shrine_keeper: No lantern, though. Spirits won't find me. Worse, neither will admirers. [#face=sad]
+shrine_keeper: Visit me. Bring fried tofu. That isn't a stereotype. It's a standing order. [#face=tease]
+- I'll bring a lot.
+	shrine_keeper: Then you'll be my favorite. For the evening. [#face=tease]
+- Only if you tell my fortune.
+	shrine_keeper: Your fortune is that you'll bring me fried tofu. See? I'm never wrong. [#face=tease]
+=> END
+
+~ home_happy
+
+% shrine_keeper: The lantern burned all night. Three ghosts and a moth came to visit. The moth was the best company. [#face=tease]
+% shrine_keeper: I brushed my tail for an hour this morning. It deserved it. [#face=happy]
+% shrine_keeper: Shall I tell your fortune? Rain tomorrow, a good roll the day after. Free of charge. Once. [#face=happy]
+% shrine_keeper: The town's coming back. I can feel it in the ears. [#face=happy]
+=> END
+
+~ home_unhappy
+
+% shrine_keeper: A lantern by my door, please. I'm not asking twice. I'm asking a third time. [#face=sad]
+% shrine_keeper: It's very dark at night. I can see in the dark, of course. That's not the point. [#face=tease]
+% shrine_keeper: A shrine keeper with no light at her door. The neighbors will talk. [#face=neutral]
+=> END
+
+~ no_home
+
+% shrine_keeper: I'll wait on the dock. Elegantly. I've had practice. [#face=happy]
+% shrine_keeper: Any roof will do. That's a lie. A nice roof will do. [#face=tease]
+=> END
+
+~ scene_invite
+
+shrine_keeper: Come to my door tonight, when the lantern's lit. [#face=flustered]
+shrine_keeper: Bring a brush. I'll explain when you get there. It's the most personal thing a fox can ask, so don't be late. [#face=happy]
+=> END
+
+~ date
+
+if spot == "hot_spring"
+	Akane sits on the rocks at the edge of the Hot Spring with her feet in the water and her tail held carefully up and away from it. [#face=neutral]
+	if dates_done > 0
+		shrine_keeper: You came back. I foresaw it, of course. I also hoped. Those aren't the same thing. [#face=happy]
+	else
+		shrine_keeper: The water is lovely. The tail stays dry. That's not up for discussion. [#face=tease]
+else
+	Akane has the best table in the Café and three plates in front of her, all fried tofu. [#face=tease]
+	if dates_done > 0
+		shrine_keeper: I ordered for you. It's tofu. It's always going to be tofu. [#face=tease]
+	else
+		shrine_keeper: Sit. I ordered for both of us, and then I ate yours. You were late. [#face=tease]
+shrine_keeper: So. Say something nice about me. Warm me up. [#face=happy]
+- Your tail's gorgeous.
+	set affection += 1
+	shrine_keeper: It is. You should have seen the other eight. [#face=flustered]
+- You've got sauce on your chin.
+	shrine_keeper: I do not. [#face=surprised]
+	shrine_keeper: I did. Thank you. That was nice in its own way. [#face=tease]
+- Your nose does a thing when you're smug.
+	set affection += 1
+	shrine_keeper: Nobody has ever noticed that. You're dangerous. [#face=flustered]
+shrine_keeper: Let's play a game. I'm hiding a pearl under one of these cups. Which one? [#face=tease]
+if spot == "hot_spring"
+	She lines up three teacups on the rocks and shuffles them, quick as a minnow.
+else
+	She turns three teacups over on the table and shuffles them, quick as a minnow.
+- The left one.
+	She lifts it. Empty. She lifts the other two. Also empty. The pearl is in her hand.
+	shrine_keeper: Never play a fox at cups. That's free advice. [#face=tease]
+- You're cheating.
+	set affection += 1
+	shrine_keeper: Of course I'm cheating. Well caught. [#face=tease]
+	She opens her hand. The pearl was there all along.
+	shrine_keeper: The cat caught me faster. But you're new. [#face=happy]
+- (Lift all three at once.)
+	set affection += 1
+	All empty. She laughs and opens her hand to show the pearl.
+	shrine_keeper: Rude, clever, effective. I approve on all counts. [#face=tease]
+shrine_keeper: Do you know what I miss? The weight. Nine tails are heavy. You lean back into them like a chair. [#face=sad]
+shrine_keeper: Now I lean back and there's nothing there. Every time. I keep falling into chairs that aren't there. [#face=sad]
+- We'll win them back. All eight.
+	set affection += 1
+	shrine_keeper: Off her shoulders? I'd pay to watch that. [#face=happy]
+	shrine_keeper: I'd pay twice. [#face=tease]
+- One looks good on you.
+	set affection += 1
+	shrine_keeper: Flatterer. Keep going. [#face=flustered]
+- Was it worth it? Trying to win the town?
+	shrine_keeper: I lost, so no. I'd try again tomorrow, so yes. Don't ask a fox for a straight answer. [#face=happy]
+if spot == "hot_spring"
+	shrine_keeper: My feet are warm and my tail is dry. A perfect evening. Almost. Come back and finish it some time. [#face=happy]
+else
+	shrine_keeper: You can pay. I left my purse in a cage at the bottom of the sea. [#face=tease]
+=> END

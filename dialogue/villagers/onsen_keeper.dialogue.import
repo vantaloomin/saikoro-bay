@@ -1,0 +1,16 @@
+[remap]
+
+importer="dialogue_manager"
+importer_version=18
+type="Resource"
+uid="uid://dbwwwanj6xis4"
+path="res://.godot/imported/onsen_keeper.dialogue-a3b0c77ce53b61f9ac7e2a7a17aa2c5b.tres"
+
+[deps]
+
+source_file="res://dialogue/villagers/onsen_keeper.dialogue"
+dest_files=["res://.godot/imported/onsen_keeper.dialogue-a3b0c77ce53b61f9ac7e2a7a17aa2c5b.tres"]
+
+[params]
+
+defaults=true

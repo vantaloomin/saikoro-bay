@@ -1,0 +1,16 @@
+[remap]
+
+importer="dialogue_manager"
+importer_version=18
+type="Resource"
+uid="uid://dli7868uaatip"
+path="res://.godot/imported/shrine_keeper.dialogue-6e8d96278bb635f25177a01da24a2e63.tres"
+
+[deps]
+
+source_file="res://dialogue/villagers/shrine_keeper.dialogue"
+dest_files=["res://.godot/imported/shrine_keeper.dialogue-6e8d96278bb635f25177a01da24a2e63.tres"]
+
+[params]
+
+defaults=true

@@ -22,7 +22,8 @@ extends RefCounted
 const FORMAT: String = "saikoro-bay-save"
 ## 2: villagers, landmarks and the last delve (M2), so an older build
 ## refuses these saves instead of dropping them. 3: the town (M3).
-const CURRENT_VERSION: int = 3
+## 4: affection and dates (M5).
+const CURRENT_VERSION: int = 4
 
 ## Largest integer a JSON number (a double) holds exactly. Bigger values,
 ## like RNG states, must be saved as strings.
@@ -46,7 +47,7 @@ static var MIGRATIONS: Dictionary[int, Callable] = default_migrations()
 ## The game's own upgrades. Tests that register their own call this to
 ## put them back.
 static func default_migrations() -> Dictionary[int, Callable]:
-	return {2: GameState.migrate_to_v2, 3: GameState.migrate_to_v3}
+	return {2: GameState.migrate_to_v2, 3: GameState.migrate_to_v3, 4: GameState.migrate_to_v4}
 
 
 class DecodeResult:

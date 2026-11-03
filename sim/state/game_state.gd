@@ -36,6 +36,12 @@ var last_delve: Dictionary = {}
 var _seen_twists: Array[String] = []
 ## The town's layout, homes and this visit's actions (save version 3).
 var town: Town = Town.new()
+## Affection per villager (save version 4). Only ever rises (RD-6). A
+## villager with none isn't listed.
+var _affection: Dictionary[String, int] = {}
+## Dates finished per villager (save version 4), so a script can tell a
+## first date from a repeat.
+var _dates_done: Dictionary[String, int] = {}
 
 
 func _init(seed_value: int = 0) -> void:
@@ -408,7 +414,111 @@ func town_problems(data: GameData) -> PackedStringArray:
 	for building: Dictionary in town.placed:
 		if data.has_row("landmarks", building["building"]) and not _landmarks.has(building["building"]):
 			out.append("landmark \"%s\" placed but never won" % building["building"])
+	for villager: String in _affection.keys() + _dates_done.keys():
+		if not _villagers.has(villager):
+			out.append("affection or dates for \"%s\", who isn't in town" % villager)
 	return out
+
+
+# --- Dates and affection (M5: RD-1, RD-2, RD-5) ------------------------------------
+
+func affection(villager: String) -> int:
+	return _affection.get(villager, 0)
+
+
+func dates_done(villager: String) -> int:
+	return _dates_done.get(villager, 0)
+
+
+## Date spots standing in town, in date_spots.json order: where a date can
+## happen now.
+func date_spots_placed(data: GameData) -> Array[String]:
+	var out: Array[String] = []
+	for id: String in data.ids("date_spots"):
+		if town.count(id) > 0:
+			out.append(id)
+	return out
+
+
+## The dates row for `villager`, or {} if none is written.
+static func date_row(data: GameData, villager: String) -> Dictionary:
+	for id: String in data.ids("dates"):
+		if data.row("dates", id)["villager"] == villager:
+			return data.row("dates", id)
+	return {}
+
+
+## Why `villager` can't go on a date at `spot` right now, or [] if they
+## can. Entries are {"kind": Town.Refusal, "text": String}, like
+## build_refusals. An empty `spot` checks everything but the spot, for the
+## villager card's Date button.
+func date_refusals(data: GameData, villager: String, spot: String = "") -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if phase != Phase.TOWN or not _villagers.has(villager):
+		return [_refusal(Town.Refusal.NOT_YET, "Not in town")]
+	var date: Dictionary = date_row(data, villager)
+	if date.is_empty():
+		return [_refusal(Town.Refusal.NOT_YET, "No date written yet")]
+	if not spot.is_empty():
+		if not data.has_row("date_spots", spot):
+			out.append(_refusal(Town.Refusal.SPOT, "Not a date spot"))
+		elif town.count(spot) == 0:
+			var name: String = str(data.row("landmarks", spot).get("name", spot))
+			var where: String = "Place the %s in town first" % name if _landmarks.has(spot) \
+				else "Win the %s in Koban's vault" % name
+			out.append(_refusal(Town.Refusal.NOT_YET, where))
+	elif date_spots_placed(data).is_empty():
+		out.append(_refusal(Town.Refusal.NOT_YET, "Needs a date spot: win the Café or the Hot Spring in Koban's vault"))
+	if town.actions_left < (date["actions"] as int):
+		out.append(_refusal(Town.Refusal.NO_ACTIONS, "No actions left"))
+	return out
+
+
+## A date session for `villager` at `spot`, ready for its script, or null
+## if date_refusals says no. Starting changes nothing: the action is spent
+## and the points kept only by finish_date, so leaving a date midway costs
+## and earns nothing.
+func begin_date(data: GameData, villager: String, spot: String, content_level: int) -> DateSession:
+	if spot.is_empty() or not date_refusals(data, villager, spot).is_empty():
+		return null
+	var date: Dictionary = date_row(data, villager)
+	var session: DateSession = DateSession.new()
+	session.villager = villager
+	session.spot = spot
+	session.date_id = date["id"]
+	session.script_path = date["script"]
+	session.villager_happy = mood(data, villager) == Town.Mood.HAPPY
+	session.dates_done = dates_done(villager)
+	session.content_level = ContentLevel.from_value(content_level)
+	session.start_affection = affection(villager)
+	session.max_gain = date["max_gain"]
+	return session
+
+
+## Ends a date: checks it can still happen, spends its actions, and adds
+## its affection (finishing, the spot's bonus, and what its choices earned,
+## capped at max_gain), all in this one call. Returns [] when kept
+## (session.kept says how much it added), or why not, having changed
+## nothing. A session is kept at most once.
+func finish_date(data: GameData, session: DateSession) -> Array[Dictionary]:
+	if session == null or session.finished:
+		return [_refusal(Town.Refusal.NOT_YET, "This date is over")]
+	var refusals: Array[Dictionary] = date_refusals(data, session.villager, session.spot)
+	if not refusals.is_empty():
+		return refusals
+	var date: Dictionary = date_row(data, session.villager)
+	if date["id"] != session.date_id or session.start_affection != affection(session.villager):
+		return [_refusal(Town.Refusal.NOT_YET, "This date is out of date")]
+	var points: int = mini(session.gained() + (date["finish_gain"] as int)
+		+ (data.row("date_spots", session.spot)["bonus"] as int), date["max_gain"] as int)
+	town.actions_left -= date["actions"] as int
+	town.kept = mini(town.kept, town.actions_left)
+	if points > 0:
+		_affection[session.villager] = affection(session.villager) + points
+	_dates_done[session.villager] = dates_done(session.villager) + 1
+	session.kept = points
+	session.finished = true
+	return refusals
 
 
 # --- Resources ----------------------------------------------------------------
@@ -472,7 +582,31 @@ func to_dict() -> Dictionary:
 		"landmarks": _landmarks.duplicate(),
 		"last_delve": last_delve.duplicate(true),
 		"town": town.to_dict(),
+		"affection": _int_map(_affection),
+		"dates_done": _int_map(_dates_done),
 	}
+
+
+static func _int_map(values: Dictionary[String, int]) -> Dictionary:
+	var out: Dictionary = {}
+	for id: String in values:
+		out[id] = values[id]
+	return out
+
+
+## A saved {villager: whole number} map with zeros dropped, or null if an
+## id is empty or a number is negative or not whole.
+static func _read_int_map(value: Variant) -> Variant:
+	if not value is Dictionary:
+		return null
+	var out: Dictionary[String, int] = {}
+	for id: Variant in value as Dictionary:
+		var amount: int = SaveCodec.to_int_or((value as Dictionary)[id], -1)
+		if not id is String or (id as String).is_empty() or amount < 0:
+			return null
+		if amount > 0:
+			out[id as String] = amount
+	return out
 
 
 ## Save version 1 -> 2: adds villagers, landmarks and the last delve's
@@ -499,13 +633,23 @@ static func migrate_to_v3(payload: Dictionary) -> Dictionary:
 	return payload
 
 
+## Save version 3 -> 4: adds affection and dates, none yet (M5).
+static func migrate_to_v4(payload: Dictionary) -> Dictionary:
+	if not payload.get(PAYLOAD_KEY) is Dictionary:
+		return payload
+	(payload[PAYLOAD_KEY] as Dictionary)["affection"] = {}
+	(payload[PAYLOAD_KEY] as Dictionary)["dates_done"] = {}
+	return payload
+
+
 ## Builds a state from to_dict() output (after a JSON round trip).
 ## Returns null if anything is missing, negative or not a whole number.
 ## "seen_twists" is optional, so saves from before it existed still load.
 ## "villagers", "landmarks" and "last_delve" are required: version 2 saves
 ## always have them, and older saves get them from migrate_to_v2().
 ## "town" and "delve_attempt" are required too (version 3, or
-## migrate_to_v3()). Checks against the data, like whether buildings fit
+## migrate_to_v3()), and so are "affection" and "dates_done" (version 4,
+## or migrate_to_v4()). Checks against the data, like whether buildings fit
 ## the map, are in town_problems().
 static func from_dict(data: Dictionary) -> GameState:
 	var phase_name: Variant = data.get("phase")
@@ -537,6 +681,10 @@ static func from_dict(data: Dictionary) -> GameState:
 	var town_state: Town = Town.from_dict(data.get("town"))
 	if town_state == null:
 		return null
+	var affection_data: Variant = _read_int_map(data.get("affection"))
+	var dates_data: Variant = _read_int_map(data.get("dates_done"))
+	if affection_data == null or dates_data == null:
+		return null
 
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
 	state.phase = Phase[phase_name as String] as Phase
@@ -567,6 +715,8 @@ static func from_dict(data: Dictionary) -> GameState:
 			state._landmarks.append(id as String)
 	state.last_delve = last
 	state.town = town_state
+	state._affection = affection_data
+	state._dates_done = dates_data
 	return state
 
 

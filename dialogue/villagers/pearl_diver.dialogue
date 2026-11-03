@@ -1,0 +1,148 @@
+# Pearl diver: Natsu, 27. Bold, outdoorsy, talks when nervous, which is often.
+# An ama who dove the bay for eleven years. Four minutes on one breath, once.
+# Bet lost: her breath. She bet Koban she could swim to the palace gate and back
+# on one breath; Koban said they'd settle it with dice, and Natsu rolled a two.
+# She breathes fine but can't hold it longer than it takes to say "pearl".
+# Koban's seal: a small gold coin mark at the base of her throat.
+# Perk: Nudge (raise one die by 1). First to be rescued.
+# Speaker id: pearl_diver. Faces: neutral, happy, tease, flustered, sad, surprised.
+
+~ rescue_start
+
+A coral cage stands in the middle of the room, half full of seawater. A woman in a white diving wrap clings to the bars at the top, where the last of the air is. [#face=surprised]
+pearl_diver: Oh! A person! Are you real? Wave if you're real. [#face=surprised]
+- (Wave.)
+	pearl_diver: Real. Good. I've been talking to a sea cucumber for three tides, and he's no help at all. [#face=tease]
+- I'm here to get you out.
+	pearl_diver: Then you're my favorite person in the whole palace. Low bar, but still. [#face=tease]
+pearl_diver: Three locks. A sum of ten, a pair, and three in a row. I've stared at them so long I see them when I blink. [#face=neutral]
+pearl_diver: The water comes up every time you take too long, so maybe don't take too long? [#face=happy]
+=> END
+
+~ rescue_turn
+
+% pearl_diver: That's fine! The water's only at my chin. My nose is a whole extra inch. [#face=tease]
+% pearl_diver: Don't rush. Actually, rush a little. [#face=happy]
+% pearl_diver: You're doing great. I can't see the dice from here, but you look like you're doing great. [#face=happy]
+% pearl_diver: The sea cucumber says hurry. I'm paraphrasing. [#face=tease]
+=> END
+
+~ rescue_won
+
+The last lock clicks open and the cage door swings wide. She's out and up on the rim in one pull, gulping air like it might run out. [#face=tease]
+pearl_diver: Air! Free air! Don't tell the cat, she'll start charging for it. [#face=tease]
+pearl_diver: I'm Natsu. I dove this bay for eleven years. Best lungs on the coast, everyone said so. Four minutes on one breath. [#face=happy]
+- So how did you end up in a cage?
+	pearl_diver: Bragging. How else? [#face=tease]
+- Four minutes? Show me.
+	pearl_diver: Ha. I wish. That's the problem. [#face=tease]
+pearl_diver: I bet the cat I could swim down to her palace gate and back on one breath. She said fine, but we'd settle it with dice. Everything down here is settled with dice. [#face=sad]
+pearl_diver: She rolled a six. I rolled a two. Now she's got my breath in a jar somewhere, and I can't hold it longer than it takes to say "pearl." [#face=sad]
+She touches the little gold coin mark at the base of her throat, then shrugs.
+pearl_diver: Pearl. See? Gone. [#face=tease]
+pearl_diver: Anyway! You came all the way down here for me, so I owe you. When a roll comes up short, I'll lean on it. One pip. Divers know how to push. [#face=happy]
+=> END
+
+~ rescue_failed
+
+The water closes over the last lock. The cage seals itself, and the tide draws it back into the dark. [#face=sad]
+pearl_diver: Hey. Don't make that face. [#face=happy]
+pearl_diver: It's slow water. I'll float. Come back next tide and try again, all right? I'm very hard to get rid of. [#face=tease]
+=> END
+
+~ move_in
+
+pearl_diver: This is mine? A whole house? With a door that opens from the inside? [#face=surprised]
+if villager_happy
+	pearl_diver: And I can hear the waves from the step. You were listening when I said that. [#face=happy]
+else
+	pearl_diver: It's lovely. It's a bit far from the water, though. I keep turning my head toward where the sea should be. [#face=neutral]
+pearl_diver: Come by in the morning. I'll show you how to open an oyster without losing a thumb.
+- I'd like that.
+	pearl_diver: Good. Bring a knife you don't love. [#face=tease]
+- I'm attached to my thumbs.
+	pearl_diver: That's what everyone says before oyster season. [#face=tease]
+=> END
+
+~ home_happy
+
+% pearl_diver: The waves were loud last night. I slept like a stone. [#face=happy]
+% pearl_diver: I counted the swells from my window. Eleven a minute. That's a good sea. [#face=happy]
+% pearl_diver: Someone left an oyster on my step. Was it you? It was the gulls, wasn't it. [#face=tease]
+% pearl_diver: I held my breath in the bath this morning. Six seconds! New record. [#face=tease]
+=> END
+
+~ home_unhappy
+
+% pearl_diver: It's a nice house. I just can't hear the sea from it. [#face=neutral]
+% pearl_diver: I keep walking down to the water at night just to listen. It's a long walk. [#face=sad]
+% pearl_diver: Any chance I could live closer to the waves? I sleep better with them. [#face=happy]
+=> END
+
+~ no_home
+
+% pearl_diver: I'll sleep on the dock. I've slept in worse places. I've slept in a cage. [#face=tease]
+% pearl_diver: No rush on a house! Small rush. Medium rush. [#face=happy]
+=> END
+
+~ scene_invite
+
+pearl_diver: Hey. Come down to the water with me some night? After dark. [#face=flustered]
+pearl_diver: There's something I want to show you, and I can only show it to someone I trust to hold on. [#face=happy]
+=> END
+
+~ date
+
+if spot == "hot_spring"
+	The Hot Spring steams in the cool air. Natsu is already in to her shoulders, waving at you before you've got your sandals off. [#face=tease]
+	if dates_done > 0
+		pearl_diver: You came back! I saved you the warm corner. I've been guarding it from a frog. [#face=tease]
+	else
+		pearl_diver: Warm water! I forgot how much I missed warm water. The sea's never warm, not where the pearls are. [#face=tease]
+else
+	The Café smells of roasted barley and sugar. Natsu has taken the table by the window, the one with the sea in it. [#face=tease]
+	if dates_done > 0
+		pearl_diver: Same table! I told them it's ours now. They didn't argue, but they didn't agree either. [#face=tease]
+	else
+		pearl_diver: I ordered you something. I don't know what it is. The menu had a drawing of a cloud. [#face=tease]
+pearl_diver: Can I tell you something embarrassing? [#face=flustered]
+- Please.
+	set affection += 1
+	pearl_diver: You said that very fast. You love embarrassing things. [#face=tease]
+- Is it about the sea cucumber?
+	pearl_diver: It's a little bit about the sea cucumber. [#face=flustered]
+pearl_diver: I've been practicing. Holding my breath. Every night, with my face in a bucket, like a child at bath time. [#face=flustered]
+pearl_diver: I used to do four minutes. Now my best is nine seconds, and the bucket has started to judge me. [#face=tease]
+if spot == "hot_spring"
+	pearl_diver: Count for me? I'll go under. Don't laugh if I come up fast. [#face=happy]
+else
+	pearl_diver: Watch. I'll hold it right here at the table. Count for me, and don't laugh. [#face=happy]
+She fills her cheeks, pinches her nose and stares at you with great seriousness.
+- (Count slowly.)
+	set affection += 1
+	You count slowly. Very slowly. Somewhere around seven you start stretching the numbers out.
+	pearl_diver: Twelve! That was twelve! [#face=tease]
+	pearl_diver: You counted slow. I saw you. I'm keeping it anyway. [#face=flustered]
+- (Count honestly.)
+	You count true. She makes it to eight before she bursts.
+	pearl_diver: Eight. Fine. Eight is fine. Eight beats the bucket. [#face=sad]
+- (Pull a face at her.)
+	She lasts two seconds and comes up laughing, which costs her what was left of her air.
+	pearl_diver: That's cheating! You're as bad as the cat! [#face=tease]
+pearl_diver: I don't miss the pearls, you know. I miss the quiet. Down there it's only you and your heartbeat, and the light going green. [#face=neutral]
+pearl_diver: Up here everyone's always talking. Me most of all, I know. [#face=happy]
+- I like your talking.
+	set affection += 1
+	pearl_diver: Careful. Say that again and I'll never stop. [#face=flustered]
+- We'll get your breath back from her.
+	set affection += 1
+	pearl_diver: From the cat? You'd have to beat her an awful lot. [#face=happy]
+	pearl_diver: I'd like to watch that, though. Front row. [#face=tease]
+- Then let's be quiet a while.
+	set affection += 1
+	You sit for a while without saying anything. She's better at it than she thinks. [#face=happy]
+if spot == "hot_spring"
+	pearl_diver: Look at my fingers. Prunes. Worth it. [#face=tease]
+else
+	pearl_diver: I still don't know what the cloud drink was. I'd order it again. [#face=tease]
+=> END

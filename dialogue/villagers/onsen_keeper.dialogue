@@ -1,0 +1,149 @@
+# Onsen keeper: Chiyo, 36. Teasing, nurturing, bossy about hot water.
+# Has kept the spring at the top of the town since she was sixteen.
+# Bet lost: the hot spring itself. Koban slipped into the bath after closing
+# for twelve years and never paid. Chiyo bet the spring against the whole tab,
+# double or nothing, on one roll. Koban rolled two sixes; Chiyo rolled a three and a one.
+# Koban's seal: a gold coin mark on the bathhouse key Chiyo wears on a cord.
+# Perk: Mend (heal after winning a fight). Third to be rescued.
+# Speaker id: onsen_keeper. Faces: neutral, happy, tease, flustered, sad, surprised.
+
+~ rescue_start
+
+A cage of black iron stands in a pool of icy water. Inside, a woman sits wrapped in every towel in the palace, glaring at a teapot that refuses to boil. [#face=tease]
+onsen_keeper: Finally. Do you know how long I've been cold? I run a hot spring. I don't do cold. [#face=tease]
+onsen_keeper: And look at you. Scraped knees, wet hair. Did you even eat before you came down? [#face=tease]
+- I had a rice ball.
+	onsen_keeper: One rice ball. For a whole palace. I'm going to feed you so much when we get out. [#face=happy]
+- You're one to talk. You're in a cage.
+	onsen_keeper: Cheeky. I like that. Open the locks and you can be cheeky to me somewhere warm. [#face=tease]
+onsen_keeper: Ten, a pair and a run. The cold water comes in every time you dither, so don't dither. [#face=neutral]
+=> END
+
+~ rescue_turn
+
+% onsen_keeper: You're bleeding. Don't argue, I can see it from here. Keep rolling. [#face=tease]
+% onsen_keeper: My toes have stopped speaking to me. Hurry, but nicely. [#face=neutral]
+% onsen_keeper: That was a lovely roll. Wrong lock, but lovely. [#face=happy]
+=> END
+
+~ rescue_won
+
+The locks fall away. She's out of the cage and has a towel round your shoulders before you've stood up. [#face=happy]
+onsen_keeper: There. Now we're both warm. Well, warmer. [#face=happy]
+onsen_keeper: Chiyo. I kept the spring at the top of the town, the one your grandmother built her inn beside. [#face=happy]
+- How did you end up down here?
+	onsen_keeper: The cat. How else does anyone end up down here? [#face=sad]
+- Did she cheat you too?
+	onsen_keeper: I've wondered. Never caught her. [#face=sad]
+onsen_keeper: Every night for twelve years, she slipped into my bath after closing. Never paid. Not once. [#face=sad]
+onsen_keeper: So I bet her. The spring against her whole tab, double or nothing. She said fine, on one roll. [#face=neutral]
+onsen_keeper: She rolled two sixes. I rolled a three and a one. Now my spring sits in her palace, and it's the only warm thing down here. [#face=sad]
+She lifts the bathhouse key on its cord round her neck. A gold coin mark has been pressed right into the metal.
+onsen_keeper: Still won't open anything. Win it back for me, and I'll keep you patched up between rooms. Bandages, tea, a scolding. The full service. [#face=tease]
+=> END
+
+~ rescue_failed
+
+The cold water rises over the last lock, and the cage slides back into the dark with her still in it. [#face=sad]
+onsen_keeper: Oh, don't you dare feel bad. Go up, eat something hot, and come back for me. [#face=happy]
+onsen_keeper: I'll still be here, being cold at the cat. Somebody has to. [#face=tease]
+=> END
+
+~ move_in
+
+onsen_keeper: So this is the house you picked for me. [#face=neutral]
+if villager_happy
+	onsen_keeper: Close enough to something warm that I can smell it. You did well. [#face=happy]
+else
+	onsen_keeper: It's a little far from anything warm. I'll manage. For a while. [#face=sad]
+onsen_keeper: Come by the bath sometime. Bring a towel. [#face=happy]
+- I'll be there.
+	onsen_keeper: Good. I'll keep the water hot. [#face=happy]
+- Maybe after the next delve.
+	onsen_keeper: Then don't keep me waiting too long. And eat first. [#face=tease]
+=> END
+
+~ home_happy
+
+% onsen_keeper: I made too much soup. Take some. That wasn't a question. [#face=happy]
+% onsen_keeper: Good house. Warm floors. You've earned a day without a scolding. [#face=tease]
+% onsen_keeper: Have you been sleeping? You look like you've been sleeping. Good. [#face=happy]
+% onsen_keeper: I can hear a kettle from my door. Bliss. [#face=happy]
+=> END
+
+~ home_unhappy
+
+% onsen_keeper: It's a fine house. It's just so far from anything that steams. [#face=sad]
+% onsen_keeper: Put a tea stall near me and I'll stop mentioning it. Probably. [#face=tease]
+% onsen_keeper: I wake up cold. Do you know how insulting that is, for me? [#face=sad]
+=> END
+
+~ no_home
+
+% onsen_keeper: I'll wait on the dock. Wrapped in a towel. Looking pitiful. Is it working? [#face=tease]
+% onsen_keeper: Build me somewhere warm and I'll cook you dinner every night for a week. [#face=happy]
+=> END
+
+~ scene_invite
+
+onsen_keeper: The spring closes at midnight. Come after. [#face=flustered]
+onsen_keeper: I'll leave the gate open, and only for you. Bring a towel. You know the rule. [#face=happy]
+=> END
+
+~ date
+
+if spot == "hot_spring"
+	Chiyo stands at the edge of the Hot Spring with her sleeves tied back, inspecting you as you come in. [#face=tease]
+	if dates_done > 0
+		onsen_keeper: Back again. Rinse first. I won't remind you a third time. I will, but I won't want to. [#face=tease]
+	else
+		onsen_keeper: You rinse first. At the tap. Were you raised by crabs? [#face=tease]
+		onsen_keeper: There. Now you may get in. Slowly. The water's hot because I love it. Respect that. [#face=happy]
+else
+	Chiyo sits in the Café with her hands folded on the table, looking around like she's waiting to be asked to work. [#face=surprised]
+	if dates_done > 0
+		onsen_keeper: I've decided I like being waited on. Don't spread it around. [#face=tease]
+	else
+		onsen_keeper: Somebody else is pouring my tea. I don't know what to do with my hands. [#face=surprised]
+onsen_keeper: So. Tell me something about you. I always ask my guests, and they always tell me about their backs. [#face=happy]
+- My back's fine, thanks.
+	onsen_keeper: Liar. You've been hauling driftwood all week. I've watched you. [#face=tease]
+- I'm trying to win my grandmother's town back.
+	set affection += 1
+	onsen_keeper: I know that, sweetheart. Everyone knows that. Tell me something they don't. [#face=happy]
+	You tell her about the ferryman who wouldn't land, and the roof. She laughs at the right parts.
+- I'd rather hear about you.
+	set affection += 1
+	onsen_keeper: Smooth. Nobody asks the bath lady about the bath lady. [#face=flustered]
+onsen_keeper: I've looked after people since I was sixteen. Sore feet, broken hearts, fishermen who think a hot soak cures a hangover. It doesn't. [#face=neutral]
+onsen_keeper: And you're the first one in years who went down a hole in the sea to look after me. I haven't decided what to do about that. [#face=flustered]
+- Let me look after you for once.
+	set affection += 1
+	onsen_keeper: Bold. [#face=flustered]
+	onsen_keeper: All right. One evening. Don't get used to it. [#face=happy]
+- You could feed me. You keep threatening to.
+	set affection += 1
+	onsen_keeper: Threatening! It's a promise. You'll leave here three kilos heavier. [#face=tease]
+- Start by paying your tab?
+	onsen_keeper: Ha! Don't you start. I've had enough of that from the cat. [#face=tease]
+if spot == "hot_spring"
+	onsen_keeper: Turn round. I'll do your back. Every guest gets it once, and you've earned it twice. [#face=happy]
+	- (Turn round.)
+		set affection += 1
+		She scrubs your shoulders with a cloth, hard enough to make you yelp, and laughs when you do.
+	- Only if I get to do yours after.
+		set affection += 1
+		onsen_keeper: Ha. We'll see. Turn round. [#face=flustered]
+	- I'm ticklish.
+		onsen_keeper: Then this will be fun for one of us. [#face=tease]
+else
+	onsen_keeper: This tea is too weak. Don't tell them. I'll come and show them how tomorrow. [#face=tease]
+	- They'd be lucky to have you.
+		set affection += 1
+		onsen_keeper: They would. I'm glad somebody said it. [#face=happy]
+	- Let them have one day.
+		set affection += 1
+		onsen_keeper: One day. Then I'm marching in there with my own pot. [#face=tease]
+	- Mine's fine.
+		onsen_keeper: Yours is fine because I watched them pour it. [#face=tease]
+=> END
