@@ -33,6 +33,9 @@ jobs:
       - name: Export presets come in full and SFW pairs
         run: python3 tools/check_presets.py
 
+      - name: The SFW pack check catches what it's for
+        run: python3 tools/check_pck.py --self-test
+
       - name: Cache Godot
         id: cache-godot
         uses: actions/cache@v4
@@ -147,6 +150,9 @@ jobs:
           godot --headless --path . --export-release "Windows" build/full/windows/SaikoroBay.exe
           test -s build/full/windows/SaikoroBay.exe
 
+      # Adult art never enters git (content/adult/README.md), so this "full"
+      # build has none: it's for testing the full-cap code path, never for
+      # release. Real full builds are made on the maintainer's machine.
       # content/adult/ci_canary/ is a stand-in adult asset. Finding it in the
       # full pack proves the SFW check below can see adult files at all.
       - name: The full build carries the adult canary
