@@ -72,7 +72,7 @@ static var _link_sets: Dictionary[String, Array] = {}
 
 
 ## Draws the map for a delve. `villagers_left` and `landmarks_left` are the
-## ones not yet in town, in a fixed order (data order).
+## ones not yet in town, in data order; the first villager left is rescued.
 static func generate(data: GameData, delve_seed: int, villagers_left: Array[String], landmarks_left: Array[String], config_id: String = "slice") -> DelveMap:
 	var config: Dictionary = data.row("delve", config_id)
 	var attempts: int = maxi(1, config["redraw_attempts"] as int)
@@ -106,6 +106,14 @@ func _set_inputs(seed_value: int, config: String, villagers: Array[String], land
 	input_villagers = villagers.duplicate()
 	input_landmarks = landmarks.duplicate()
 	attempt = attempt_index
+
+
+## Who waits in the rescue room: the first villager not yet in town.
+## Rescues follow a fixed order (decided 2026-11-03), the order of
+## data/villagers.json, so story beats and perks arrive in a known order.
+## No draw: the order never depends on the seed.
+static func rescue_for(villagers_left: Array[String]) -> String:
+	return villagers_left[0] if not villagers_left.is_empty() else ""
 
 
 ## Each attempt's own seed, so a redraw never depends on how much an
@@ -344,7 +352,7 @@ static func _draw(config: Dictionary, rng: RngStreams, villagers_left: Array[Str
 	for rm: Variant in map.floors[0][0] as Array:
 		(rm as Room).type = FIGHT
 	if not villagers_left.is_empty():
-		map.rescue_villager = villagers_left[rng.index(RngStreams.Stream.MAP, villagers_left.size())]
+		map.rescue_villager = rescue_for(villagers_left)
 		map._place_rescue(rng)
 	if map.floors.size() > ELITE_FLOOR:
 		map._place_in_floor(rng, ELITE_FLOOR, ELITE, 1)
@@ -502,7 +510,7 @@ static func template(config: Dictionary, rng: RngStreams, villagers_left: Array[
 	if villagers_left.is_empty():
 		map.room(RESCUE_FLOOR, 1, 1).type = TREASURE
 	else:
-		map.rescue_villager = villagers_left[rng.index(RngStreams.Stream.MAP, villagers_left.size())]
+		map.rescue_villager = rescue_for(villagers_left)
 	map.vault_prize = _draw_prize(config, rng, landmarks_left)
 	return map
 
