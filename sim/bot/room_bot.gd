@@ -3,8 +3,9 @@ extends RefCounted
 ## Plays a treasure, rest or rescue room (DiceRoom) through the same moves
 ## the board uses, the way a careful new player might.
 ##
-## Each turn it tries every way of putting the free dice into the open
-## slots (and leaving some out), with or without one nudge, on planning
+## Each turn it lists, for every open slot, the sets of free dice that
+## would complete it (a half-filled slot never pays), tries every way of
+## combining sets that share no die, with or without one nudge, on planning
 ## copies, and keeps the plan whose resolved turn scores best. If dice are
 ## left over and a reroll is available, it keeps the plan's dice in place,
 ## spends the lowest leftover die to reroll the rest, and plans again.
@@ -19,6 +20,10 @@ const OPEN_SCORE: int = 1_000
 ## loot numbers.
 const RESOURCE_WORTH: Dictionary[String, int] = {"driftwood": 1, "pearls": 4, "koban_coins": 10}
 const HEAL_WORTH: int = 2
+
+## Plans scored so far (each one a planning copy and a resolved turn), so a
+## test can pin the work the bot does.
+var trials: int = 0
 
 
 ## Plays the room to the end. Returns the number of turns played.
@@ -73,26 +78,16 @@ static func score(before: DiceRoom, after: DiceRoom) -> int:
 
 func _best_placement(room: DiceRoom, nudged: int) -> Dictionary:
 	var dice: Array[int] = _free_dice(room)
-	var targets: Array[String] = []
+	# A half-filled slot never pays, so each slot only needs the sets of free
+	# dice that would complete it; a plan is a choice of disjoint sets.
+	var options: Array = []
 	for s: DiceRoom.Slot in room.slots:
-		if not s.sealed:
-			targets.append(s.id)
+		options.append(_completing_sets(room, s, dice) if not s.sealed else [])
+	var plans: Array = []
+	_combine(options, 0, 0, [], plans)
 	var best: Dictionary = {"score": -WIN_SCORE - 1, "nudge": nudged, "places": []}
 	var best_used: int = 0
-	# Each die goes to one of the targets or stays out (the last choice).
-	var choice: Array[int] = []
-	choice.resize(dice.size())
-	choice.fill(targets.size())
-	var combos: int = int(pow(targets.size() + 1, dice.size()))
-	for n: int in combos:
-		var rest: int = n
-		for i: int in dice.size():
-			choice[i] = rest % (targets.size() + 1)
-			rest /= targets.size() + 1
-		var places: Array = []
-		for i: int in dice.size():
-			if choice[i] < targets.size():
-				places.append([dice[i], targets[choice[i]]])
+	for places: Array in plans:
 		var trial: DiceRoom = room.planning_copy()
 		var ok: bool = true
 		for p: Array in places:
@@ -101,12 +96,66 @@ func _best_placement(room: DiceRoom, nudged: int) -> Dictionary:
 				break
 		if not ok:
 			continue
+		trials += 1
 		trial.end_turn()
 		var value: int = score(room, trial)
 		if value > best["score"] or (value == best["score"] and places.size() < best_used):
 			best = {"score": value, "nudge": nudged, "places": places}
 			best_used = places.size()
 	return best
+
+
+## Every set of `dice` (as a bitmask over that list) that completes `s`
+## on its own: the right count, each die allowed in, and the slot's rule.
+func _completing_sets(room: DiceRoom, s: DiceRoom.Slot, dice: Array[int]) -> Array:
+	var sets: Array = []
+	for mask: int in range(1, 1 << dice.size()):
+		var values: Array[int] = []
+		var ids: Array[int] = []
+		for i: int in dice.size():
+			if mask & (1 << i):
+				ids.append(dice[i])
+				values.append(room.die(dice[i]).value)
+		if values.size() > s.max_dice() or not s.is_complete_with(values):
+			continue
+		if not _each_die_fits(s, values):
+			continue
+		sets.append({"mask": mask, "ids": ids, "slot": s.id})
+	return sets
+
+
+## The per-die rules a slot checks on the way in (range, even, odd, exact).
+static func _each_die_fits(s: DiceRoom.Slot, values: Array[int]) -> bool:
+	for v: int in values:
+		match s.row["accepts"] as String:
+			"range":
+				if v < (s.row["min"] as int) or v > (s.row["max"] as int):
+					return false
+			"even":
+				if v % 2 != 0:
+					return false
+			"odd":
+				if v % 2 == 0:
+					return false
+			"exact":
+				if v != (s.row["min"] as int):
+					return false
+	return true
+
+
+## Every way of picking at most one set per slot with no die in two.
+func _combine(options: Array, index: int, used: int, places: Array, out: Array) -> void:
+	if index == options.size():
+		out.append(places.duplicate())
+		return
+	_combine(options, index + 1, used, places, out)
+	for option: Dictionary in options[index] as Array:
+		if used & (option["mask"] as int):
+			continue
+		var more: Array = places.duplicate()
+		for die_id: int in option["ids"] as Array:
+			more.append([die_id, option["slot"]])
+		_combine(options, index + 1, used | (option["mask"] as int), more, out)
 
 
 func _apply(room: DiceRoom, plan: Dictionary) -> void:

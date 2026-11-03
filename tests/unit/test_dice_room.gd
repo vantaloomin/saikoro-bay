@@ -254,3 +254,28 @@ func test_a_planning_copy_resolves_its_turn_once() -> void:
 	assert_eq(copy.payout, {"driftwood": 6} as Dictionary[String, int])
 	copy.start_rng["changed"] = true
 	assert_false(room.start_rng.has("changed"), "the copy shares nothing")
+
+
+func _six_dice_data() -> GameData:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	var loadouts: Dictionary = JSON.parse_string(texts["loadouts"])
+	(loadouts["items"] as Array)[0]["dice"] = ["d6", "d6", "d6", "d6", "d6", "d6"]
+	texts["loadouts"] = JSON.stringify(loadouts)
+	var six: GameData = GameData.new()
+	six.load_texts(texts)
+	assert_eq(six.errors, PackedStringArray())
+	return six
+
+
+## Imogen's #24 audit: trying every die in every slot grew as 4^dice (about
+## 2.5 s a room with 6 dice and Nudge). The bot now only tries sets that
+## complete a slot. This pins the work for a busy hand.
+func test_the_bot_only_tries_plans_that_complete_slots() -> void:
+	var room: DiceRoom = DiceRoom.create(_six_dice_data(), "fresh", "rescue", RngStreams.new(3), NUDGE, 20)
+	_set_hand(room, [3, 4, 5, 5, 6, 2])
+	var bot: RoomBot = RoomBot.new()
+	var plan: Dictionary = bot.best_plan(room)
+	assert_lt(bot.trials, 400, "was 7 x 4^6 = 28672 copies")
+	assert_between(plan["score"] as int, 2 * RoomBot.OPEN_SCORE - 10, 2 * RoomBot.OPEN_SCORE, "and still opens two locks (three need 7 dice)")

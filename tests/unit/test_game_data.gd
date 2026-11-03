@@ -161,3 +161,12 @@ func test_a_slot_only_goes_where_its_effect_works() -> void:
 	assert_eq(data.errors, PackedStringArray([
 		"loadouts \"fresh\": slot \"small_lock\" has effect resource, which does nothing there",
 		"dice_rooms \"rest\": slot \"guard\" has effect block, which does nothing there"]))
+
+
+func test_loot_is_only_for_fights() -> void:
+	var loot: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "chest_bonus", "room": "treasure", "resource": "driftwood", "chance_percent": 100, "min": 1, "max": 2},
+	]})
+	var data: GameData = GameData.new()
+	data.load_texts({"loot": loot})
+	assert_string_contains(", ".join(data.errors), "\"room\" must be one of fight, elite", "treasure pays through its locks")
