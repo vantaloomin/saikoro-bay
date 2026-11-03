@@ -1,7 +1,13 @@
 # ---------------------------------------------------------------
 # Saikoro Bay .gitignore
-# Engine-specific rules are added once the engine is chosen.
 # ---------------------------------------------------------------
+
+# Godot 4 (keep *.import and *.uid files: they belong in the repo)
+.godot/
+/android/
+export_credentials.cfg
+*.translation
+mono_crash.*.json
 
 # OS files
 .DS_Store
