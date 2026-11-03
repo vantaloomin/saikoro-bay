@@ -30,9 +30,16 @@ var _prompted_this_visit: bool = false
 func _ready() -> void:
 	_ensure_prompt_action()
 	if OS.has_feature(FEATURE) or ARG in OS.get_cmdline_user_args():
-		start(DIR.path_join(Time.get_datetime_string_from_system(true).replace(":", "").replace("T", "-") + ".jsonl"))
+		start_after_load(DIR.path_join(Time.get_datetime_string_from_system(true).replace(":", "").replace("T", "-") + ".jsonl"))
 	Game.delve_started.connect(_on_delve_started)
 	Game.returned_to_town.connect(_on_returned_to_town)
+
+
+## Starts the log once Game has loaded the campaign, so session_start
+## records the real campaign and not the empty one autoloads begin with
+## (Imogen's #47 audit: autoloads are ready before boot loads the save).
+func start_after_load(file_path: String) -> void:
+	Game.campaign_loaded.connect(start.bind(file_path), CONNECT_ONE_SHOT)
 
 
 ## Opens a log file and records the session start. Tests pass their own path.

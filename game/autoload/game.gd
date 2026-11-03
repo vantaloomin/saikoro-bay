@@ -12,6 +12,8 @@ signal save_failed(error: Error)
 signal delve_started(number: int, seed_value: int)
 ## The player left delve `number` for town.
 signal returned_to_town(number: int)
+## load_or_new has the campaign (or the test town) in place.
+signal campaign_loaded
 
 const TOWN_SCENE: String = "res://game/town/town.tscn"
 const DELVE_SCENE: String = "res://game/delve/delve.tscn"
@@ -61,7 +63,9 @@ func _ready() -> void:
 func load_or_new(test_town: bool = FakeTown.requested()) -> String:
 	fake_town = test_town
 	if test_town:
-		return _start_fake_town()
+		var scene: String = _start_fake_town()
+		campaign_loaded.emit()
+		return scene
 	var result: SaveStore.ReadResult = store.read()
 	saving_locked = result.status == SaveCodec.Status.TOO_NEW
 	save_problem = "Saving is off: your save is from a newer version of the game." if saving_locked else ""
@@ -93,6 +97,7 @@ func load_or_new(test_town: bool = FakeTown.requested()) -> String:
 			save()
 		elif state.arrive(data):
 			save()
+	campaign_loaded.emit()
 	return scene_for_phase()
 
 

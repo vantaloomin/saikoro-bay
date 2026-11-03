@@ -34,6 +34,20 @@ func test_off_by_default_in_tests() -> void:
 	assert_false(FileAccess.file_exists(LOG))
 
 
+func test_a_session_starts_with_the_campaign_it_loaded() -> void:
+	var fake: bool = Game.fake_town
+	PlaytestLog.start_after_load(LOG)
+	assert_false(FileAccess.file_exists(LOG), "nothing is written before the campaign is in place")
+	Game.load_or_new(true)
+	PlaytestLog.stop()
+	var first: Dictionary = _read_events()[0]
+	assert_eq(first["event"], "session_start")
+	assert_eq(first["fake_town"], true, "exit-check sessions can be left out")
+	assert_eq(first["campaign_seed"], str(FakeTown.SEED), "the log ties back to the campaign")
+	SaveStore.new(FakeTown.SAVE_PATH).erase()
+	Game.fake_town = fake
+
+
 func test_delves_record_prompt_and_town_time() -> void:
 	assert_eq(PlaytestLog.start(LOG), OK)
 	# First delve: the observer nudged the player.
