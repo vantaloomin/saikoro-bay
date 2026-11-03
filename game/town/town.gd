@@ -366,7 +366,7 @@ func _input(event: InputEvent) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _pause_menu.visible:
 		if event.is_action_pressed(&"ui_cancel"):
-			_pause_menu.close()
+			_pause_menu.cancel()
 			get_viewport().set_input_as_handled()
 		return
 	var key: InputEventKey = event as InputEventKey
