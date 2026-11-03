@@ -278,6 +278,25 @@ func test_the_rescue_tide_can_wash_you_up() -> void:
 	assert_false(run.haul.villagers.has("pearl_diver"))
 
 
+func test_opening_the_cage_adds_the_villager_to_the_haul() -> void:
+	var run: DelveRun = _seed_with(DelveMap.RESCUE)
+	var cage: DiceRoom = run.room
+	_set_hand(cage, [5, 5, 6, 4])
+	cage.place(0, "cage_pair")
+	cage.place(1, "cage_pair")
+	cage.place(2, "cage_sum")
+	cage.place(3, "cage_sum")
+	cage.end_turn()
+	_set_hand(cage, [2, 3, 4, 1])
+	for die_id: int in [0, 1, 2]:
+		cage.place(die_id, "cage_run")
+	cage.end_turn()
+	assert_true(cage.succeeded)
+	assert_true(run.finish_room())
+	assert_eq(run.haul.villagers, ["pearl_diver"] as Array[String])
+	assert_false(run.is_over(), "you carry on with them")
+
+
 func test_a_shut_cage_leaves_the_villager_below() -> void:
 	var run: DelveRun = _seed_with(DelveMap.RESCUE)
 	for turn: int in 3:
