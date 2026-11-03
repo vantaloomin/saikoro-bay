@@ -198,6 +198,7 @@ func test_dice_rooms_play_on_the_room_board() -> void:
 		assert_eq(board.top_inset, HaulStrip.HEIGHT)
 		while run.room.state == DiceRoom.State.PLAYER_TURN:
 			board._on_verb()
+		board._results_shown_at -= RoomBoard.RESULT_GUARD_MS
 		board._continue.pressed.emit()
 		assert_null(run.room, "the room finished")
 		assert_true(run.step in [DelveRun.Step.CHOOSE_ROOM, DelveRun.Step.LANDING, DelveRun.Step.WASHED_UP])
