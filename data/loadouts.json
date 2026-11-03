@@ -1,0 +1,13 @@
+{
+	"schema": 1,
+	"note": "Starting kits. 'fresh' is a new campaign's kit before any town perks.",
+	"items": [
+		{
+			"id": "fresh", "hp": 30,
+			"dice": ["d6", "d6", "d6", "d6"],
+			"slots": ["strike", "guard", "high_roller", "pair_bet"],
+			"rerolls_per_turn": 1,
+			"unused_die_block": 1
+		}
+	]
+}

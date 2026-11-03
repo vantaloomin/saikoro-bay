@@ -1,0 +1,21 @@
+{
+	"schema": 1,
+	"note": "Intents cycle in order. Each intent is parts joined by '+': attack:N, guard:N. Placeholder numbers.",
+	"items": [
+		{
+			"id": "card_shark", "name": "Card Shark", "hp": 18,
+			"intents": ["attack:6", "attack:4+guard:4"],
+			"twist": "none", "twist_text": ""
+		},
+		{
+			"id": "hermit_croupier", "name": "Hermit Croupier", "hp": 22,
+			"intents": ["attack:5", "attack:7"],
+			"twist": "house_lock", "twist_text": "House lock: your highest die is locked each turn."
+		},
+		{
+			"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "hp": 16,
+			"intents": ["attack:4", "attack:4", "attack:9"],
+			"twist": "snake_eyes", "twist_text": "Snake eyes: each 1 you leave unplaced bites you for 1."
+		}
+	]
+}

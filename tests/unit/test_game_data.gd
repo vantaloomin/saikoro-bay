@@ -64,3 +64,26 @@ func test_bad_files_are_reported() -> void:
 	var all: String = "\n".join(data.errors)
 	assert_string_contains(all, "perks: JSON error")
 	assert_string_contains(all, "rooms: schema must be 1")
+
+
+func test_lists_and_enums_are_checked() -> void:
+	var dice: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "d6", "name": "D6", "faces": [1, 2, 3, 4, 5, 6]},
+		{"id": "empty", "name": "E", "faces": []},
+		{"id": "words", "name": "W", "faces": ["1"]},
+	]})
+	var slots: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "s", "name": "S", "text": "t", "accepts": "anything", "min": 1, "max": 6,
+			"dice_needed": 1, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
+	]})
+	var loadouts: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "kit", "hp": 30, "dice": ["d6", "d8"], "slots": [], "rerolls_per_turn": 1, "unused_die_block": 1},
+	]})
+	var data: GameData = GameData.new()
+	data.load_texts({"dice": dice, "slots": slots, "loadouts": loadouts})
+	var all: String = "\n".join(data.errors)
+	assert_string_contains(all, "\"faces\" must be a non-empty list of whole numbers")
+	assert_eq(data.ids("dice"), PackedStringArray(["d6"]))
+	assert_typeof(data.row("dice", "d6")["faces"][0], TYPE_INT)
+	assert_string_contains(all, "\"accepts\" must be one of any, range")
+	assert_string_contains(all, "points to missing dice \"d8\"")
