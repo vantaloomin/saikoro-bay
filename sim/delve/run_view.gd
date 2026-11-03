@@ -55,6 +55,16 @@ func has_foresight() -> bool:
 	return _run.foresight
 
 
+## Who gives Foresight (a villager id), for its badge, or "" without it.
+func foresight_source() -> String:
+	if not _run.foresight:
+		return ""
+	for entry: Dictionary in _run.perks:
+		if str(entry.get("perk", "")) == DelveRun.FORESIGHT_PERK:
+			return str(entry.get("source", ""))
+	return ""
+
+
 ## The enemy in the room being played, once you're in it, or "".
 func current_enemy() -> String:
 	return _run.fight.enemy_id if _run.fight != null else ""

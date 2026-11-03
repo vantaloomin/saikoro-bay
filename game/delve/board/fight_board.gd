@@ -93,6 +93,9 @@ var _leave: Button
 ## town" shows. Set before adding the board to the tree.
 var again_text: String = "Fight again"
 var leave_shown: bool = true
+## Room left free above the board for the delve's haul strip. Set before
+## adding the board to the tree.
+var top_inset: int = 0
 
 
 ## Show the one-line banner for this enemy's twist (the first meeting).
@@ -609,6 +612,7 @@ func _build() -> void:
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side: String in ["left", "right", "top", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 40)
+	margin.add_theme_constant_override("margin_top", 40 + top_inset)
 	var column: VBoxContainer = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 20)
 	margin.add_child(column)
