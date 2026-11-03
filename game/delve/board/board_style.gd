@@ -129,8 +129,13 @@ static func draw_padlock(canvas: CanvasItem, rect: Rect2, color: Color = DANGER)
 	var c: Vector2 = rect.get_center()
 	var w: float = rect.size.x * 0.42
 	var body: Rect2 = Rect2(c.x - w / 2, c.y - w * 0.1, w, w * 0.75)
-	canvas.draw_arc(Vector2(c.x, body.position.y), w * 0.3, PI, TAU, 16, color, 5.0)
+	# A dark lock with a colored edge, so it reads in greyscale too: red on
+	# a greyed die face has almost the same brightness.
+	canvas.draw_arc(Vector2(c.x, body.position.y), w * 0.3, PI, TAU, 16, LACQUER, 9.0)
+	canvas.draw_arc(Vector2(c.x, body.position.y), w * 0.3, PI, TAU, 16, color, 4.0)
+	canvas.draw_rect(body.grow(3), LACQUER)
 	canvas.draw_rect(body, color)
+	canvas.draw_circle(body.get_center(), w * 0.09, LACQUER)
 
 
 ## A sword (attack) or shield (guard) glyph in `rect`.

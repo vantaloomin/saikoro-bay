@@ -51,3 +51,8 @@ func _draw() -> void:
 	var font_size: int = int(radius * 0.95)
 	var w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 	draw_string(font, center + Vector2(-w / 2.0, font_size * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, BoardStyle.LACQUER)
+	if dimmed:
+		# Used: a slash as well as the dimming, so it reads in greyscale.
+		var d: Vector2 = Vector2(radius, -radius) * 0.75
+		draw_line(center - d, center + d, BoardStyle.LACQUER, 6.0)
+		draw_line(center - d, center + d, BoardStyle.INK, 2.5)
