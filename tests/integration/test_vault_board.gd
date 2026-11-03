@@ -67,11 +67,17 @@ func test_hands_read_in_words() -> void:
 	assert_eq(VaultBoard.describe_hand([4, 6, 4] as Array[int]), "a pair of 4s and a 6")
 	assert_eq(VaultBoard.describe_hand([2, 6, 4] as Array[int]), "high die 6-4-2")
 	assert_eq(VaultBoard.describe_hand([3, 3] as Array[int]), "a pair of 3s so far")
-	assert_eq(VaultBoard.compare_text([5, 5, 2] as Array[int], [4, 4, 6] as Array[int]), "Same rank. Her total of 14 beats your 12.")
+	assert_eq(VaultBoard.compare_text([5, 5, 2] as Array[int], [4, 4, 6] as Array[int]), "Same rank. Your pair of 5s beats her pair of 4s.")
+	assert_eq(VaultBoard.compare_text([4, 4, 2] as Array[int], [4, 4, 6] as Array[int]), "Same pair. Her odd die 6 beats your 2.")
+	assert_eq(VaultBoard.compare_text([3, 3, 3] as Array[int], [5, 5, 5] as Array[int]), "Same rank. Her three 5s beat your three 3s.")
+	assert_eq(VaultBoard.compare_text([4, 5, 6] as Array[int], [1, 2, 3] as Array[int]), "Same rank. Your run of 4-5-6 beats her run of 1-2-3.")
+	assert_eq(VaultBoard.compare_text([6, 2, 4] as Array[int], [5, 3, 1] as Array[int]), "Same rank. Your high die 6 beats her high die 5.")
+	assert_eq(VaultBoard.compare_text([6, 3, 1] as Array[int], [6, 4, 1] as Array[int]), "Same high die. Her next die 4 beats your 3.")
+	assert_eq(VaultBoard.compare_text([6, 4, 2] as Array[int], [6, 4, 1] as Array[int]), "Same top dice. Your total of 12 beats her 11.")
 	assert_eq(VaultBoard.compare_text([2, 3, 4] as Array[int], [4, 4, 6] as Array[int]), "Your run of 2-3-4 beats her pair of 4s and a 6.")
 	assert_eq(VaultBoard.compare_text([6, 6, 6] as Array[int], [4, 4, 6] as Array[int]), "Your three 6s beat her pair of 4s and a 6.")
 	assert_eq(VaultBoard.compare_text([6, 4, 2] as Array[int], [4, 4, 6] as Array[int]), "Her pair of 4s and a 6 beats your high die 6-4-2.")
-	assert_eq(VaultBoard.compare_text([4, 4, 6] as Array[int], [6, 4, 4] as Array[int]), "Same rank, same total of 14. A full tie goes to Koban.")
+	assert_eq(VaultBoard.compare_text([4, 4, 6] as Array[int], [6, 4, 4] as Array[int]), "Same hand. A full tie goes to Koban.")
 	assert_eq(VaultBoard.compare_text([6, 6] as Array[int], [3, 4, 6] as Array[int]), "A hand needs 3 dice. A short hand loses.")
 
 
@@ -194,7 +200,7 @@ func test_a_shared_rank_shows_the_tie_rule_on_its_row() -> void:
 	var pair: int = _row(Vault.PAIR)
 	assert_eq(board._ladder_dice[pair].text, "her 6 4 4 · your 5 5 3")
 	assert_true(board._ladder_tie[pair].visible)
-	assert_eq(board._ladder_tie[pair].text, "Same rank · higher total wins · ties go to Koban")
+	assert_eq(board._ladder_tie[pair].text, "Same rank · higher hand wins · ties go to Koban")
 	assert_false(board._ladder_footer.visible, "the rule moves onto the row")
 
 

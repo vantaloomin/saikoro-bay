@@ -90,7 +90,7 @@ func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
 
 
 ## An abandoned delve counts as never having happened for time (Imogen's
-## town review, option 1, pending Vanta): the actions held at "Go down"
+## town review, option 1, Vanta chose it): the actions held at "Go down"
 ## come back, and the next delve reuses this delve's number, so its seed
 ## and map. The haul is still lost. Quitting and reloading gains nothing.
 func _undo_go_down() -> void:
