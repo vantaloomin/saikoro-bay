@@ -166,7 +166,15 @@ static func speaker_name(data: GameData, id: String) -> String:
 	return id.capitalize()
 
 
+## True once the player has left: an advance still awaiting when Leave was
+## pressed must not show a line or keep the date (Imogen's PR 2 audit).
+func _gone() -> bool:
+	return stage == "left" or is_queued_for_deletion()
+
+
 func _show_line() -> void:
+	if _gone():
+		return
 	for old: Node in _responses.get_children():
 		old.queue_free()
 	var line: DialogueLine = runner.line
@@ -300,6 +308,8 @@ func leave() -> void:
 
 
 func _on_script_end() -> void:
+	if _gone():
+		return
 	if stage == "invite":
 		_show_result()
 		return

@@ -184,6 +184,67 @@ func test_a_date_follows_the_setting_when_it_changes() -> void:
 	assert_eq(screen.session.spot, "cafe", "and nothing else moves")
 
 
+# Imogen's PR 2 audit: Leave pressed in the same frame as going on past a
+# plain line (the last one included) keeps nothing, at every point of a date.
+func test_leave_in_the_same_frame_as_going_on_keeps_nothing() -> void:
+	var tried: int = 0
+	for k: int in 40:
+		before_each()
+		var town: TownScreen = _open_card("pearl_diver")
+		var screen: DateScreen = await _start_date(town, "pearl_diver", "cafe")
+		var steps: int = 0
+		var guard: int = 0
+		while screen.stage == "playing" and steps < k and guard < 300:
+			guard += 1
+			if screen.runner.busy:
+				await wait_process_frames(1)
+			elif screen.runner.line != null and not screen.runner.line.responses.is_empty():
+				await screen.choose(0)
+				steps += 1
+			else:
+				await screen.go_on()
+				steps += 1
+		var past_the_end: bool = screen.stage != "playing"
+		if not past_the_end:
+			while screen.typing():
+				screen._finish_typing()
+			if screen.runner.line != null and screen.runner.line.responses.is_empty():
+				tried += 1
+				var told_left: Array[bool] = [false]
+				screen.closed.connect(func(kept: bool) -> void: told_left[0] = told_left[0] or not kept)
+				screen.go_on()
+				screen.leave()
+				var left: bool = screen.stage == "left"
+				await wait_process_frames(4)
+				if left:
+					assert_eq([Game.state.town.actions_left, Game.state.affection("pearl_diver"), Game.state.dates_done("pearl_diver")],
+						[2, 0, 0], "leaving after %d steps keeps nothing" % k)
+					assert_false(Game.store.read().is_ok(), "and saves nothing")
+				else:
+					# The last line ended the date before Leave: Leave is
+					# then refused and the date is kept, once.
+					assert_eq(Game.state.dates_done("pearl_diver"), 1, "the date that ended first is kept once")
+					assert_false(told_left[0], "and the screen never said it was left")
+		town.free()
+		after_each()
+		if past_the_end:
+			break
+	assert_gt(tried, 3, "tried leaving at several plain lines, the last one included")
+
+
+# The same race when the advance awaits: it resumes after Leave, on a node
+# that is only queued for deletion, and finds the script over.
+func test_an_advance_that_resumes_after_leave_keeps_nothing() -> void:
+	var town: TownScreen = _open_card("pearl_diver")
+	var screen: DateScreen = await _start_date(town, "pearl_diver", "cafe")
+	screen.leave()
+	screen.runner.line = null
+	screen._show_line()
+	screen._on_script_end()
+	assert_eq([Game.state.town.actions_left, Game.state.affection("pearl_diver")], [2, 0])
+	assert_false(Game.store.read().is_ok(), "nothing saved")
+
+
 func test_a_double_stamp_opens_one_date() -> void:
 	var town: TownScreen = _open_card("pearl_diver")
 	town.open_date("pearl_diver")
