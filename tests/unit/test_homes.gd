@@ -128,3 +128,56 @@ func test_moods_are_never_saved() -> void:
 		assert_false(text.contains(word), word)
 	var loaded: GameState = GameState.from_dict(JSON.parse_string(text))
 	assert_eq(loaded.mood(data, "pearl_diver"), Town.Mood.HAPPY)
+
+
+func test_banking_a_delve_settles_the_rescued() -> void:
+	var state: GameState = _state()
+	state.build(data, "cottage", Vector2i(0, 0))
+	state.start_delve()
+	var haul: Haul = Haul.new()
+	haul.villagers.append("pearl_diver")
+	assert_true(state.finish_delve(data, Haul.SURFACED, haul))
+	assert_eq(state.town.homes, {"pearl_diver": 1} as Dictionary[String, int], "arrival lives in finish_delve")
+
+
+## Imogen's #38 audit: whatever the player does, nobody waits at the dock
+## while a home stands empty, and the town stays loadable.
+func test_nobody_is_homeless_beside_an_empty_home() -> void:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	var ids: PackedStringArray = data.ids("buildings")
+	var map: TownMap = GameState.town_map(data)
+	for run: int in 40:
+		rng.seed = 1000 + run
+		var state: GameState = _state()
+		state._landmarks.append_array(["cafe", "hot_spring"] as Array[String])
+		for step: int in 60:
+			state.town.actions_left = 5
+			state.add_resource("driftwood", 10)
+			state.add_resource("pearls", 3)
+			var cell: Vector2i = Vector2i(rng.randi_range(0, map.width - 1), rng.randi_range(0, map.height - 1))
+			match rng.randi_range(0, 3):
+				0:
+					state.build(data, ids[rng.randi_range(0, ids.size() - 1)], cell)
+				1:
+					if not state.town.placed.is_empty():
+						state.move_building(data, state.town.placed[rng.randi_range(0, state.town.placed.size() - 1)]["uid"], cell)
+				2:
+					if not state.villagers().is_empty() and not state.town.placed.is_empty():
+						state.swap_home(data, state.villagers()[rng.randi_range(0, state.villagers().size() - 1)],
+							state.town.placed[rng.randi_range(0, state.town.placed.size() - 1)]["uid"])
+				3:
+					var left: Array[String] = state.villagers_left(data)
+					state.start_delve()
+					var haul: Haul = Haul.new()
+					if not left.is_empty():
+						haul.villagers.append(left[0])
+					state.finish_delve(data, Haul.SURFACED, haul)
+			var free_home: bool = state.town.placed.any(func(building: Dictionary) -> bool:
+				return building["building"] == "cottage" and state.town.resident(building["uid"]).is_empty())
+			if not state.homeless().is_empty() and free_home:
+				fail_test("run %d step %d: %s homeless beside an empty home" % [run, step, state.homeless()])
+				return
+			if not state.town_problems(data).is_empty():
+				fail_test("run %d step %d: %s" % [run, step, state.town_problems(data)])
+				return
+	pass_test("40 random towns of 60 steps")

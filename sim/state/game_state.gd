@@ -53,9 +53,11 @@ func start_delve() -> bool:
 ## 1): surfacing, clearing the vault, washing up and an abandoned delve all
 ## end here. `haul` is everything the delve carried; the outcome decides
 ## what's kept (Haul.kept). Villagers and landmarks already in town are
-## never added twice. Returns false, changing nothing, if not in a delve or
-## the outcome is unknown.
-func finish_delve(outcome: String, haul: Haul) -> bool:
+## never added twice. The whole arrival happens here, in this one state
+## change: rescued villagers move into any free home (and PR 3's budget).
+## Returns false, changing nothing, if not in a delve or the outcome is
+## unknown.
+func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
 	if phase != Phase.DELVE or not Haul.OUTCOMES.has(outcome):
 		return false
 	var kept: Haul = haul.kept(outcome)
@@ -68,6 +70,7 @@ func finish_delve(outcome: String, haul: Haul) -> bool:
 		_landmarks.append(kept.landmark)
 	last_delve = {"delve": delve_count, "outcome": outcome, "kept": kept.to_dict()}
 	phase = Phase.TOWN
+	settle_villagers(data)
 	return true
 
 

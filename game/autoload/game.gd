@@ -80,7 +80,7 @@ func load_or_new() -> String:
 	else:
 		state = loaded
 		if state.phase == GameState.Phase.DELVE:
-			state.finish_delve(Haul.ABANDONED, Haul.new())
+			state.finish_delve(data, Haul.ABANDONED, Haul.new())
 			save()
 	return scene_for_phase()
 
@@ -164,11 +164,8 @@ func go_down() -> bool:
 func come_up() -> bool:
 	if SceneFlow.busy or run == null or not run.is_over():
 		return false
-	if not state.finish_delve(run.outcome(), run.haul):
+	if not state.finish_delve(data, run.outcome(), run.haul):
 		return false
-	# Rescued villagers move into any free home before the save, so the
-	# town they arrive in is the one that's saved.
-	state.settle_villagers(data)
 	run = null
 	var error: Error = save()
 	if error != OK and error != ERR_BUSY and not saving_locked:
