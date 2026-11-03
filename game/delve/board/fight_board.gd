@@ -88,6 +88,11 @@ var _nudge: Button
 var _results: PanelContainer
 var _results_text: Label
 var _again: Button
+var _leave: Button
+## The results panel's buttons: what "again" says, and whether "Return to
+## town" shows. Set before adding the board to the tree.
+var again_text: String = "Fight again"
+var leave_shown: bool = true
 
 
 ## Show the one-line banner for this enemy's twist (the first meeting).
@@ -768,12 +773,13 @@ func _build() -> void:
 	_results.add_child(results_box)
 	_results_text = BoardStyle.label("", BoardStyle.NUMBER)
 	results_box.add_child(_results_text)
-	_again = _button("Fight again", 72)
+	_again = _button(again_text, 72)
 	_again.pressed.connect(again_requested.emit)
 	results_box.add_child(_again)
-	var leave: Button = _button("Return to town", 64)
-	leave.pressed.connect(leave_requested.emit)
-	results_box.add_child(leave)
+	_leave = _button("Return to town", 64)
+	_leave.pressed.connect(leave_requested.emit)
+	_leave.visible = leave_shown
+	results_box.add_child(_leave)
 
 
 static func _accepts_face(row: Dictionary, face: int) -> bool:

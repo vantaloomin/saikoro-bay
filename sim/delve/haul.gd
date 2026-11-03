@@ -35,13 +35,34 @@ func is_empty() -> bool:
 	return resources.is_empty() and villagers.is_empty() and landmark.is_empty()
 
 
+## How a delve can end, as GameState.finish_delve() takes it.
+const SURFACED: String = "surfaced"
+const CLEARED: String = "cleared"
+const WASHED_UP: String = "washed_up"
+## The game closed mid-delve (Imogen's #6 audit): a wash-up with nothing kept.
+const ABANDONED: String = "abandoned"
+const OUTCOMES: Array[String] = [SURFACED, CLEARED, WASHED_UP, ABANDONED]
+
+
+## What the town keeps of this haul after `outcome`: all of it after
+## surfacing or clearing the vault, half the resources after washing up,
+## nothing after an abandoned delve (or an unknown outcome).
+func kept(outcome: String) -> Haul:
+	match outcome:
+		SURFACED, CLEARED:
+			return copy()
+		WASHED_UP:
+			return halved()
+	return Haul.new()
+
+
 ## What washing up keeps (DM-7): half of each resource, rounded down, and
 ## no villagers or landmark. Those go back below the tide.
 func halved() -> Haul:
-	var kept: Haul = Haul.new()
+	var out: Haul = Haul.new()
 	for id: String in resources:
-		kept.add_resource(id, resources[id] / 2)
-	return kept
+		out.add_resource(id, resources[id] / 2)
+	return out
 
 
 func copy() -> Haul:

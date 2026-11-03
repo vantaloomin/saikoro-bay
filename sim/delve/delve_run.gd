@@ -215,15 +215,21 @@ func go_deeper() -> bool:
 	return true
 
 
-## What the town gets: the whole haul after surfacing or clearing the
-## vault, half the resources after washing up, nothing mid-delve.
-func kept_haul() -> Haul:
+## How the delve ended, as a Haul outcome, or "" while it's still going.
+func outcome() -> String:
 	match step:
-		Step.SURFACED, Step.CLEARED:
-			return haul.copy()
+		Step.SURFACED:
+			return Haul.SURFACED
+		Step.CLEARED:
+			return Haul.CLEARED
 		Step.WASHED_UP:
-			return haul.halved()
-	return Haul.new()
+			return Haul.WASHED_UP
+	return ""
+
+
+## What the town gets (Haul.kept): nothing while the delve is still going.
+func kept_haul() -> Haul:
+	return haul.kept(outcome())
 
 
 func _pay_loot(paid_room: String) -> void:

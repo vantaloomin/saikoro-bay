@@ -2,8 +2,12 @@ extends GutTest
 ## SaveCodec: encoding, integrity checks and version handling.
 
 
+## Versions past the game's own, for tests of the migration path.
+const NEXT: int = SaveCodec.CURRENT_VERSION + 1
+
+
 func after_each() -> void:
-	SaveCodec.MIGRATIONS.clear()
+	SaveCodec.MIGRATIONS = SaveCodec.default_migrations()
 
 
 func test_round_trip() -> void:
@@ -72,29 +76,34 @@ func test_bad_version_values() -> void:
 
 
 func test_older_version_without_migration_is_refused() -> void:
-	var v1_text: String = SaveCodec.encode({"coins": 5})
-	var result: SaveCodec.DecodeResult = SaveCodec.decode(v1_text, 2)
-	assert_eq(result.status, SaveCodec.Status.BAD_VERSION, "no v1 -> v2 migration registered")
+	var current_text: String = SaveCodec.encode({"coins": 5})
+	var result: SaveCodec.DecodeResult = SaveCodec.decode(current_text, NEXT)
+	assert_eq(result.status, SaveCodec.Status.BAD_VERSION, "no migration to the next version registered")
 
 
 func test_migrations_run_in_order() -> void:
-	SaveCodec.MIGRATIONS[2] = func(p: Dictionary) -> Dictionary:
-		p["coins_v2"] = SaveCodec.read_int(p, "coins") * 10
+	SaveCodec.MIGRATIONS[NEXT] = func(p: Dictionary) -> Dictionary:
+		p["coins_next"] = SaveCodec.read_int(p, "coins") * 10
 		return p
-	SaveCodec.MIGRATIONS[3] = func(p: Dictionary) -> Dictionary:
-		p["coins_v3"] = SaveCodec.read_int(p, "coins_v2") + 1
+	SaveCodec.MIGRATIONS[NEXT + 1] = func(p: Dictionary) -> Dictionary:
+		p["coins_after"] = SaveCodec.read_int(p, "coins_next") + 1
 		return p
-	var result: SaveCodec.DecodeResult = SaveCodec.decode(SaveCodec.encode({"coins": 5}), 3)
+	var result: SaveCodec.DecodeResult = SaveCodec.decode(SaveCodec.encode({"coins": 5}), NEXT + 1)
 	assert_true(result.is_ok())
-	assert_eq(result.version, 3)
-	assert_eq(SaveCodec.read_int(result.payload, "coins_v3"), 51)
+	assert_eq(result.version, NEXT + 1)
+	assert_eq(SaveCodec.read_int(result.payload, "coins_after"), 51)
 
 
 func test_migration_must_return_a_dictionary() -> void:
-	SaveCodec.MIGRATIONS[2] = func(_p: Dictionary) -> Variant:
+	SaveCodec.MIGRATIONS[NEXT] = func(_p: Dictionary) -> Variant:
 		return null
-	var result: SaveCodec.DecodeResult = SaveCodec.decode(SaveCodec.encode({"coins": 5}), 2)
+	var result: SaveCodec.DecodeResult = SaveCodec.decode(SaveCodec.encode({"coins": 5}), NEXT)
 	assert_eq(result.status, SaveCodec.Status.BAD_VERSION)
+
+
+func test_the_game_registers_every_upgrade_to_the_current_version() -> void:
+	for version: int in range(2, SaveCodec.CURRENT_VERSION + 1):
+		assert_true(SaveCodec.default_migrations().has(version), "an upgrade to version %d" % version)
 
 
 func test_payload_must_be_an_object() -> void:

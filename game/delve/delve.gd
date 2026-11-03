@@ -1,45 +1,96 @@
 extends Control
-## Greybox delve (M1): one dice fight at a time on the board, against an
-## enemy drawn from this delve's ENEMIES stream. "Fight again" draws the next
-## enemy from the same streams, so a delve seed always deals the same
-## fights. The map, rooms and carried HP arrive in M2.
+## Greybox delve (M2 stand-in until the map screen): plays Game.run room by
+## room, always taking the leftmost room it can reach. Fights show on the
+## board; treasure, rest and rescue rooms are placeholders that pass for
+## now. At a landing, Surface and Deeper choose; a wash-up or surfacing
+## goes back to town, where the haul is banked.
 
 const BOARD_SCENE: PackedScene = preload("res://game/delve/board/fight_board.tscn")
 
-var _rng: RngStreams
 var _board: FightBoard
-var _fights: int = 0
+var _deeper: Button
 
 @onready var _surface: Button = %Surface
 @onready var _status: Label = %Status
 
 
 func _ready() -> void:
+	_surface.text = "Surface"
 	_surface.pressed.connect(_on_surface_pressed)
-	_rng = RngStreams.new(Game.state.current_delve_seed())
-	_next_fight()
+	_deeper = _surface.duplicate() as Button
+	_deeper.text = "Deeper"
+	_deeper.position.y += 64
+	_deeper.pressed.connect(_on_deeper_pressed)
+	add_child(_deeper)
+	_advance()
 
 
-func _next_fight() -> void:
+## Moves the run on until it needs the player: a fight, a landing, the
+## vault, or the end.
+func _advance() -> void:
+	var run: DelveRun = Game.run
+	_surface.visible = false
+	_deeper.visible = false
+	if run == null:
+		return
+	for guard: int in 32:
+		match run.step:
+			DelveRun.Step.CHOOSE_ROOM:
+				run.choose(run.reachable()[0])
+			DelveRun.Step.IN_ROOM:
+				if run.fight != null:
+					_show_fight(run)
+					return
+				run.finish_room()
+			DelveRun.Step.LANDING:
+				_surface.visible = true
+				_deeper.visible = true
+				_set_status(run, "Landing: surface with your haul, or go deeper?")
+				_surface.grab_focus()
+				return
+			DelveRun.Step.VAULT:
+				_set_status(run, "Koban's vault opens in a later build. Close the game to leave.")
+				return
+			_:
+				Game.come_up()
+				return
+
+
+func _show_fight(run: DelveRun) -> void:
 	if _board != null:
 		_board.queue_free()
-	var enemies: Array = Array(DelveRun.enemy_pool(Game.data, "regular"))
-	var enemy_id: String = _rng.pick(RngStreams.Stream.ENEMIES, enemies) as String
-	var fight: Fight = Fight.create(Game.data, "fresh", enemy_id, _rng)
-	_fights += 1
-	_status.text = "Delve %d · fight %d · seed %d" % [Game.state.delve_count, _fights, Game.state.current_delve_seed()]
+	_set_status(run, "Floor %d · %s" % [run.floor_index + 1, run.room_type])
 	_board = BOARD_SCENE.instantiate() as FightBoard
-	_board.setup(fight, Game.data)
+	_board.setup(run.fight, Game.data)
+	_board.again_text = "Continue"
+	_board.leave_shown = false
 	# Marked seen as the fight is dealt, which is when the banner shows: the
 	# board goes into the tree a few lines down. If showing it is ever
 	# deferred, mark it seen from the board when the banner appears instead.
-	_board.twist_banner = Game.state.meet_twist(str(Game.data.row("enemies", enemy_id).get("twist", "")))
-	_board.again_requested.connect(_next_fight)
-	_board.leave_requested.connect(_on_surface_pressed)
+	_board.twist_banner = Game.state.meet_twist(run.fight.twist)
+	_board.again_requested.connect(_on_fight_over)
 	add_child(_board)
 	move_child(_board, 0)
-	PlaytestLog.log_event("fight_start", {"enemy": enemy_id, "fight": _fights})
+	PlaytestLog.log_event("fight_start", {"enemy": run.fight.enemy_id, "floor": run.floor_index, "row": run.row})
+
+
+func _on_fight_over() -> void:
+	if _board != null:
+		_board.queue_free()
+		_board = null
+	Game.run.finish_room()
+	_advance()
 
 
 func _on_surface_pressed() -> void:
-	Game.come_up()
+	if Game.run.surface():
+		Game.come_up()
+
+
+func _on_deeper_pressed() -> void:
+	if Game.run.go_deeper():
+		_advance()
+
+
+func _set_status(run: DelveRun, text: String) -> void:
+	_status.text = "Delve %d · HP %d/%d · %s" % [Game.state.delve_count, run.hp, run.max_hp, text]

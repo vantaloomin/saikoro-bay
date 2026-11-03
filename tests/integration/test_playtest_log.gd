@@ -40,6 +40,7 @@ func test_delves_record_prompt_and_town_time() -> void:
 	PlaytestLog.mark_prompt()
 	Game.go_down()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+	Game.run.step = DelveRun.Step.SURFACED
 	Game.come_up()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	# Second delve: no nudge.
@@ -58,6 +59,9 @@ func test_delves_record_prompt_and_town_time() -> void:
 	assert_true(events[2].has("time_in_town_ms"))
 	assert_eq(events[4]["prompted"], false, "the prompt only counts for the visit it happened in")
 	assert_eq(events[4]["seed"], str(Game.state.delve_seed(2)))
+	assert_eq((events[2]["map"] as Dictionary)["seed"], str(Game.state.delve_seed(1)), "the map's replay inputs")
+	assert_eq((events[2]["map"] as Dictionary)["villagers_left"], ["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"])
+	assert_eq(events[3]["outcome"], "surfaced")
 	assert_eq(events[0]["campaign_seed"], "77")
 
 

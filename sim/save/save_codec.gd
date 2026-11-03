@@ -20,7 +20,9 @@ extends RefCounted
 ## rejected.
 
 const FORMAT: String = "saikoro-bay-save"
-const CURRENT_VERSION: int = 1
+## 2: villagers, landmarks and the last delve (M2), so an older build
+## refuses these saves instead of dropping them.
+const CURRENT_VERSION: int = 2
 
 ## Largest integer a JSON number (a double) holds exactly. Bigger values,
 ## like RNG states, must be saved as strings.
@@ -37,10 +39,14 @@ enum Status {
 }
 
 ## Version N -> N + 1 upgrades. Each takes and returns a payload Dictionary.
-## Example for when version 2 arrives:
-##   2: func(p: Dictionary) -> Dictionary: ...   (upgrades a v1 payload to v2)
-## Keyed by the version they produce.
-static var MIGRATIONS: Dictionary[int, Callable] = {}
+## Keyed by the version they produce: 2 upgrades a version 1 payload.
+static var MIGRATIONS: Dictionary[int, Callable] = default_migrations()
+
+
+## The game's own upgrades. Tests that register their own call this to
+## put them back.
+static func default_migrations() -> Dictionary[int, Callable]:
+	return {2: GameState.migrate_to_v2}
 
 
 class DecodeResult:

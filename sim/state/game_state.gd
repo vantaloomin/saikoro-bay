@@ -21,6 +21,12 @@ var campaign_seed: int = 0
 var delve_count: int = 0
 
 var _resources: Dictionary[String, int] = {}
+## Villagers living in town and landmarks rebuilt, in the order they came.
+var _villagers: Array[String] = []
+var _landmarks: Array[String] = []
+## How the last delve ended, for the town to show on arrival:
+## {"delve": n, "outcome": Haul outcome, "kept": Haul.to_dict()}, or {}.
+var last_delve: Dictionary = {}
 ## Twists the player has met, so each gets its one-line banner only once
 ## per campaign (dice-fight-rules section 9). Sorted, for a stable save.
 var _seen_twists: Array[String] = []
@@ -41,10 +47,24 @@ func start_delve() -> bool:
 	return true
 
 
-## Comes back up. Returns false if not in a delve.
-func end_delve() -> bool:
-	if phase != Phase.DELVE:
+## Banks a delve and comes back up, in one step (delve-map spec 8a, rule
+## 1): surfacing, clearing the vault, washing up and an abandoned delve all
+## end here. `haul` is everything the delve carried; the outcome decides
+## what's kept (Haul.kept). Villagers and landmarks already in town are
+## never added twice. Returns false, changing nothing, if not in a delve or
+## the outcome is unknown.
+func finish_delve(outcome: String, haul: Haul) -> bool:
+	if phase != Phase.DELVE or not Haul.OUTCOMES.has(outcome):
 		return false
+	var kept: Haul = haul.kept(outcome)
+	for id: String in kept.resources:
+		add_resource(id, kept.resources[id])
+	for villager: String in kept.villagers:
+		if not _villagers.has(villager):
+			_villagers.append(villager)
+	if not kept.landmark.is_empty() and not _landmarks.has(kept.landmark):
+		_landmarks.append(kept.landmark)
+	last_delve = {"delve": delve_count, "outcome": outcome, "kept": kept.to_dict()}
 	phase = Phase.TOWN
 	return true
 
@@ -60,6 +80,43 @@ func delve_seed(n: int) -> int:
 ## The seed for the delve in progress (or the last one started).
 func current_delve_seed() -> int:
 	return delve_seed(delve_count)
+
+
+# --- Town ------------------------------------------------------------------------
+
+func villagers() -> Array[String]:
+	return _villagers.duplicate()
+
+
+func landmarks() -> Array[String]:
+	return _landmarks.duplicate()
+
+
+## Villagers still below the tide, in data order: the order they're rescued in.
+func villagers_left(data: GameData) -> Array[String]:
+	var out: Array[String] = []
+	for id: String in data.ids("villagers"):
+		if not _villagers.has(id):
+			out.append(id)
+	return out
+
+
+func landmarks_left(data: GameData) -> Array[String]:
+	var out: Array[String] = []
+	for id: String in data.ids("landmarks"):
+		if not _landmarks.has(id):
+			out.append(id)
+	return out
+
+
+## The perks the next delve brings: one per villager in town, from
+## data/villagers.json, sourced to that villager for the board's badges.
+func delve_perks(data: GameData) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for id: String in _villagers:
+		if data.has_row("villagers", id):
+			out.append({"perk": data.row("villagers", id)["perk"], "source": id})
+	return out
 
 
 # --- Resources ----------------------------------------------------------------
@@ -118,12 +175,29 @@ func to_dict() -> Dictionary:
 		"delve_count": delve_count,
 		"resources": resource_data,
 		"seen_twists": _seen_twists.duplicate(),
+		"villagers": _villagers.duplicate(),
+		"landmarks": _landmarks.duplicate(),
+		"last_delve": last_delve.duplicate(true),
 	}
+
+
+## Save version 1 -> 2: adds villagers, landmarks and the last delve's
+## result, all empty, since no delve could bank any before version 2.
+static func migrate_to_v2(payload: Dictionary) -> Dictionary:
+	if not payload.get(PAYLOAD_KEY) is Dictionary:
+		return payload
+	var game: Dictionary = payload[PAYLOAD_KEY]
+	game["villagers"] = []
+	game["landmarks"] = []
+	game["last_delve"] = {}
+	return payload
 
 
 ## Builds a state from to_dict() output (after a JSON round trip).
 ## Returns null if anything is missing, negative or not a whole number.
 ## "seen_twists" is optional, so saves from before it existed still load.
+## "villagers", "landmarks" and "last_delve" are required: version 2 saves
+## always have them, and older saves get them from migrate_to_v2().
 static func from_dict(data: Dictionary) -> GameState:
 	var phase_name: Variant = data.get("phase")
 	if not (phase_name is String and Phase.has(phase_name)):
@@ -139,6 +213,14 @@ static func from_dict(data: Dictionary) -> GameState:
 		return null
 	var twist_data: Variant = data.get("seen_twists", [])
 	if not twist_data is Array:
+		return null
+	var villager_data: Variant = data.get("villagers")
+	var landmark_data: Variant = data.get("landmarks")
+	var last_data: Variant = data.get("last_delve")
+	if not _is_id_list(villager_data) or not _is_id_list(landmark_data):
+		return null
+	var last: Variant = _read_last_delve(last_data)
+	if last == null:
 		return null
 
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
@@ -161,4 +243,49 @@ static func from_dict(data: Dictionary) -> GameState:
 		if not twist is String:
 			return null
 		state.meet_twist(twist as String)
+	for id: Variant in villager_data as Array:
+		if not state._villagers.has(id as String):
+			state._villagers.append(id as String)
+	for id: Variant in landmark_data as Array:
+		if not state._landmarks.has(id as String):
+			state._landmarks.append(id as String)
+	state.last_delve = last
 	return state
+
+
+## The saved last_delve with whole numbers as ints, {} for none, or null
+## if it's malformed.
+static func _read_last_delve(value: Variant) -> Variant:
+	if not value is Dictionary:
+		return null
+	var data: Dictionary = value
+	if data.is_empty():
+		return {}
+	var kept_data: Variant = data.get("kept")
+	if not SaveCodec.is_int_like(data.get("delve")) or not Haul.OUTCOMES.has(str(data.get("outcome", ""))) \
+			or not kept_data is Dictionary:
+		return null
+	var kept: Dictionary = kept_data
+	var resource_data: Variant = kept.get("resources")
+	if not resource_data is Dictionary or not _is_id_list(kept.get("villagers")) or not kept.get("landmark") is String:
+		return null
+	var resources_out: Dictionary = {}
+	for id: Variant in resource_data as Dictionary:
+		var amount: int = SaveCodec.to_int_or((resource_data as Dictionary)[id], -1)
+		if not id is String or amount < 0:
+			return null
+		resources_out[id] = amount
+	return {
+		"delve": SaveCodec.to_int_or(data["delve"], 0),
+		"outcome": str(data["outcome"]),
+		"kept": {"resources": resources_out, "villagers": (kept["villagers"] as Array).duplicate(), "landmark": kept["landmark"]},
+	}
+
+
+static func _is_id_list(value: Variant) -> bool:
+	if not value is Array:
+		return false
+	for item: Variant in value as Array:
+		if not item is String or (item as String).is_empty():
+			return false
+	return true
