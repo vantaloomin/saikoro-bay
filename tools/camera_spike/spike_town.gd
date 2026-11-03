@@ -16,8 +16,6 @@ const WIDTH: int = 10
 const HEIGHT: int = 8
 ## Rows 0 to 6 are land. Row 7 is the sea.
 const LAND_ROWS: int = 7
-const PATH_COLUMNS: Array[int] = [3, 7]
-const PATH_ROW: int = 3
 const NO_CELL: Vector2i = Vector2i(-1, -1)
 
 ## Pixel sizes at 1080p.
@@ -26,7 +24,7 @@ const ISO_HALF_W: float = 80.0
 const ISO_HALF_H: float = 40.0
 const MARKER_RADIUS: float = 26.0
 ## How tall each kind of block stands in the isometric view.
-const BLOCK_HEIGHT: Dictionary[String, float] = {"home": 52.0, "shop": 68.0, "landmark": 116.0}
+const BLOCK_HEIGHT: Dictionary[String, float] = {"home": 52.0, "shop": 68.0, "landmark": 140.0}
 
 const VILLAGER_NAMES: Dictionary[String, String] = {
 	"pearl_diver": "Pearl diver", "shipwright": "Shipwright",
@@ -36,32 +34,49 @@ const VILLAGER_INITIALS: Dictionary[String, String] = {
 	"pearl_diver": "P", "shipwright": "S", "onsen_keeper": "O", "shrine_keeper": "K",
 }
 
-## The plots buildings stand on, between the paths (variant A).
-const LOTS_A: Array[Rect2i] = [
-	Rect2i(0, 0, 3, 3), Rect2i(4, 0, 3, 3), Rect2i(8, 0, 2, 3),
-	Rect2i(0, 4, 3, 3), Rect2i(4, 4, 3, 3), Rect2i(8, 4, 2, 3),
-]
-## Variant A. Variant B turns the land half a circle, so the second view
-## doesn't reward memory, and picks other targets.
-const BUILDINGS_A: Array[Dictionary] = [
-	{"id": "cafe", "name": "Café", "kind": "landmark", "rect": Rect2i(0, 0, 3, 2), "villager": ""},
-	{"id": "shrine", "name": "Shrine", "kind": "landmark", "rect": Rect2i(8, 0, 2, 2), "villager": ""},
-	{"id": "net_shed", "name": "Net shed", "kind": "shop", "rect": Rect2i(4, 2, 2, 1), "villager": ""},
-	{"id": "home_p", "name": "Home", "kind": "home", "rect": Rect2i(4, 0, 1, 1), "villager": "pearl_diver"},
-	{"id": "home_s", "name": "Home", "kind": "home", "rect": Rect2i(6, 0, 1, 1), "villager": "shipwright"},
-	{"id": "bait_shop", "name": "Bait shop", "kind": "shop", "rect": Rect2i(0, 6, 2, 1), "villager": ""},
-	{"id": "home_o", "name": "Home", "kind": "home", "rect": Rect2i(0, 4, 1, 1), "villager": "onsen_keeper"},
-	{"id": "home_k", "name": "Home", "kind": "home", "rect": Rect2i(2, 4, 1, 1), "villager": "shrine_keeper"},
-	{"id": "boat_shed", "name": "Boat shed", "kind": "shop", "rect": Rect2i(8, 4, 2, 2), "villager": ""},
-]
-const VARIANTS: Array[Dictionary] = [
-	{"empty_lot": Rect2i(4, 4, 3, 3), "unhappy": "shipwright", "neighbor": "net_shed"},
-	{"empty_lot": Rect2i(4, 4, 3, 3), "unhappy": "onsen_keeper", "neighbor": "bait_shop"},
+## Two different towns of equal difficulty (Mara's #35 review): each
+## tester sees each layout once, in a different view, so nothing learned
+## in the first view helps in the second. Lots are the land between the
+## paths. Each layout hides one target behind a tall landmark in the
+## isometric view: A's empty lot sits behind the Café, B's spots beside
+## the Bait shop sit behind it.
+const LAYOUTS: Array[Dictionary] = [
+	{
+		"name": "A", "path_columns": [3, 7], "path_row": 3,
+		"empty_lot": Rect2i(4, 0, 3, 3), "unhappy": "shipwright", "neighbor": "net_shed",
+		"buildings": [
+			{"id": "cafe", "name": "Café", "kind": "landmark", "rect": Rect2i(4, 4, 3, 2), "villager": ""},
+			{"id": "shrine", "name": "Shrine", "kind": "landmark", "rect": Rect2i(8, 0, 2, 2), "villager": ""},
+			{"id": "net_shed", "name": "Net shed", "kind": "shop", "rect": Rect2i(0, 2, 2, 1), "villager": ""},
+			{"id": "home_p", "name": "Home", "kind": "home", "rect": Rect2i(0, 0, 1, 1), "villager": "pearl_diver"},
+			{"id": "home_s", "name": "Home", "kind": "home", "rect": Rect2i(2, 0, 1, 1), "villager": "shipwright"},
+			{"id": "bait_shop", "name": "Bait shop", "kind": "shop", "rect": Rect2i(0, 6, 2, 1), "villager": ""},
+			{"id": "home_o", "name": "Home", "kind": "home", "rect": Rect2i(0, 4, 1, 1), "villager": "onsen_keeper"},
+			{"id": "home_k", "name": "Home", "kind": "home", "rect": Rect2i(2, 4, 1, 1), "villager": "shrine_keeper"},
+			{"id": "boat_shed", "name": "Boat shed", "kind": "shop", "rect": Rect2i(8, 4, 2, 2), "villager": ""},
+		],
+	},
+	{
+		"name": "B", "path_columns": [2, 6], "path_row": 4,
+		"empty_lot": Rect2i(7, 5, 3, 2), "unhappy": "onsen_keeper", "neighbor": "bait_shop",
+		"buildings": [
+			{"id": "boat_shed", "name": "Boat shed", "kind": "shop", "rect": Rect2i(0, 0, 2, 2), "villager": ""},
+			{"id": "net_shed", "name": "Net shed", "kind": "shop", "rect": Rect2i(0, 3, 2, 1), "villager": ""},
+			{"id": "bait_shop", "name": "Bait shop", "kind": "shop", "rect": Rect2i(3, 0, 2, 1), "villager": ""},
+			{"id": "cafe", "name": "Café", "kind": "landmark", "rect": Rect2i(3, 2, 3, 2), "villager": ""},
+			{"id": "shrine", "name": "Shrine", "kind": "landmark", "rect": Rect2i(8, 0, 2, 2), "villager": ""},
+			{"id": "home_p", "name": "Home", "kind": "home", "rect": Rect2i(7, 3, 1, 1), "villager": "pearl_diver"},
+			{"id": "home_s", "name": "Home", "kind": "home", "rect": Rect2i(9, 3, 1, 1), "villager": "shipwright"},
+			{"id": "home_k", "name": "Home", "kind": "home", "rect": Rect2i(1, 6, 1, 1), "villager": "shrine_keeper"},
+			{"id": "home_o", "name": "Home", "kind": "home", "rect": Rect2i(4, 5, 1, 1), "villager": "onsen_keeper"},
+		],
+	},
 ]
 
 const TEA_STALL: Dictionary = {"id": "tea_stall", "name": "Tea stall", "kind": "shop", "villager": ""}
 
 var view: View = View.TOP_DOWN
+var layout_name: String = ""
 ## Grid (0, 0)'s top corner on screen.
 var origin: Vector2 = Vector2.ZERO
 var lots: Array[Rect2i] = []
@@ -71,29 +86,42 @@ var unhappy: String = ""
 var neighbor: String = ""
 
 
-## Variant 0 or 1, in a view, framed inside `area` (screen pixels).
-static func make(variant: int, in_view: View, area: Rect2) -> SpikeTown:
+## Layout 0 (A) or 1 (B), in a view, framed inside `area` (screen pixels).
+static func make(layout: int, in_view: View, area: Rect2) -> SpikeTown:
 	var town: SpikeTown = SpikeTown.new()
 	town.view = in_view
-	var spec: Dictionary = VARIANTS[variant]
-	var turned: bool = variant == 1
-	for lot: Rect2i in LOTS_A:
-		town.lots.append(_turn(lot) if turned else lot)
-	for row: Dictionary in BUILDINGS_A:
-		var copy: Dictionary = row.duplicate()
-		if turned:
-			copy["rect"] = _turn(row["rect"] as Rect2i)
-		town.buildings.append(copy)
-	town.empty_lot = _turn(spec["empty_lot"] as Rect2i) if turned else spec["empty_lot"] as Rect2i
+	var spec: Dictionary = LAYOUTS[layout]
+	town.layout_name = str(spec["name"])
+	town.lots = _lots(spec["path_columns"] as Array, int(spec["path_row"]))
+	for row: Dictionary in spec["buildings"]:
+		town.buildings.append(row.duplicate())
+	town.empty_lot = spec["empty_lot"]
 	town.unhappy = str(spec["unhappy"])
 	town.neighbor = str(spec["neighbor"])
 	town._frame(area)
 	return town
 
 
-## Half a turn of the land, leaving the sea along the bottom.
-static func _turn(rect: Rect2i) -> Rect2i:
-	return Rect2i(WIDTH - rect.end.x, LAND_ROWS - rect.end.y, rect.size.x, rect.size.y)
+## The land between the paths, cut into lots.
+static func _lots(path_columns: Array, path_row: int) -> Array[Rect2i]:
+	var xs: Array[Vector2i] = _spans(path_columns, WIDTH)
+	var ys: Array[Vector2i] = _spans([path_row], LAND_ROWS)
+	var out: Array[Rect2i] = []
+	for y_span: Vector2i in ys:
+		for x_span: Vector2i in xs:
+			out.append(Rect2i(x_span.x, y_span.x, x_span.y, y_span.y))
+	return out
+
+
+## [start, length] runs between the cuts, from 0 to `size`.
+static func _spans(cuts: Array, size: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var start: int = 0
+	for cut: Variant in cuts + [size]:
+		if int(cut) > start:
+			out.append(Vector2i(start, int(cut) - start))
+		start = int(cut) + 1
+	return out
 
 
 ## Centers the map in `area`, leaving headroom for the tallest blocks.
@@ -162,7 +190,7 @@ func ground(cell: Vector2i) -> Ground:
 	return Ground.PATH
 
 
-## Variant buildings, minus the ones on the empty lot, plus anything placed.
+## The layout's buildings, minus any on the empty lot, plus anything placed.
 func standing() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for building: Dictionary in buildings:
@@ -279,11 +307,12 @@ func pick(point: Vector2, ground_only: bool = false) -> Dictionary:
 func task_text(task: Task) -> String:
 	match task:
 		Task.EMPTY_LOT:
-			return "Find the empty lot and click it."
+			return "Find the lot with nothing built on it, and click it."
 		Task.UNHAPPY:
 			return "One villager is unhappy at home. Click them."
 		_:
-			return "Put the Tea stall next to the %s." % str(building(neighbor).get("name", neighbor))
+			return "Put the Tea stall right beside the %s, touching one of its sides." \
+				% str(building(neighbor).get("name", neighbor))
 
 
 func task_done(task: Task, hit: Dictionary) -> bool:
