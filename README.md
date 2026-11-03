@@ -45,6 +45,22 @@ godot --headless --path . -s res://addons/gut/gut_cmdln.gd  # tests (GUT)
 
 Tests live in `tests/` and use [GUT](https://github.com/bitwes/Gut) (vendored in `addons/gut`, MIT). In the editor, the GUT panel runs them too.
 
+## Builds
+
+`export_presets.cfg` has Windows, Linux, macOS and Web presets, each in a full and a **SFW** variant. SFW presets add the `sfw` feature tag (content is capped at the SFW level) and leave out `content/adult/` entirely.
+
+CI exports the full and SFW Windows builds on every pull request and push to `main`, checks the SFW pack contains nothing from `content/adult/` (`tools/check_pck.py`), and attaches both builds to the run for 14 days.
+
+To export locally, install the Godot 4.6.3 export templates (Editor > Manage Export Templates), then use Project > Export or:
+
+```
+godot --headless --path . --export-release "Windows SFW" build/sfw/windows/SaikoroBay.exe
+```
+
+The `build/` folder holds a `.gdignore` so Godot never imports its own exports.
+
+**itch.io:** the manual "Publish to itch.io" workflow pushes a commit's CI builds with butler to the `windows` and `windows-sfw` channels. It needs a `BUTLER_API_KEY` secret and an `ITCH_PROJECT` variable (for example `user/saikoro-bay`) in the repository's Actions settings.
+
 ## Repository layout
 
 ```

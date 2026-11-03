@@ -55,8 +55,9 @@ docs/
 tmp/
 temp/
 
-# Build output
-build/
+# Build output (build/.gdignore stays, so Godot never imports exports)
+build/*
+!build/.gdignore
 builds/
 dist/
 export/

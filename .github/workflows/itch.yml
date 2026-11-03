@@ -1,0 +1,76 @@
+name: Publish to itch.io
+
+# Manual only. Needs two repository settings (Settings > Secrets and
+# variables > Actions):
+#   secret   BUTLER_API_KEY  an itch.io API key (itch.io > Settings > API keys)
+#   variable ITCH_PROJECT    the itch page as user/game, e.g. vantaloomin/saikoro-bay
+# Without them the job is skipped. Uploads the Windows builds from the CI
+# run of the chosen commit to the "windows" and "windows-sfw" channels.
+
+on:
+  workflow_dispatch:
+    inputs:
+      channels:
+        description: Which builds to push
+        type: choice
+        options: [both, sfw-only, full-only]
+        default: both
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  publish:
+    name: Push builds with butler
+    runs-on: ubuntu-latest
+    if: vars.ITCH_PROJECT != ''
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      ITCH_PROJECT: ${{ vars.ITCH_PROJECT }}
+    steps:
+      - name: Require the API key
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "BUTLER_API_KEY secret is not set." >&2
+            exit 1
+          fi
+
+      - name: Find this commit's CI run
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI --commit "$GITHUB_SHA" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$run_id" ]; then
+            echo "No successful CI run for $GITHUB_SHA; run CI first." >&2
+            exit 1
+          fi
+          echo "id=$run_id" >> "$GITHUB_OUTPUT"
+
+      - name: Download builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "${{ steps.run.outputs.id }}" --repo "$GITHUB_REPOSITORY" \
+            --name "saikoro-bay-windows-$GITHUB_SHA" --dir build/full
+          gh run download "${{ steps.run.outputs.id }}" --repo "$GITHUB_REPOSITORY" \
+            --name "saikoro-bay-windows-sfw-$GITHUB_SHA" --dir build/sfw
+
+      - name: Install butler
+        run: |
+          curl -fsSL -o /tmp/butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          mkdir -p ~/butler && unzip -q /tmp/butler.zip -d ~/butler
+          chmod +x ~/butler/butler
+          echo "$HOME/butler" >> "$GITHUB_PATH"
+
+      - name: Push
+        run: |
+          version="$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          if [ "${{ inputs.channels }}" != "sfw-only" ]; then
+            butler push build/full "$ITCH_PROJECT:windows" --userversion "$version"
+          fi
+          if [ "${{ inputs.channels }}" != "full-only" ]; then
+            butler push build/sfw "$ITCH_PROJECT:windows-sfw" --userversion "$version"
+          fi

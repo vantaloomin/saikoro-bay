@@ -57,3 +57,81 @@ jobs:
 
       - name: Run tests
         run: godot --headless --path . -s res://addons/gut/gut_cmdln.gd
+
+  build:
+    name: Export Windows builds (full and SFW)
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Download Godot
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot
+          curl -fsSL -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q /tmp/godot.zip -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+
+      - name: Add Godot to PATH
+        run: echo "$HOME/godot" >> "$GITHUB_PATH"
+
+      # The full template archive is 1.2 GB; only the Windows template is
+      # kept, so the cache stays around 100 MB.
+      - name: Cache export templates
+        id: cache-templates
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          key: godot-templates-${{ env.GODOT_VERSION }}-windows
+
+      - name: Download export templates
+        if: steps.cache-templates.outputs.cache-hit != 'true'
+        run: |
+          dest="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$dest"
+          curl -fsSL -o /tmp/templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -j -q /tmp/templates.tpz \
+            templates/windows_release_x86_64.exe \
+            templates/windows_release_x86_64_console.exe \
+            templates/version.txt \
+            -d "$dest"
+          rm /tmp/templates.tpz
+
+      - name: Import project
+        run: godot --headless --path . --import
+
+      - name: Export
+        run: |
+          mkdir -p build/full/windows build/sfw/windows
+          godot --headless --path . --export-release "Windows" build/full/windows/SaikoroBay.exe
+          godot --headless --path . --export-release "Windows SFW" build/sfw/windows/SaikoroBay.exe
+          test -s build/full/windows/SaikoroBay.exe
+          test -s build/sfw/windows/SaikoroBay.exe
+
+      - name: Check the SFW build has no adult content
+        run: |
+          godot --headless --path . --export-pack "Windows SFW" build/sfw/check.pck
+          python3 tools/check_pck.py build/sfw/check.pck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: saikoro-bay-windows-${{ github.sha }}
+          path: build/full/windows/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: saikoro-bay-windows-sfw-${{ github.sha }}
+          path: build/sfw/windows/
+          retention-days: 14
