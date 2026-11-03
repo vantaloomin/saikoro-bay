@@ -1,0 +1,9 @@
+{
+	"schema": 1,
+	"note": "Placeholder resources for the slice until the town economy (M3) names them. All amounts are whole numbers.",
+	"items": [
+		{ "id": "driftwood", "name": "Driftwood" },
+		{ "id": "pearls", "name": "Pearls" },
+		{ "id": "koban_coins", "name": "Koban coins" }
+	]
+}

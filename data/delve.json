@@ -1,0 +1,17 @@
+{
+	"schema": 1,
+	"note": "Delve map shape and room weights (specs/delve-map.md). Placeholder numbers, tuned with the delve bot.",
+	"items": [
+		{
+			"id": "slice",
+			"floors": 3, "rows_per_floor": 3,
+			"width_two_weight": 50, "width_three_weight": 50,
+			"fight_weight": 55, "treasure_weight": 20, "rest_weight": 15,
+			"max_fight_streak": 3,
+			"reveal_rows": 2,
+			"redraw_attempts": 8,
+			"fallback_resource_a": "koban_coins", "fallback_amount_a": 3,
+			"fallback_resource_b": "driftwood", "fallback_amount_b": 10
+		}
+	]
+}
