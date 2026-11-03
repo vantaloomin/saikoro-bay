@@ -56,6 +56,7 @@ func test_delves_record_prompt_and_town_time() -> void:
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	Game.run.step = DelveRun.Step.SURFACED
 	Game.come_up()
+	Game.leave_tally()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	# Second delve: no nudge.
 	Game.go_down()

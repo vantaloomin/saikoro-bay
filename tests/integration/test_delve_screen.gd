@@ -7,13 +7,19 @@ const SCENE: PackedScene = preload("res://game/delve/delve.tscn")
 const VILLAGERS: Array[String] = ["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"]
 const LANDMARKS: Array[String] = ["cafe", "hot_spring"]
 
+const TEST_SAVE: String = "user://test_saves/delve_screen.save"
+
 var _original_state: GameState
 var _original_run: DelveRun
+var _original_store: SaveStore
 
 
 func before_each() -> void:
 	_original_state = Game.state
 	_original_run = Game.run
+	_original_store = Game.store
+	Game.store = SaveStore.new(TEST_SAVE)
+	Game.store.erase()
 	Game.state = GameState.new(77)
 	Settings.reduce_motion = true
 
@@ -21,6 +27,10 @@ func before_each() -> void:
 func after_each() -> void:
 	Game.state = _original_state
 	Game.run = _original_run
+	Game.store.erase()
+	Game.store = _original_store
+	Game.settlement = {}
+	Game.tally_open = false
 	Settings.reduce_motion = false
 
 
@@ -238,3 +248,50 @@ func test_kobans_vault_plays_on_the_vault_board() -> void:
 		assert_true(run.step in [DelveRun.Step.CLEARED, DelveRun.Step.WASHED_UP], "a second end is ignored")
 		return
 	fail_test("no run reached the vault")
+
+
+func _press(key: Key) -> void:
+	for down: bool in [true, false]:
+		var event: InputEventKey = InputEventKey.new()
+		event.keycode = key
+		event.physical_keycode = key
+		event.pressed = down
+		Input.parse_input_event(event)
+	await wait_physics_frames(2)
+
+
+## Imogen's bridge review: the haul is banked and saved before the tally,
+## Game.run is gone while it's up, and nothing pressed then can reach the
+## delve's handlers or skip the tally.
+func test_the_tally_shows_after_the_bank_and_survives_presses() -> void:
+	var run: DelveRun = _new_run()
+	run.haul.add_resource("driftwood", 6)
+	run.step = DelveRun.Step.SURFACED
+	Game.state.start_delve(Game.data)
+	var screen: Control = _screen(run)
+	var tally: TallyPanel = screen.get("_tally")
+	assert_not_null(tally, "the tally waits on the delve screen")
+	assert_null(Game.run)
+	assert_true(Game.tally_open)
+	assert_eq(Game.state.resource("driftwood"), 6, "banked before it shows")
+	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq(saved.resource("driftwood"), 6, "and saved")
+	await wait_process_frames(1)
+	assert_eq(get_viewport().gui_get_focus_owner(), tally.continue_button)
+	for key: Key in [KEY_ENTER, KEY_SPACE, KEY_ESCAPE, KEY_1, KEY_LEFT, KEY_TAB]:
+		await _press(key)
+	assert_true(Game.tally_open, "a press in the first moment is meant for the screen before")
+	assert_false(SceneFlow.busy)
+	for handler: String in ["_on_surface_pressed", "_on_deeper_pressed", "_on_fight_over", "_on_room_over",
+			"_on_vault_over", "_advance"]:
+		screen.call(handler)
+	screen.call("_on_room_chosen", 0)
+	assert_eq(screen.get("_tally"), tally, "still one tally, nothing crashed")
+	assert_eq(Game.state.resource("driftwood"), 6, "never banked twice")
+	tally._shown_at -= TallyPanel.GUARD_MS
+	tally.continue_button.grab_focus()
+	await _press(KEY_ENTER)
+	assert_false(Game.tally_open, "Continue starts the tide")
+	assert_true(SceneFlow.busy)
+	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+	assert_eq(get_tree().current_scene.scene_file_path, Game.TOWN_SCENE)

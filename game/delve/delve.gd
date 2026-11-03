@@ -6,7 +6,9 @@ extends Control
 ## throughout.
 ##
 ## Koban's vault plays on the vault board. A wash-up, surfacing or clearing
-## the vault goes back to town, where the haul is banked.
+## the vault banks the haul and shows the tally here; its Continue carries
+## you up to town. Game.run is null while the tally is up, so every handler
+## below checks it first (Imogen's bridge review).
 
 const BOARD_SCENE: PackedScene = preload("res://game/delve/board/fight_board.tscn")
 
@@ -17,6 +19,7 @@ var _board: FightBoard
 var _room_board: RoomBoard
 var _vault_board: VaultBoard
 var _head_up: Button
+var _tally: TallyPanel
 ## What the fights since the last stop paid, for the map and the landing.
 var _notes: PackedStringArray = []
 
@@ -59,6 +62,8 @@ func _ready() -> void:
 func _advance() -> void:
 	var run: DelveRun = Game.run
 	if run == null:
+		if Game.tally_open:
+			_show_tally()
 		return
 	for guard: int in 32:
 		match run.step:
@@ -97,7 +102,28 @@ func _advance() -> void:
 					# Refused (a transition was running): let the player retry.
 					_head_up.visible = true
 					_head_up.grab_focus()
+					return
+				_head_up.visible = false
+				_show_tally()
 				return
+
+
+## The tally over the delve screen: what came up, what the barrel took, and
+## who joins. Its Continue starts the tide up.
+func _show_tally() -> void:
+	if _tally != null:
+		return
+	_tally = TallyPanel.new()
+	_tally.name = "Tally"
+	_tally.setup(Game.data, Game.settlement)
+	_tally.continued.connect(_on_tally_continued)
+	add_child(_tally)
+	# The strip still shows the haul as carried; the tally says what came of it.
+	_strip.visible = false
+
+
+func _on_tally_continued() -> void:
+	Game.leave_tally()
 
 
 ## Shows one screen (the map, the landing, or nothing while a board or the
@@ -164,6 +190,8 @@ func _on_room_over() -> void:
 	if _room_board != null:
 		_room_board.queue_free()
 		_room_board = null
+	if Game.run == null or Game.run.room == null:
+		return
 	var played: DiceRoom = Game.run.room
 	Game.run.finish_room()
 	PlaytestLog.log_event("room_played", {"room": played.room_id, "floor": Game.run.floor_index, "payout": played.payout,
@@ -195,6 +223,8 @@ func _on_fight_over() -> void:
 	if _board != null:
 		_board.queue_free()
 		_board = null
+	if Game.run == null:
+		return
 	var enemy: String = Game.run.fight.enemy_name if Game.run.fight != null else "Fight"
 	Game.run.finish_room()
 	var found: PackedStringArray = []
@@ -207,6 +237,8 @@ func _on_fight_over() -> void:
 
 func _on_surface_pressed() -> void:
 	# Also retries coming up if an earlier try was refused after surfacing.
+	if Game.run == null:
+		return
 	if Game.run.surface():
 		PlaytestLog.log_event("landing", {"choice": "surface", "floor": Game.run.floor_index, "hp": Game.run.hp})
 		_advance()
@@ -216,6 +248,8 @@ func _on_surface_pressed() -> void:
 
 
 func _on_deeper_pressed() -> void:
+	if Game.run == null:
+		return
 	if Game.run.go_deeper():
 		PlaytestLog.log_event("landing", {"choice": "deeper", "floor": Game.run.floor_index, "hp": Game.run.hp})
 		_advance()
