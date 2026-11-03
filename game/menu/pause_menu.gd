@@ -103,10 +103,30 @@ func _volume_row(bus: String) -> Control:
 	slider.step = 0.05
 	slider.value = Settings.volumes.get(bus, 1.0)
 	slider.custom_minimum_size = Vector2(0, 40)
+	slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_style_slider(slider)
-	slider.value_changed.connect(func(value: float) -> void: Settings.set_volume(bus, value))
-	row.add_child(slider)
+	# Left and right on a pad or the keys step it by 5%, the slider's step.
+	var readout: Label = Label.new()
+	readout.name = "Readout"
+	readout.custom_minimum_size = Vector2(64, 0)
+	readout.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	readout.add_theme_font_size_override("font_size", 24)
+	readout.add_theme_color_override("font_color", INK)
+	readout.text = percent(slider.value)
+	slider.value_changed.connect(func(value: float) -> void:
+		readout.text = percent(value)
+		Settings.set_volume(bus, value))
+	var line: HBoxContainer = HBoxContainer.new()
+	line.add_theme_constant_override("separation", 12)
+	line.add_child(slider)
+	line.add_child(readout)
+	row.add_child(line)
 	return row
+
+
+## A volume as the menu reads it: "75%".
+static func percent(value: float) -> String:
+	return "%d%%" % roundi(value * 100.0)
 
 
 ## Plain ink on off-white like the buttons: a grey track, the level filled

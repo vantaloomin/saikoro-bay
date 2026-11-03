@@ -311,8 +311,15 @@ func gather_at(uid: int, moods_before: Dictionary[String, Town.Mood]) -> void:
 	if Settings.reduce_motion:
 		_pop_left = POP_SECONDS
 		return
+	# The best spots go to whoever's bubble is about to change.
 	var names: Array[String] = []
-	names.assign(from.keys())
+	var unchanged: Array[String] = []
+	for villager: String in from:
+		if moods_before.get(villager, _state.mood(_data, villager)) != _state.mood(_data, villager):
+			names.append(villager)
+		else:
+			unchanged.append(villager)
+	names.append_array(unchanged)
 	var to: Array[Vector3] = view.gather_spots(_data, _state.town, building, names.size())
 	_walk_from = from
 	_walk_to.clear()

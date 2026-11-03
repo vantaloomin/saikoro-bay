@@ -266,31 +266,72 @@ func villager_spots(data: GameData, state: GameState) -> Dictionary[String, Vect
 	return out
 
 
-## Where the town stands to see a new landmark: a row along its front (the
-## sea side, facing the camera), then down its sides and along its back,
-## a little way out and never on the sea or in another building.
+## Where the town stands to see a new landmark, best spot first (Mara's
+## #46 review): every open spot within a step or two of it, on land or a
+## path, never in a building; spots where a building would hide the
+## villager or their bubble go last, and the rest run nearest the camera
+## first. No two spots stand closer than a villager's width.
 func gather_spots(data: GameData, town: Town, building: Dictionary, count: int) -> Array[Vector3]:
 	var rect: Rect2i = Town.rect_of(data, building)
 	var candidates: Array[Vector3] = []
-	for x: int in rect.size.x:
-		candidates.append(Vector3(rect.position.x + x + 0.5, 0.06, rect.end.y + 0.4))
-	for y: int in range(rect.size.y - 1, -1, -1):
-		candidates.append(Vector3(rect.position.x - 0.4, 0.06, rect.position.y + y + 0.5))
-		candidates.append(Vector3(rect.end.x + 0.4, 0.06, rect.position.y + y + 0.5))
-	for x: int in rect.size.x:
-		candidates.append(Vector3(rect.position.x + x + 0.5, 0.06, rect.position.y - 0.4))
-	var out: Array[Vector3] = []
+	for ring: float in [0.45, 1.35]:
+		for x: int in range(-1, rect.size.x + 1):
+			candidates.append(Vector3(rect.position.x + x + 0.5, 0.06, rect.end.y + ring))
+			candidates.append(Vector3(rect.position.x + x + 0.5, 0.06, rect.position.y - ring))
+		for y: int in rect.size.y:
+			candidates.append(Vector3(rect.position.x - ring, 0.06, rect.position.y + y + 0.5))
+			candidates.append(Vector3(rect.end.x + ring, 0.06, rect.position.y + y + 0.5))
+	var eye: Vector3 = camera_transform().origin
+	var boxes: Array[AABB] = []
+	for placed: Dictionary in town.placed:
+		boxes.append(block_box(data, placed))
+	var ranked: Array[Dictionary] = []
 	for spot: Vector3 in candidates:
 		var cell: Vector2i = Vector2i(floori(spot.x), floori(spot.z))
-		if map.in_bounds(cell) and map.ground(cell) != TownMap.Ground.SEA and town.building_at(data, cell).is_empty():
-			out.append(spot)
+		if not map.in_bounds(cell) or map.ground(cell) == TownMap.Ground.SEA or not town.building_at(data, cell).is_empty():
+			continue
+		ranked.append({"spot": spot, "hidden": _hidden_by(spot, boxes, eye), "depth": eye.distance_to(spot)})
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["hidden"] != b["hidden"]:
+			return not a["hidden"]
+		return a["depth"] < b["depth"])
+	var out: Array[Vector3] = []
+	for entry: Dictionary in ranked:
+		var spot: Vector3 = entry["spot"]
+		if out.any(func(other: Vector3) -> bool: return other.distance_to(spot) < VILLAGER_SIZE.x * 1.6):
+			continue
+		out.append(spot)
 		if out.size() == count:
 			return out
 	# Crowded in: whoever is left stands in a second row at the front.
 	var i: int = 0
 	while out.size() < count:
-		out.append(Vector3(rect.position.x + 0.3 + (i % maxi(rect.size.x, 1)) * 0.9, 0.06, rect.end.y + 1.1))
+		out.append(Vector3(rect.position.x + 0.3 + (i % maxi(rect.size.x, 1)) * 0.9, 0.06, rect.end.y + 2.2))
 		i += 1
+	return out
+
+
+## Whether a building nearer the camera than `spot` covers a villager
+## standing there, bubble included, on screen.
+func _hidden_by(spot: Vector3, boxes: Array[AABB], eye: Vector3) -> bool:
+	var standing: Rect2 = screen_rect(villager_box(spot))
+	var depth: float = eye.distance_to(spot)
+	for box: AABB in boxes:
+		var nearest: Vector3 = box.get_center().clamp(box.position, box.end)
+		# The box's corner nearest the eye decides whether it's in front.
+		for corner: int in 8:
+			if eye.distance_to(box.get_endpoint(corner)) < eye.distance_to(nearest):
+				nearest = box.get_endpoint(corner)
+		if eye.distance_to(nearest) < depth and screen_rect(box).intersects(standing):
+			return true
+	return false
+
+
+## A world box as it covers the screen: the bounds of its eight corners.
+func screen_rect(box: AABB) -> Rect2:
+	var out: Rect2 = Rect2(to_screen(box.get_endpoint(0)), Vector2.ZERO)
+	for corner: int in range(1, 8):
+		out = out.expand(to_screen(box.get_endpoint(corner)))
 	return out
 
 

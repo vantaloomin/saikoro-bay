@@ -66,6 +66,7 @@ const TAB_INSET: int = 18
 const MUSIC_PATH: String = "res://content/sfw/music/town_loop.ogg"
 const MUSIC_DB: float = -14.0
 const MUSIC_FADE_SECONDS: float = 1.5
+const SHELLS_FILL_SECONDS: float = 0.5
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -105,6 +106,9 @@ var music: AudioStreamPlayer
 var staging: String = ""
 ## The landmark the town is gathering round, and its name.
 var _gathering: Dictionary = {}
+## Shells lit from the left while they fill in after the staging; -1 is all.
+var _shells_lit: int = -1
+var _shells_waited: bool = false
 
 
 func _ready() -> void:
@@ -179,17 +183,39 @@ func _show_hud() -> void:
 	_go_down.text = Game.state.go_down_label(Game.data)
 
 
-## The shell tray: hidden while the arrival is staged round a landmark,
-## then faded in (a fade isn't motion, so it fades with reduce motion too).
+## The shell tray: while the arrival is staged round a landmark the panel
+## stays but its shells wait faded (Mara's #46 review), then fill in one by
+## one when the notice line lands. It's a fade, so reduce motion keeps it.
 func _show_tray() -> void:
-	var waiting: bool = not staging.is_empty()
-	if waiting:
-		_tray_panel.visible = false
+	# Go down waits too, so nobody leaves without seeing what they'd lose.
+	_go_down.disabled = not staging.is_empty()
+	if not staging.is_empty():
+		_shells.lit = 0
+		_shells_waited = true
 		return
-	if not _tray_panel.visible:
-		_tray_panel.visible = true
-		_tray_panel.modulate.a = 0.0
-		create_tween().tween_property(_tray_panel, "modulate:a", 1.0, TownStyle.EASE_SECONDS)
+	_shells.lit = _shells_lit
+	if _shells_waited:
+		_shells_waited = false
+		_shells_lit = 0
+		var tween: Tween = create_tween()
+		tween.tween_method(_light_shells, 0.0, float(_shells.tokens.size()), SHELLS_FILL_SECONDS)
+		tween.tween_callback(_light_shells.bind(-1.0))
+
+
+func _light_shells(count: float) -> void:
+	_shells_lit = int(count) if count >= 0.0 else -1
+	if _shells != null and is_instance_valid(_shells):
+		_shells.lit = _shells_lit
+		_shells.queue_redraw()
+
+
+static func _is_press(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var button: InputEventMouseButton = event as InputEventMouseButton
+		return button.pressed and button.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]
+	if event is InputEventKey:
+		return (event as InputEventKey).pressed and not event.is_echo()
+	return event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed
 
 
 ## The notice board: newest first after a change. While picking a home it
@@ -266,6 +292,11 @@ func _show_tabs() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _board.is_gathering() and _is_press(event):
+		# Any press skips the gathering to its end (Mara's #46 review).
+		_board.stop_gathering()
+		get_viewport().set_input_as_handled()
+		return
 	var pad: bool = event is InputEventJoypadButton or event is InputEventJoypadMotion
 	if pad and (event as InputEventJoypadMotion == null or absf((event as InputEventJoypadMotion).axis_value) > 0.5):
 		_set_pad(true)
