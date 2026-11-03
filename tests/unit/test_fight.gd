@@ -5,12 +5,14 @@ extends GutTest
 ## Rule tests use fixed enemies, so tuning data/enemies.json never breaks
 ## them. Everything else comes from the shipped data files.
 const TEST_ENEMIES: Array[Dictionary] = [
-	{"id": "card_shark", "name": "Card Shark", "hp": 18, "intents": ["attack:6", "attack:4+guard:4"],
+	{"id": "card_shark", "name": "Card Shark", "tier": "regular", "hp": 18, "intents": ["attack:6", "attack:4+guard:4"],
 		"twist": "none", "twist_text": ""},
-	{"id": "hermit_croupier", "name": "Hermit Croupier", "hp": 22, "intents": ["attack:5", "attack:7"],
+	{"id": "hermit_croupier", "name": "Hermit Croupier", "tier": "regular", "hp": 22, "intents": ["attack:5", "attack:7"],
 		"twist": "house_lock", "twist_text": "t"},
-	{"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "hp": 16, "intents": ["attack:4", "attack:4", "attack:9"],
+	{"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "tier": "regular", "hp": 16, "intents": ["attack:4", "attack:4", "attack:9"],
 		"twist": "snake_eyes", "twist_text": "t"},
+	{"id": "test_elite", "name": "Test Elite", "tier": "elite", "hp": 40, "intents": ["attack:8"],
+		"twist": "none", "twist_text": ""},
 ]
 
 var data: GameData

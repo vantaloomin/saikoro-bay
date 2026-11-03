@@ -23,7 +23,7 @@ func _ready() -> void:
 func _next_fight() -> void:
 	if _board != null:
 		_board.queue_free()
-	var enemies: Array = Array(Game.data.ids("enemies"))
+	var enemies: Array = Array(DelveRun.enemy_pool(Game.data, "regular"))
 	var enemy_id: String = _rng.pick(RngStreams.Stream.ENEMIES, enemies) as String
 	var fight: Fight = Fight.create(Game.data, "fresh", enemy_id, _rng)
 	_fights += 1
