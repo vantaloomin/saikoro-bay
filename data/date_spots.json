@@ -1,0 +1,8 @@
+{
+	"schema": 1,
+	"note": "Landmarks that double as date spots (RD-2), in the order the spot picker lists them. A date can happen at one once it's placed in town. text is the picker's line. bonus is extra affection a date there adds (RD-3, better spots pay more; 0 in the slice).",
+	"items": [
+		{ "id": "cafe", "text": "Coffee, cake and a table by the window.", "bonus": 0 },
+		{ "id": "hot_spring", "text": "Warm water and a view of the bay.", "bonus": 0 }
+	]
+}

@@ -1,0 +1,148 @@
+# Shipwright: Genzo, 44. Gruff, dependable, short sentences, soft underneath.
+# Built half the boats in the bay and fixed the other half.
+# Bet lost: his hands. Koban called his best boat, the Ōkujira, a bathtub. He bet
+# his hands it could outsail anything she owned; she said they'd roll for it.
+# She rolled a six, he rolled a five. His hands have worked for the House since,
+# carving dice without him. Freed, they're his again, but stiff and shaky.
+# Koban's seal: gold coin marks on the backs of both hands.
+# Perk: Brace (start every turn with block). Second to be rescued.
+# Speaker id: shipwright. Faces: neutral, happy, tease, flustered, sad, surprised.
+
+~ rescue_start
+
+The cage here is a ship's cradle, ribs of black wood with a broad man sitting inside on an upturned bucket. His hands are carving dice, fast and neat, and dropping them on a pile at his feet. He doesn't look at them. [#face=neutral]
+shipwright: Don't mind the hands. They're on the House's clock. [#face=neutral]
+shipwright: Three locks on this cage. I built two of them. Sorry about that. [#face=tease]
+- You built your own cage?
+	shipwright: The hands did. I watched. Good joints, too. That's the worst of it. [#face=tease]
+- Any advice?
+	shipwright: The pair lock sticks. Give it both dice at once and don't be gentle. [#face=neutral]
+shipwright: Water's rising. Get on with it. Please. [#face=neutral]
+=> END
+
+~ rescue_turn
+
+% shipwright: Steady. Rushing sinks more boats than storms do. [#face=neutral]
+% shipwright: That one was close. Keep at it. [#face=neutral]
+% shipwright: My boots are wet. That's fine. I've had wet boots for twenty years. [#face=happy]
+=> END
+
+~ rescue_won
+
+The third lock gives. The cradle creaks open, and the carving stops all at once. He stares at his hands as if they belong to someone else. [#face=surprised]
+shipwright: They stopped. [#face=surprised]
+shipwright: Genzo. Shipwright. I built half the boats in this bay, and the other half I fixed. [#face=neutral]
+- What did you bet?
+	shipwright: My hands. You saw. [#face=neutral]
+- Why were your hands carving dice?
+	shipwright: Because they're not mine. Weren't. [#face=neutral]
+shipwright: The cat came up to look at the Ōkujira, my best boat, and called it a bathtub. [#face=sad]
+shipwright: I said I'd bet my hands it could outsail anything she owned. She said fine, but we roll for it. [#face=sad]
+shipwright: She rolled a six. I rolled a five. Since then my hands have worked for the House, and I've worked for nobody. [#face=sad]
+He turns his hands over. On the back of each one sits a small gold mark, round, with a square hole, like a coin pressed into the skin.
+shipwright: They're stiff. Might be a while before I can build anything worth sailing. [#face=sad]
+shipwright: Until then I can still stand in front of you. When the hits come, I'll take the first of them. [#face=neutral]
+=> END
+
+~ rescue_failed
+
+The tide covers the last lock. The cradle groans shut and sinks back into the dark, and you hear the carving start again. [#face=neutral]
+shipwright: Not your fault. These locks are well made. I'd know. [#face=happy]
+shipwright: Next tide. I'll be here. Hands'll keep busy, so take your time. [#face=neutral]
+=> END
+
+~ move_in
+
+He walks the length of the cottage, knocks on a post, and listens to it like a doctor. [#face=neutral]
+shipwright: Sound frame. Somebody built this right. [#face=neutral]
+if villager_happy
+	shipwright: And I can smell the tar from the shed. That'll do. That'll do fine. [#face=happy]
+else
+	shipwright: Bit far from the boats. Can't hear a hull being planed from here. I'll get used to it. Probably. [#face=sad]
+shipwright: I'll fix that loose step of yours at the inn. Not today. Hands still shake. [#face=neutral]
+- I'll help you fix it.
+	shipwright: You hold, I hammer. When I can hold a hammer. [#face=happy]
+- No rush.
+	shipwright: There's always a rush. The sea doesn't wait. But thank you. [#face=happy]
+=> END
+
+~ home_happy
+
+% shipwright: Heard a keel going down at the shed this morning. Best sound in the world. [#face=happy]
+% shipwright: Held a chisel for a whole minute today. Didn't drop it. [#face=tease]
+% shipwright: Good house. Good neighbors. Smells right. [#face=happy]
+% shipwright: If you see the cat, tell her the Ōkujira says hello. [#face=tease]
+=> END
+
+~ home_unhappy
+
+% shipwright: House is fine. Too quiet. I'm used to mallets. [#face=neutral]
+% shipwright: Put me by the boat shed or the net shed and I'd sleep through the night. [#face=neutral]
+% shipwright: I walk to the boats every morning anyway. Might as well live there. [#face=tease]
+=> END
+
+~ no_home
+
+% shipwright: Dock's fine. I've slept under more hulls than roofs. [#face=neutral]
+% shipwright: When you've a spare plank or four, a roof would be nice. [#face=neutral]
+=> END
+
+~ scene_invite
+
+shipwright: Come by the shed tomorrow night? [#face=flustered]
+shipwright: I built a tub. Took a month with these hands. It needs a second opinion. [#face=flustered]
+=> END
+
+~ date
+
+if spot == "hot_spring"
+	Genzo sits in the Hot Spring with a little wooden boat bobbing in front of him. He looks like a bear who's been ordered to relax. [#face=tease]
+	if dates_done > 0
+		shipwright: Back again. Good. The boat's been asking after you. [#face=happy]
+	else
+		shipwright: Don't laugh. My hands wanted something to do. [#face=tease]
+else
+	Genzo is wedged into a café chair two sizes too small, holding his teacup in both hands so it won't rattle. [#face=tease]
+	if dates_done > 0
+		shipwright: Same chair. I've made my peace with it. It hasn't made peace with me. [#face=tease]
+	else
+		shipwright: Nobody told me the chairs were built for children. [#face=tease]
+shipwright: I'm no good at this. Talking. Ask me about boats and I'll go all night. Ask me anything else and you'll get a grunt. [#face=neutral]
+- Tell me about boats, then.
+	set affection += 1
+	shipwright: You'll regret that. [#face=happy]
+	shipwright: Cedar for the hull, keyaki for the keel, and you steam the ribs until they bend the way they want to. Never force a plank. It remembers. [#face=happy]
+- I like grunts.
+	set affection += 1
+	shipwright: Hm. [#face=flustered]
+	shipwright: That was a good one. You're welcome. [#face=tease]
+- What else do you like?
+	shipwright: Mornings. Rain on a roof I built. Quiet people. [#face=neutral]
+	shipwright: Loud ones, sometimes. Depends who. [#face=flustered]
+if spot == "hot_spring"
+	The little boat drifts against your arm. He reaches for it, and his hand shakes so hard it bobs away again.
+else
+	He sets the cup down. It rattles anyway. He glares at it like a bent nail.
+shipwright: Twenty years these hands never shook. Now I can't hold a cup of tea. [#face=sad]
+- (Take his hand.)
+	set affection += 1
+	His hand is huge and rough, with pale old scars across the knuckles and the gold mark on the back. It goes still in yours.
+	shipwright: Huh. That's better. [#face=flustered]
+- They'll come back.
+	set affection += 1
+	shipwright: You say that like you know. [#face=neutral]
+	shipwright: I'll take it anyway. [#face=happy]
+- Tea's overrated.
+	shipwright: Ha! It is. Don't tell the tea stall. [#face=tease]
+shipwright: Made you something. Took four nights. Used to take an hour. [#face=flustered]
+He sets a wooden boat in front of you, no longer than your thumb. The hull's a little rough, but the lines are true.
+- What's it called?
+	shipwright: Hasn't got a name. That's your job. [#face=flustered]
+- It's beautiful.
+	set affection += 1
+	shipwright: It's lopsided. But thank you. [#face=flustered]
+if spot == "hot_spring"
+	shipwright: It floats. I checked. Twice. [#face=tease]
+else
+	shipwright: Keep it out of your tea. It'll float, but it'll sulk. [#face=tease]
+=> END

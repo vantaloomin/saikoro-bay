@@ -1,0 +1,16 @@
+[remap]
+
+importer="dialogue_manager"
+importer_version=18
+type="Resource"
+uid="uid://b4b8mmbggyjhb"
+path="res://.godot/imported/shipwright.dialogue-1041695e3d3a3e719a89ecaf70ad1aa2.tres"
+
+[deps]
+
+source_file="res://dialogue/villagers/shipwright.dialogue"
+dest_files=["res://.godot/imported/shipwright.dialogue-1041695e3d3a3e719a89ecaf70ad1aa2.tres"]
+
+[params]
+
+defaults=true

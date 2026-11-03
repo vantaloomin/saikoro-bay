@@ -1,0 +1,16 @@
+[remap]
+
+importer="dialogue_manager"
+importer_version=18
+type="Resource"
+uid="uid://bal60l1i4rxck"
+path="res://.godot/imported/pearl_diver.dialogue-c38cb1774e31b85b19048d6197451137.tres"
+
+[deps]
+
+source_file="res://dialogue/villagers/pearl_diver.dialogue"
+dest_files=["res://.godot/imported/pearl_diver.dialogue-c38cb1774e31b85b19048d6197451137.tres"]
+
+[params]
+
+defaults=true

@@ -92,6 +92,16 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"id": "id", "hp": "int", "dice": "ref_list:dice", "slots": "ref_list:slots",
 		"rerolls_per_turn": "int", "unused_die_block": "int",
 	},
+	"dates": {
+		"id": "id", "villager": "ref:villagers", "script": "string", "actions": "int",
+		"finish_gain": "int", "max_gain": "int",
+	},
+	"date_spots": {
+		"id": "ref:landmarks", "text": "string?", "bonus": "int",
+	},
+	"affection": {
+		"id": "id", "name": "string", "points": "int", "unlock": "enum:none|scene", "text": "string?",
+	},
 }
 
 var errors: PackedStringArray = []
@@ -305,6 +315,7 @@ func _check_rows() -> void:
 					func(face: Variant) -> bool: return int(face) < 0 or int(face) > Vault.MAX_FACE):
 				errors.append("vaults \"%s\": die \"%s\" has a face outside 0-%d" % [id, die_id, Vault.MAX_FACE])
 	_check_town()
+	_check_dates()
 	for id: String in ids("dice_rooms"):
 		var room_row: Dictionary = row("dice_rooms", id)
 		if (room_row["turns"] as int) < 1 or (room_row["slots"] as Array).is_empty():
@@ -437,6 +448,34 @@ func _check_town() -> void:
 		elif villager["wish"] == "sea" and not map.lots.any(
 				func(lot: Rect2i) -> bool: return lot.end.y == map.land_rows):
 			errors.append("villagers \"%s\": a sea wish needs a lot beside the sea" % id)
+
+
+## Dates, date spots and affection milestones (M5: RD-1, RD-2, RD-5).
+func _check_dates() -> void:
+	var dated: Dictionary[String, String] = {}
+	for id: String in ids("dates"):
+		var date: Dictionary = row("dates", id)
+		var villager: String = date["villager"]
+		if dated.has(villager):
+			errors.append("dates \"%s\": %s already has date \"%s\"" % [id, villager, dated[villager]])
+		dated[villager] = id
+		for field: String in ["actions", "finish_gain", "max_gain"]:
+			if (date[field] as int) < 0:
+				errors.append("dates \"%s\": %s can't be negative" % [id, field])
+		# Dates are for every content level, so their scripts never live
+		# with the adult files the SFW build leaves out.
+		var script: String = date["script"]
+		if not script.begins_with("res://dialogue/") or not script.ends_with(".dialogue"):
+			errors.append("dates \"%s\": script must be a res://dialogue/....dialogue file" % id)
+	for id: String in ids("date_spots"):
+		if (row("date_spots", id)["bonus"] as int) < 0:
+			errors.append("date_spots \"%s\": bonus can't be negative" % id)
+	var last: int = 0
+	for id: String in ids("affection"):
+		var points: int = row("affection", id)["points"]
+		if points <= last:
+			errors.append("affection \"%s\": milestones need points of at least 1, rising in file order" % id)
+		last = maxi(last, points)
 
 
 func _check_unlock(id: String, building: Dictionary) -> void:
