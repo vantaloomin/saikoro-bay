@@ -5,6 +5,10 @@ extends Button
 ## seal sits at its left; pressing it stamps once and disables the button
 ## until the screen re-arms it, so a double click can't spend twice
 ## (Imogen's rule: the stamp waits for the sim's answer).
+##
+## `stamped` fires when the seal touches the paper, at the bottom of the
+## punch, so the build and its sound land on that frame (Mara's #44
+## review); with reduce motion there's no punch and it fires at once.
 
 signal stamped
 
@@ -32,12 +36,14 @@ func _stamp() -> void:
 		return
 	disabled = true
 	queue_redraw()
-	if not Settings.reduce_motion and is_inside_tree():
-		pivot_offset = size / 2.0
-		var tween: Tween = create_tween()
-		tween.tween_property(self, "scale", Vector2(0.96, 0.96), PUNCH_SECONDS / 2.0)
-		tween.tween_property(self, "scale", Vector2.ONE, PUNCH_SECONDS / 2.0)
-	stamped.emit()
+	if Settings.reduce_motion or not is_inside_tree():
+		stamped.emit()
+		return
+	pivot_offset = size / 2.0
+	var tween: Tween = create_tween()
+	tween.tween_property(self, "scale", Vector2(0.96, 0.96), PUNCH_SECONDS / 2.0)
+	tween.tween_callback(stamped.emit)
+	tween.tween_property(self, "scale", Vector2.ONE, PUNCH_SECONDS / 2.0)
 
 
 func _draw() -> void:

@@ -20,11 +20,17 @@ const FILL: Color = Color(0.29, 0.62, 0.64, 0.5)
 var _holding: bool = false
 var _progress: float = 0.0
 var _flash: float = 0.0
+## The rising tone under the fill (Mara's #44 review: it follows the fill
+## and falls away on an early release, never plays out on its own).
+var _tone: AudioStreamPlayer
 
 
 func _ready() -> void:
 	button_down.connect(start_hold)
 	button_up.connect(stop_hold)
+	_tone = AudioStreamPlayer.new()
+	_tone.stream = TownSounds.stream(TownSounds.HOLD)
+	add_child(_tone)
 	set_process(false)
 
 
@@ -92,7 +98,26 @@ func advance(seconds: float) -> void:
 		_progress = maxf(_progress - seconds / DRAIN_SECONDS, 0.0)
 	if not _holding and _progress <= 0.0 and _flash <= 0.0:
 		set_process(false)
+	_follow_fill()
 	queue_redraw()
+
+
+## How loud the hold's tone is, 0 to 1: the fill, rising a little faster.
+func tone_level() -> float:
+	return sqrt(_progress) if _tone != null and _tone.playing else 0.0
+
+
+func _follow_fill() -> void:
+	if _tone == null:
+		return
+	if _progress <= 0.0:
+		_tone.stop()
+		return
+	if not _tone.playing:
+		_tone.play()
+	# Up a fifth across the fill, from a quiet start.
+	_tone.pitch_scale = 1.0 + 0.5 * _progress
+	_tone.volume_db = linear_to_db(maxf(sqrt(_progress), 0.001)) - 14.0
 
 
 func _draw() -> void:

@@ -198,7 +198,10 @@ func test_a_build_goes_list_card_carry_stamp() -> void:
 	stamp.pressed.emit()
 	assert_true(stamp.disabled, "the stamp locks itself on the first press (Imogen's #42 audit)")
 	stamp.pressed.emit()
+	assert_eq(Game.state.town.placed.size(), 0, "the build waits for the seal to touch the paper")
+	await wait_seconds(HankoButton.PUNCH_SECONDS)
 	assert_eq(Game.state.town.placed.size(), 1, "one stamp, one build")
+	assert_eq(town.sounds.played.count("stamp"), 1, "the stamp sounds once, as the seal lands")
 	assert_eq(Game.state.town.actions_left, 3, "one shell spent, once")
 	assert_eq(Game.state.resource("driftwood"), 16)
 	assert_eq(town.sheet, {})
@@ -367,6 +370,7 @@ func test_a_new_home_says_who_moved_in() -> void:
 	town.start_carry("cottage")
 	board._pick_at(_cell_point(board, Vector2i(1, 1)))
 	(town.find_child("Stamp", true, false) as HankoButton).pressed.emit()
+	await wait_seconds(HankoButton.PUNCH_SECONDS)
 	var said: bool = false
 	for label: Node in (town.get_node("%Notice") as Control).find_children("*", "Label", true, false):
 		said = said or (label as Label).text == TownScreen.MOVED_IN % ["Kitsune shrine keeper", "Cottage"]
@@ -404,3 +408,35 @@ func test_the_open_tab_sits_flush_on_its_sheet() -> void:
 	assert_eq(shut.edge_width, 0.0, "a closed tab is flat, with no border")
 	assert_eq(town._tabs[TownScreen.TAB_NOTICE].get_theme_stylebox("pressed").get("fill"), TownStyle.DRIFTWOOD,
 		"the notice tab is the board's driftwood")
+
+
+func test_the_town_sounds_like_wood_and_paper() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	assert_true(town.music.playing, "the town's loop plays")
+	assert_true((town.music.stream as AudioStreamOggVorbis).loop, "and loops")
+	town.open_build_list()
+	town.start_carry("cottage")
+	board._pick_at(_cell_point(board, Vector2i(4, 2)))
+	assert_eq(town.sounds.played, ["paper", "lift", "refuse"] as Array[String], "a path is a soft no")
+	for cue: String in TownSounds.CUES:
+		var length: float = TownSounds.stream(cue).get_length()
+		assert_between(length, 0.03, 1.7, "%s is short" % cue)
+
+
+func test_the_hold_tone_follows_the_fill() -> void:
+	var town: TownScreen = _open()
+	var hold: HoldButton = town.get_node("%GoDown") as HoldButton
+	hold.set_process(false)
+	hold.start_hold()
+	hold.advance(HoldButton.HOLD_SECONDS * 0.4)
+	var rising: float = hold.tone_level()
+	assert_gt(rising, 0.0, "holding sounds")
+	hold.advance(HoldButton.HOLD_SECONDS * 0.2)
+	assert_gt(hold.tone_level(), rising, "and rises with the fill")
+	hold.stop_hold()
+	hold.advance(HoldButton.DRAIN_SECONDS * 0.5)
+	assert_lt(hold.tone_level(), rising, "letting go early falls away with the fill")
+	hold.advance(HoldButton.DRAIN_SECONDS)
+	assert_eq(hold.tone_level(), 0.0, "and stops, never plays out")
