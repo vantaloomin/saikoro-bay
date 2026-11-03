@@ -41,6 +41,7 @@ python3 tools/lint_content.py                               # adult assets only 
 godot --headless --path . --import                          # first run only
 godot --headless --path . -s res://tools/check_scripts.gd   # every script compiles
 godot --headless --path . -s res://addons/gut/gut_cmdln.gd  # tests (GUT)
+godot --headless --path . -s res://tools/check_maps.gd      # delve maps follow every rule (10,000 seeds)
 ```
 
 The balance bots play delves across thousands of seeds and print a JSON report (clear rate, turns, fights reached, HP lost per enemy, and a determinism check). `greedy` plays like a new player and is the floor; `planner` tries every placement and weighs rerolls, and plays like a strong player. CI fails if either leaves its band.

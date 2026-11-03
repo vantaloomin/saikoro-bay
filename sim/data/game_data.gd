@@ -49,6 +49,19 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"id": "id", "name": "string", "hp": "int", "intents": "string_list",
 		"twist": "enum:none|house_lock|snake_eyes", "twist_text": "string?",
 	},
+	"delve": {
+		"id": "id", "floors": "int", "rows_per_floor": "int",
+		"width_two_weight": "int", "width_three_weight": "int",
+		"fight_weight": "int", "treasure_weight": "int", "rest_weight": "int",
+		"max_fight_streak": "int", "reveal_rows": "int", "redraw_attempts": "int",
+		"fallback_koban_coins": "int", "fallback_driftwood": "int",
+	},
+	"resources": {
+		"id": "id", "name": "string",
+	},
+	"landmarks": {
+		"id": "id", "name": "string",
+	},
 	"loadouts": {
 		"id": "id", "hp": "int", "dice": "ref_list:dice", "slots": "ref_list:slots",
 		"rerolls_per_turn": "int", "unused_die_block": "int",

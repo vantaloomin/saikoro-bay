@@ -1,0 +1,8 @@
+{
+	"schema": 1,
+	"note": "Landmarks won in Koban's vault (LM-1, LM-2). Two in the slice; both double as date spots.",
+	"items": [
+		{ "id": "cafe", "name": "Café" },
+		{ "id": "hot_spring", "name": "Hot Spring" }
+	]
+}
