@@ -1,5 +1,7 @@
 # Adult content
 
+**This folder is local-only.** Everything in it except this README is gitignored, because the repo is public. The files live on the maintainer's PC with backups, and full (non-SFW) builds are only made there. A clone, CI or any other machine has an empty folder here, and the game plays every scene at SFW.
+
 Everything that may only appear at the Suggestive or Full content level lives here, and only here.
 
 - SFW export presets exclude this whole folder, so a SFW build can't contain any of it.

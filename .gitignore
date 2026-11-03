@@ -62,3 +62,10 @@ builds/
 dist/
 export/
 exports/
+
+# Adult art never enters git (the repo is public). It lives only on the
+# maintainer's PC, with backups; full builds are made there. CI and every
+# clone see SFW content only. Source art lives outside the repo entirely.
+content/adult/*
+!content/adult/README.md
+art-src/
