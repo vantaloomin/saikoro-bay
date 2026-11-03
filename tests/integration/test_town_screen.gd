@@ -250,15 +250,99 @@ func test_a_won_landmark_waits_on_arrival_and_places_free() -> void:
 	var town: TownScreen = _open()
 	var board: TownBoard = town.get_node("%Board") as TownBoard
 	assert_eq(town.sheet, {"kind": "building", "id": "hot_spring"}, "the first thing on arrival (LM-5)")
+	var tray: Control = town.get_node("%Tray")
+	assert_false(tray.visible, "the visit's budget waits for the landmark")
 	town.start_carry("hot_spring")
+	assert_false(tray.visible, "still waiting while it's carried")
 	board._pick_at(_cell_point(board, Vector2i(10, 0)))
 	assert_eq(Game.state.town.count("hot_spring"), 1, "placed with no stamp: it's free")
 	assert_eq(Game.state.town.actions_left, 4, "and costs no action")
 	assert_eq(town.sheet, {})
-	var said: bool = false
+	assert_true(_notice_says(town, TownScreen.CHEER % "Hot Spring"), "with nobody in town yet, it's just open")
+	assert_true(tray.visible, "then the budget appears")
+	assert_true(town.sounds.played.has("chimes"))
+
+
+func _notice_says(town: TownScreen, line: String) -> bool:
 	for label: Node in (town.get_node("%Notice") as Control).find_children("*", "Label", true, false):
-		said = said or (label as Label).text == TownScreen.CHEER % "Hot Spring"
-	assert_true(said, "the notice board says the town came out")
+		if (label as Label).text == line:
+			return true
+	return false
+
+
+func test_the_town_walks_over_to_see_a_landmark_and_home_again() -> void:
+	Game.state._landmarks.append("hot_spring")
+	Game.state._villagers.append("pearl_diver")
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 7))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	var home: Vector3 = board.view.villager_spots(Game.data, Game.state)["pearl_diver"]
+	var tray: Control = town.get_node("%Tray")
+	town.start_carry("hot_spring")
+	board._pick_at(_cell_point(board, Vector2i(10, 0)))
+	assert_true(board.is_gathering(), "the town comes out to see it")
+	assert_false(tray.visible, "the shells wait until they have")
+	board.advance_gathering(TownBoard.WALK_SECONDS / 2.0)
+	var halfway: Vector3 = board.view.villager_spots(Game.data, Game.state)["pearl_diver"]
+	assert_ne(halfway, home, "on the way")
+	board.advance_gathering(TownBoard.WALK_SECONDS / 2.0)
+	var there: Vector3 = board.view.villager_spots(Game.data, Game.state)["pearl_diver"]
+	var rect: Rect2i = Town.rect_of(Game.data, Game.state.town.entry(Game.state.town.placed.back()["uid"]))
+	assert_true(Rect2(rect).grow(1.0).has_point(Vector2(there.x, there.z)), "standing by the Hot Spring")
+	assert_eq(board.bubble_reveal, 0.0, "the bubble hasn't popped yet")
+	assert_false(_notice_says(town, TownScreen.GATHERED % "Hot Spring"), "the notice board waits for the pop")
+	board.advance_gathering(TownBoard.POP_SECONDS)
+	assert_eq(board.bubble_reveal, 1.0)
+	assert_true(_notice_says(town, TownScreen.GATHERED % "Hot Spring"), "then says the town came out")
+	assert_true(tray.visible, "and the budget appears")
+	board.advance_gathering(TownBoard.GATHER_HOLD_SECONDS)
+	board.advance_gathering(TownBoard.WALK_SECONDS)
+	assert_false(board.is_gathering())
+	assert_eq(board.view.villager_spots(Game.data, Game.state)["pearl_diver"], home, "and home again")
+
+
+func test_with_reduce_motion_nobody_walks_and_bubbles_crossfade() -> void:
+	Settings.reduce_motion = true
+	Game.state._landmarks.append("hot_spring")
+	Game.state._villagers.append("pearl_diver")
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 7))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	var home: Vector3 = board.view.villager_spots(Game.data, Game.state)["pearl_diver"]
+	town.start_carry("hot_spring")
+	board._pick_at(_cell_point(board, Vector2i(10, 0)))
+	assert_eq(board.view.villager_spots(Game.data, Game.state)["pearl_diver"], home, "no walk")
+	assert_true(board.is_gathering(), "but the bubbles still change in turn")
+	board.advance_gathering(TownBoard.POP_SECONDS)
+	assert_true(_notice_says(town, TownScreen.GATHERED % "Hot Spring"))
+	assert_false(board.is_gathering(), "no stay and no walk home")
+	Settings.reduce_motion = false
+
+
+func test_putting_a_landmark_off_shows_the_budget() -> void:
+	Game.state._landmarks.append("hot_spring")
+	var town: TownScreen = _open()
+	town.close_sheet()
+	assert_true((town.get_node("%Tray") as Control).visible, "Later: the shells appear")
+	assert_eq(town.staging, "")
+
+
+func test_carrying_mid_gathering_sends_everyone_home() -> void:
+	_rich()
+	Game.state._landmarks.append("hot_spring")
+	Game.state._villagers.append("pearl_diver")
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 7))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	var home: Vector3 = board.view.villager_spots(Game.data, Game.state)["pearl_diver"]
+	town.start_carry("hot_spring")
+	board._pick_at(_cell_point(board, Vector2i(10, 0)))
+	board.advance_gathering(TownBoard.WALK_SECONDS / 2.0)
+	town.start_carry("lantern_post")
+	assert_false(board.is_gathering())
+	assert_eq(board.view.villager_spots(Game.data, Game.state)["pearl_diver"], home)
+	assert_true(_notice_says(town, TownScreen.GATHERED % "Hot Spring") or town._cheer == TownScreen.GATHERED % "Hot Spring",
+		"cut short, it still says the town came out")
 
 
 func test_moving_is_free_and_the_last_move_undoes() -> void:
@@ -451,3 +535,23 @@ func test_music_and_sounds_each_have_their_own_volume() -> void:
 	for bus: String in Settings.BUSES:
 		assert_gt(AudioServer.get_bus_index(bus), 0, "the %s bus exists" % bus)
 		assert_not_null(town.get_node("%PauseMenu").find_child(bus + "Volume", true, false), "the pause menu has a %s slider" % bus)
+
+
+func test_names_keep_off_the_swap_preview() -> void:
+	Game.state._villagers.append("pearl_diver")
+	Game.state._villagers.append("shipwright")
+	var sea: int = Game.state.town.place("cottage", Vector2i(0, 7))
+	var inland: int = Game.state.town.place("cottage", Vector2i(1, 6))
+	Game.state.town.homes["pearl_diver"] = inland
+	Game.state.town.homes["shipwright"] = sea
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.pick_home_for("pearl_diver")
+	board.hovered = {"kind": "building", "uid": sea}
+	var swap: Dictionary = board.swap_tag()
+	assert_false(swap.is_empty())
+	var loses: bool = Game.state.swap_moods(Game.data, "pearl_diver", sea).values().any(
+		func(mood: Town.Mood) -> bool: return mood != Town.Mood.HAPPY)
+	assert_eq(swap["mood"], Town.Mood.UNHAPPY if loses else Town.Mood.HAPPY, "the icon says gain or loss")
+	for tag: Dictionary in board.map_tags(board.view.villager_spots(Game.data, Game.state)):
+		assert_false((tag["rect"] as Rect2).intersects(swap["rect"]), "%s keeps off the swap preview" % tag["text"])

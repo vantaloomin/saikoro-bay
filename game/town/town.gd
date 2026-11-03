@@ -20,6 +20,12 @@ extends Control
 ## Free things never ask: placing a won landmark (the town celebrates),
 ## moving a building (with an undo for the last move), and moving a
 ## villager to another home.
+##
+## Landmark arrival (PR 5c, LM-5): a landmark won on the last delve is the
+## first thing on arrival, and the visit's budget (the shell tray) waits
+## until it's placed or put off. Placed, the town walks over to see it,
+## the changed bubbles pop, and only then does the notice board say
+## everyone came out, with the shells after it.
 
 ## What the notice board says about the last delve. An abandoned delve is
 ## said plainly, so a player who quit mid-delve knows what it cost.
@@ -47,6 +53,7 @@ const PICK_A_SPOT: String = "Pick a spot"
 ## Until 5c stages the villagers walking over, the notice only says what
 ## you can see (Mara's #42 review).
 const CHEER: String = "The %s is open."
+const GATHERED: String = "Everyone came out to see the %s."
 const MOVED_IN: String = "The %s moved into the new %s."
 const TAB_NOTICE: String = "Notice board"
 const TAB_BUILD: String = "Build"
@@ -93,6 +100,11 @@ var _tabs: Dictionary[String, Button] = {}
 var _column_gap: Control
 var sounds: TownSounds
 var music: AudioStreamPlayer
+## The landmark the arrival is staged round: the tray waits while it's
+## the open card, being carried, or the town is gathering to see it.
+var staging: String = ""
+## The landmark the town is gathering round, and its name.
+var _gathering: Dictionary = {}
 
 
 func _ready() -> void:
@@ -125,19 +137,23 @@ func _ready() -> void:
 	_board.picked.connect(_on_picked)
 	_board.spot_chosen.connect(_on_spot_chosen)
 	_board.spot_refused.connect(sounds.play.bind("refuse").unbind(1))
+	_board.gathered.connect(_on_gathered)
 	_board.home_chosen.connect(_on_home_chosen)
 	_board.cancelled.connect(back)
 	_card.resized.connect(_aim_leader)
 	_card.visibility_changed.connect(_aim_leader)
 	get_viewport().size_changed.connect(_fit_hud)
 	_show_hint()
+	var waiting: Array[String] = Game.state.landmarks_waiting()
+	if not waiting.is_empty():
+		staging = waiting[0]
+		sheet = {"kind": "building", "id": staging}
 	refresh()
 	_fit_hud.call_deferred()
 	SceneFlow.focus_default()
 	# A landmark won on the last delve is the first thing on arrival (LM-5).
-	var waiting: Array[String] = Game.state.landmarks_waiting()
-	if not waiting.is_empty():
-		open_building(waiting[0])
+	if not staging.is_empty():
+		_focus_first.call_deferred()
 
 
 ## Redraws everything from the sim.
@@ -159,7 +175,21 @@ func _show_hud() -> void:
 		# Said once, here, not on every card (spec section 3).
 		tray.append(TownStyle.label(ShellTray.describe(Game.state), TownStyle.SMALL))
 	_fill(_tray_panel, "Actions", tray)
+	_show_tray()
 	_go_down.text = Game.state.go_down_label(Game.data)
+
+
+## The shell tray: hidden while the arrival is staged round a landmark,
+## then faded in (a fade isn't motion, so it fades with reduce motion too).
+func _show_tray() -> void:
+	var waiting: bool = not staging.is_empty()
+	if waiting:
+		_tray_panel.visible = false
+		return
+	if not _tray_panel.visible:
+		_tray_panel.visible = true
+		_tray_panel.modulate.a = 0.0
+		create_tween().tween_property(_tray_panel, "modulate:a", 1.0, TownStyle.EASE_SECONDS)
 
 
 ## The notice board: newest first after a change. While picking a home it
@@ -311,6 +341,16 @@ func _start_music() -> void:
 	create_tween().tween_property(music, "volume_db", MUSIC_DB, MUSIC_FADE_SECONDS)
 
 
+## The loop dips 3 dB under the landmark chimes (Mara's #45 review).
+func _duck_music() -> void:
+	if music == null or not music.playing:
+		return
+	var tween: Tween = create_tween()
+	tween.tween_property(music, "volume_db", MUSIC_DB - 3.0, 0.1)
+	tween.tween_interval(1.4)
+	tween.tween_property(music, "volume_db", MUSIC_DB, 0.6)
+
+
 func _fade_music() -> void:
 	if music != null and music.playing:
 		create_tween().tween_property(music, "volume_db", -60.0, MUSIC_FADE_SECONDS / 2.0)
@@ -440,6 +480,9 @@ func _on_stamped() -> void:
 ## Builds through the one sim call; on a refusal the stamp's card lists why.
 func _place(building: String, cell: Vector2i) -> void:
 	var homeless: Array[String] = Game.state.homeless()
+	var moods_before: Dictionary[String, Town.Mood] = {}
+	for villager: String in Game.state.villagers():
+		moods_before[villager] = Game.state.mood(Game.data, villager)
 	var refusals: Array[Dictionary] = Game.build(building, cell)
 	if not refusals.is_empty():
 		sounds.play("refuse")
@@ -452,9 +495,9 @@ func _place(building: String, cell: Vector2i) -> void:
 	# A stamped build sounds the stamp; a free one is set down.
 	sounds.play("stamp" if sheet.get("kind", "") == "confirm" else "set_down")
 	if Game.data.row("buildings", building)["kind"] == "landmark":
-		sounds.play("chimes")
-		_finish_change({"kind": "building", "uid": uid}, CHEER % BuildList.card_for(Game.data, Game.state, building)["title"])
-		_board.celebrate(uid)
+		_gathering = {"uid": uid, "name": BuildList.card_for(Game.data, Game.state, building)["title"]}
+		_finish_change({"kind": "building", "uid": uid}, "")
+		_board.gather_at(uid, moods_before)
 	else:
 		var line: String = ""
 		for villager: String in homeless:
@@ -462,6 +505,21 @@ func _place(building: String, cell: Vector2i) -> void:
 				line = MOVED_IN % [Game.data.row("villagers", villager).get("role", villager),
 					BuildList.card_for(Game.data, Game.state, building)["title"]]
 		_finish_change({"kind": "building", "uid": uid}, line)
+
+
+## Everyone has come out and the bubbles have popped: the chimes, the
+## paper burst, the notice board's line, and then the shells.
+func _on_gathered() -> void:
+	if _gathering.is_empty():
+		return
+	var uid: int = _gathering["uid"]
+	var line: String = GATHERED if not Game.state.villagers().is_empty() else CHEER
+	_cheer = line % _gathering["name"]
+	_gathering = {}
+	sounds.play("chimes")
+	_duck_music()
+	_board.celebrate(uid)
+	_show_right_column()
 
 
 func undo_move() -> void:
@@ -694,6 +752,9 @@ func _fill(panel: PanelContainer, title: String, children: Array[Control]) -> vo
 ## selection's card. The build sheets take the notice board's room.
 func _show_right_column() -> void:
 	var kind: String = str(sheet.get("kind", ""))
+	if not staging.is_empty() and _gathering.is_empty() and not (kind in ["building", "carry"] and sheet.get("id", "") == staging):
+		# Put off, or placed and gathered: the visit's budget appears.
+		staging = ""
 	_show_hud()
 	_show_tabs()
 	_notice.visible = current_tab() == TAB_NOTICE

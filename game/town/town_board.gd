@@ -26,6 +26,9 @@ signal spot_chosen(cell: Vector2i)
 signal spot_refused(cell: Vector2i)
 signal home_chosen(uid: int)
 signal cancelled
+## The town has gathered round a new landmark and every changed bubble has
+## popped: the screen can say so (gather_at).
+signal gathered
 
 enum Mode { LOOK, CARRY, PICK_HOME }
 
@@ -39,6 +42,15 @@ const DRAG_SLOP: float = 6.0
 const WHEEL_ZOOM: float = 1.12
 const TRIGGER_ZOOM: float = 1.8
 const PARTY_SECONDS: float = 1.6
+## Coming out to see a new landmark (LM-5, Mara's #44 review): the walk
+## there, the bubbles popping as moods change, how long they stay, and
+## the walk home.
+const WALK_SECONDS: float = 1.2
+const POP_SECONDS: float = 0.35
+const GATHER_HOLD_SECONDS: float = 2.5
+## A name tag pushed down more than this many of its own heights goes
+## above its owner's head instead.
+const FAR_PUSH: float = 2.0
 ## Teal for "this would make someone happy": the happy bubble's color.
 const WISH_FILL: Color = Color(0.25, 0.6, 0.5, 0.35)
 const SWAP_MOOD: Dictionary[Town.Mood, String] = {
@@ -87,6 +99,19 @@ var home_villager: String = ""
 ## A little paper burst over a new landmark: seconds left, and where.
 var _party_left: float = 0.0
 var _party_at: Vector3 = Vector3.ZERO
+## The gathering: where each villager walks from and to, seconds left of
+## the walk, of the pop and of the stay, and each mood before the landmark.
+var _walk_from: Dictionary[String, Vector3] = {}
+var _walk_to: Dictionary[String, Vector3] = {}
+var _walk_left: float = 0.0
+var _going_home: bool = false
+var _pop_left: float = 0.0
+var _stay_left: float = 0.0
+var _moods_before: Dictionary[String, Town.Mood] = {}
+var _gather_pending: bool = false
+## 0 while a changed bubble still shows the old mood, 1 once the new one
+## has popped in.
+var bubble_reveal: float = 1.0
 
 
 func _ready() -> void:
@@ -175,6 +200,7 @@ func set_hud(rects: Array[Rect2]) -> void:
 ## Picks up `building_id` to place it, or placed building `lifted_uid` to
 ## move it. The ghost follows the pointer (or the cursor) from now on.
 func start_carry(building_id: String, lifted_uid: int = 0) -> void:
+	stop_gathering()
 	mode = Mode.CARRY
 	carry_building = building_id
 	carry_lifted = lifted_uid
@@ -219,6 +245,7 @@ func stop_mode() -> void:
 
 func start_home_pick(villager: String) -> void:
 	stop_mode()
+	stop_gathering()
 	mode = Mode.PICK_HOME
 	home_villager = villager
 	redraw_marks()
@@ -264,6 +291,107 @@ func celebrate(uid: int) -> void:
 	var box: AABB = TownView.block_box(_data, building)
 	_party_at = Vector3(box.get_center().x, box.end.y, box.get_center().z)
 	_party_left = PARTY_SECONDS
+
+
+## The town comes out to see landmark `uid`, just placed: everyone walks
+## to stand round it, then each bubble whose mood changed pops from the
+## old mood (`moods_before`) to the new, then `gathered` fires. After a
+## short stay they walk home. With reduce motion nobody walks and the
+## changed bubbles crossfade.
+func gather_at(uid: int, moods_before: Dictionary[String, Town.Mood]) -> void:
+	stop_gathering()
+	var building: Dictionary = _state.town.entry(uid)
+	var from: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
+	_moods_before = moods_before
+	_gather_pending = true
+	if from.is_empty() or building.is_empty():
+		_pop_done()
+		return
+	bubble_reveal = 0.0
+	if Settings.reduce_motion:
+		_pop_left = POP_SECONDS
+		return
+	var names: Array[String] = []
+	names.assign(from.keys())
+	var to: Array[Vector3] = view.gather_spots(_data, _state.town, building, names.size())
+	_walk_from = from
+	_walk_to.clear()
+	for i: int in names.size():
+		_walk_to[names[i]] = to[i]
+	_going_home = false
+	_walk_left = WALK_SECONDS
+
+
+func is_gathering() -> bool:
+	return _walk_left > 0.0 or _pop_left > 0.0 or _stay_left > 0.0
+
+
+## Moves the gathering on by `seconds`: the walk, then the pop, then the
+## stay, then the walk home.
+func advance_gathering(seconds: float) -> void:
+	if _walk_left > 0.0:
+		_walk_left = maxf(_walk_left - seconds, 0.0)
+		var t: float = smoothstep(0.0, 1.0, 1.0 - _walk_left / WALK_SECONDS)
+		for villager: String in _walk_to:
+			var start: Vector3 = _walk_from.get(villager, _walk_to[villager])
+			var spot: Vector3 = start.lerp(_walk_to[villager], t)
+			# A little bob in the step, so it reads as a walk.
+			spot.y += absf(sin(t * PI * 6.0)) * 0.05 if _walk_left > 0.0 else 0.0
+			view.walking[villager] = spot
+			diorama.move_villager(villager, spot)
+		if _walk_left <= 0.0:
+			if _going_home:
+				view.walking.clear()
+				diorama.show_town(_data, view, _state, carry_lifted if mode == Mode.CARRY else 0)
+			else:
+				_pop_left = POP_SECONDS
+		redraw_marks()
+	elif _pop_left > 0.0:
+		_pop_left = maxf(_pop_left - seconds, 0.0)
+		bubble_reveal = 1.0 - _pop_left / POP_SECONDS
+		if _pop_left <= 0.0:
+			_pop_done()
+		redraw_marks()
+	elif _stay_left > 0.0:
+		_stay_left = maxf(_stay_left - seconds, 0.0)
+		if _stay_left <= 0.0:
+			_walk_home()
+
+
+## Everyone back where they live at once: a carry or a home pick starting,
+## or a new gathering. A gathering cut short still says it gathered.
+func stop_gathering() -> void:
+	var was_pending: bool = _gather_pending
+	_walk_left = 0.0
+	_pop_left = 0.0
+	_stay_left = 0.0
+	bubble_reveal = 1.0
+	if not view.walking.is_empty():
+		view.walking.clear()
+		if _state != null:
+			diorama.show_town(_data, view, _state, carry_lifted if mode == Mode.CARRY else 0)
+	if was_pending:
+		_pop_done()
+	redraw_marks()
+
+
+func _pop_done() -> void:
+	bubble_reveal = 1.0
+	if not view.walking.is_empty():
+		_stay_left = GATHER_HOLD_SECONDS
+	if _gather_pending:
+		_gather_pending = false
+		gathered.emit()
+
+
+func _walk_home() -> void:
+	_walk_from = view.walking.duplicate()
+	var walking: Dictionary[String, Vector3] = view.walking
+	view.walking = {}
+	_walk_to = view.villager_spots(_data, _state)
+	view.walking = walking
+	_going_home = true
+	_walk_left = WALK_SECONDS
 
 
 func _still_there(hit: Dictionary) -> bool:
@@ -379,6 +507,8 @@ func _process(delta: float) -> void:
 	if _party_left > 0.0:
 		_party_left = maxf(_party_left - delta, 0.0)
 		_overlay.queue_redraw()
+	if is_gathering():
+		advance_gathering(delta)
 	var all_names: bool = Input.is_key_pressed(KEY_ALT) or Input.is_joy_button_pressed(0, JOY_BUTTON_LEFT_STICK)
 	if all_names != show_all_names:
 		show_all_names = all_names
@@ -509,7 +639,29 @@ func _draw_bubbles() -> void:
 		return
 	var rects: Dictionary[String, Rect2] = bubble_rects(view.villager_spots(_data, _state))
 	for villager: String in rects:
-		_bubbles.draw_texture_rect(_bubble_textures[_state.mood(_data, villager)], rects[villager], false)
+		var now: Town.Mood = _state.mood(_data, villager)
+		var before: Town.Mood = _moods_before.get(villager, now)
+		if bubble_reveal >= 1.0 or before == now:
+			_bubbles.draw_texture_rect(_bubble_textures[now], rects[villager], false)
+		elif Settings.reduce_motion:
+			# A crossfade from the old mood to the new.
+			_bubbles.draw_texture_rect(_bubble_textures[before], rects[villager], false, Color(1, 1, 1, 1.0 - bubble_reveal))
+			_bubbles.draw_texture_rect(_bubble_textures[now], rects[villager], false, Color(1, 1, 1, bubble_reveal))
+		else:
+			# The old bubble shrinks away and the new one pops in, a little
+			# past full size before it settles.
+			var out: float = clampf(1.0 - bubble_reveal * 2.0, 0.0, 1.0)
+			var pop: float = clampf(bubble_reveal * 2.0 - 1.0, 0.0, 1.0)
+			var grow: float = pop + sin(pop * PI) * 0.25
+			if out > 0.0:
+				_bubbles.draw_texture_rect(_bubble_textures[before], _scaled(rects[villager], out), false)
+			if grow > 0.0:
+				_bubbles.draw_texture_rect(_bubble_textures[now], _scaled(rects[villager], grow), false)
+
+
+static func _scaled(rect: Rect2, by: float) -> Rect2:
+	var center: Vector2 = rect.get_center()
+	return Rect2(center - rect.size * by / 2.0, rect.size * by)
 
 
 func _draw_overlay() -> void:
@@ -600,9 +752,12 @@ func _draw_carry_tag() -> void:
 
 ## While picking a home: over the hovered home, how both villagers would
 ## feel after the swap.
-func _draw_swap_tag() -> void:
-	if hovered.get("kind", "") != "building" or not home_choices().has(hovered["uid"]):
-		return
+## While picking a home, the hovered home's swap preview: who'd be happy,
+## unhappy or on the dock, with the happy bubble when it's all gains and
+## the unhappy one when anyone loses. {"text", "rect", "mood"}, or {}.
+func swap_tag() -> Dictionary:
+	if mode != Mode.PICK_HOME or hovered.get("kind", "") != "building" or not home_choices().has(hovered["uid"]):
+		return {}
 	var moods: Dictionary[String, Town.Mood] = _state.swap_moods(_data, home_villager, hovered["uid"])
 	var words: PackedStringArray = []
 	var any_unhappy: bool = false
@@ -610,23 +765,38 @@ func _draw_swap_tag() -> void:
 		var role: String = str(_data.row("villagers", villager).get("role", villager))
 		words.append("%s %s" % [role, SWAP_MOOD[moods[villager]]])
 		any_unhappy = any_unhappy or moods[villager] != Town.Mood.HAPPY
+	var text: String = " · ".join(words)
 	var box: AABB = TownView.block_box(_data, _state.town.entry(hovered["uid"]))
 	var front: Vector2 = view.to_screen(Vector3(box.end.x, 0.0, box.end.z)) + Vector2(0, 10)
-	_draw_mood_tag(" · ".join(words), front, Town.Mood.UNHAPPY, any_unhappy)
+	return {"text": text, "rect": _mood_tag_rect(text, front), "mood": Town.Mood.UNHAPPY if any_unhappy else Town.Mood.HAPPY}
+
+
+func _draw_swap_tag() -> void:
+	var tag: Dictionary = swap_tag()
+	if not tag.is_empty():
+		_draw_mood_tag_in(tag["text"], tag["rect"], tag["mood"])
+
+
+## Where a tag with a mood bubble at its left sits, centered on `at`.
+func _mood_tag_rect(text: String, at: Vector2) -> Rect2:
+	var rect: Rect2 = _tag_rect(text, at, false)
+	var side: float = rect.size.y
+	return _keep_on_screen(Rect2(rect.position - Vector2(side / 2.0, 0), rect.size + Vector2(side, 0)))
+
+
+func _draw_mood_tag_in(text: String, rect: Rect2, mood: Town.Mood) -> void:
+	var side: float = rect.size.y
+	_draw_tag_in("", rect, 1.0)
+	_overlay.draw_texture_rect(_bubble_textures[mood], Rect2(rect.position + Vector2(6, 2), Vector2(side - 4, side - 4)), false)
+	_draw_tag_in(text, Rect2(rect.position + Vector2(side, 0), rect.size - Vector2(side, 0)), 0.0)
 
 
 ## A tag with a mood bubble at its left when `show_icon`.
 func _draw_mood_tag(text: String, at: Vector2, mood: Town.Mood, show_icon: bool) -> void:
-	var rect: Rect2 = _keep_on_screen(_tag_rect(text, at, false))
 	if not show_icon:
-		_draw_tag_in(text, rect, 1.0)
+		_draw_tag_in(text, _keep_on_screen(_tag_rect(text, at, false)), 1.0)
 		return
-	var side: float = rect.size.y
-	rect = _keep_on_screen(Rect2(rect.position - Vector2(side / 2.0, 0), rect.size + Vector2(side, 0)))
-	_draw_tag_in("", rect, 1.0)
-	_overlay.draw_texture_rect(_bubble_textures[mood], Rect2(rect.position + Vector2(6, 2), Vector2(side - 4, side - 4)), false)
-	var text_rect: Rect2 = Rect2(rect.position + Vector2(side, 0), rect.size - Vector2(side, 0))
-	_draw_tag_in(text, text_rect, 0.0)
+	_draw_mood_tag_in(text, _mood_tag_rect(text, at), mood)
 
 
 ## A rectangle of ground (in cells) as it lies on screen.
@@ -672,43 +842,73 @@ func _tag_font_size() -> int:
 ## on screen.
 func map_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
 	var taken: Array[Rect2] = []
-	for rect: Rect2 in bubble_rects(spots).values():
+	var bubbles: Dictionary[String, Rect2] = bubble_rects(spots)
+	for rect: Rect2 in bubbles.values():
 		taken.append(rect)
 	for villager: String in spots:
 		taken.append(sprite_rect(spots[villager]))
+	# The swap preview is what the pointer is about to do: names keep off it
+	# (Mara's #42 re-review).
+	var swap: Dictionary = swap_tag()
+	if not swap.is_empty():
+		taken.append(swap["rect"])
 	var villagers: Array[Dictionary] = []
 	for villager: String in spots:
 		var role: String = str(_data.row("villagers", villager).get("role", villager))
 		var feet: Vector2 = view.to_screen(spots[villager])
-		villagers.append({"text": role, "anchor": feet, "kind": "villager",
+		var head: Vector2 = Vector2(feet.x, bubbles[villager].position.y - 2.0)
+		villagers.append({"text": role, "anchor": feet, "kind": "villager", "above": head,
 			"rect": _tag_rect(role, feet + Vector2(0, 6), false)})
 	var buildings: Array[Dictionary] = []
 	for uid: int in building_names():
 		var building: Dictionary = _state.town.entry(uid)
 		var foot: Rect2i = Town.rect_of(_data, building)
 		var front: Vector2 = view.to_screen(Vector3(foot.end.x - TownView.INSET, 0.0, foot.end.y - TownView.INSET))
+		var box: AABB = TownView.block_box(_data, building)
+		var roof: Vector2 = view.to_screen(Vector3(box.get_center().x, box.end.y, box.get_center().z)) - Vector2(0, 4)
 		var name: String = str(_data.row("buildings", building["building"]).get("name", building["building"]))
-		buildings.append({"text": name, "anchor": front, "kind": "building", "rect": _tag_rect(name, front + Vector2(0, 4), false)})
+		buildings.append({"text": name, "anchor": front, "kind": "building", "above": roof,
+			"rect": _tag_rect(name, front + Vector2(0, 4), false)})
 	var out: Array[Dictionary] = []
 	for group: Array[Dictionary] in [villagers, buildings]:
 		group.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 			return (a["rect"] as Rect2).position.y < (b["rect"] as Rect2).position.y)
 		for tag: Dictionary in group:
-			var rect: Rect2 = _keep_on_screen(tag["rect"])
-			for attempt: int in 12:
-				var blocker: Rect2 = Rect2()
-				for other: Rect2 in taken:
-					if rect.grow(2.0).intersects(other):
-						blocker = other
-						break
-				if blocker.size == Vector2.ZERO:
-					break
-				rect.position.y = blocker.end.y + 2.0
+			var start: Rect2 = _keep_on_screen(tag["rect"])
+			var rect: Rect2 = _pushed_clear(start, taken)
+			if rect.position.y - start.position.y > start.size.y * FAR_PUSH:
+				# Pushed a long way: it goes above its owner's head instead
+				# of hanging off a long tick (Mara's #42 re-review).
+				var above: Rect2 = _keep_on_screen(_tag_rect(tag["text"], tag["above"], true))
+				if not _hits(above, taken):
+					rect = above
+					tag["anchor"] = tag["above"]
 			rect = _keep_on_screen(rect)
 			tag["rect"] = rect
 			taken.append(rect)
 			out.append(tag)
 	return out
+
+
+## `rect` moved down past whatever it overlaps, a few times at most.
+static func _pushed_clear(rect: Rect2, taken: Array[Rect2]) -> Rect2:
+	for attempt: int in 12:
+		var blocker: Rect2 = Rect2()
+		for other: Rect2 in taken:
+			if rect.grow(2.0).intersects(other):
+				blocker = other
+				break
+		if blocker.size == Vector2.ZERO:
+			break
+		rect.position.y = blocker.end.y + 2.0
+	return rect
+
+
+static func _hits(rect: Rect2, taken: Array[Rect2]) -> bool:
+	for other: Rect2 in taken:
+		if rect.grow(2.0).intersects(other):
+			return true
+	return false
 
 
 func _keep_on_screen(rect: Rect2) -> Rect2:

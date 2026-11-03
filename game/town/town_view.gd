@@ -35,6 +35,9 @@ var min_distance: float = 8.0
 var max_distance: float = 30.0
 ## The HUD's panels on screen; the land is framed clear of them.
 var obstacles: Array[Rect2] = []
+## Villagers standing somewhere other than their usual spot for now: the
+## town gathered round a new landmark, or walking there and back.
+var walking: Dictionary[String, Vector3] = {}
 
 
 ## A view that fits the whole town on a `screen_size` screen, clear of the
@@ -257,6 +260,37 @@ func villager_spots(data: GameData, state: GameState) -> Dictionary[String, Vect
 	var homeless: Array[String] = state.homeless()
 	for i: int in homeless.size():
 		out[homeless[i]] = dock_spot(i)
+	for villager: String in walking:
+		if out.has(villager):
+			out[villager] = walking[villager]
+	return out
+
+
+## Where the town stands to see a new landmark: a row along its front (the
+## sea side, facing the camera), then down its sides and along its back,
+## a little way out and never on the sea or in another building.
+func gather_spots(data: GameData, town: Town, building: Dictionary, count: int) -> Array[Vector3]:
+	var rect: Rect2i = Town.rect_of(data, building)
+	var candidates: Array[Vector3] = []
+	for x: int in rect.size.x:
+		candidates.append(Vector3(rect.position.x + x + 0.5, 0.06, rect.end.y + 0.4))
+	for y: int in range(rect.size.y - 1, -1, -1):
+		candidates.append(Vector3(rect.position.x - 0.4, 0.06, rect.position.y + y + 0.5))
+		candidates.append(Vector3(rect.end.x + 0.4, 0.06, rect.position.y + y + 0.5))
+	for x: int in rect.size.x:
+		candidates.append(Vector3(rect.position.x + x + 0.5, 0.06, rect.position.y - 0.4))
+	var out: Array[Vector3] = []
+	for spot: Vector3 in candidates:
+		var cell: Vector2i = Vector2i(floori(spot.x), floori(spot.z))
+		if map.in_bounds(cell) and map.ground(cell) != TownMap.Ground.SEA and town.building_at(data, cell).is_empty():
+			out.append(spot)
+		if out.size() == count:
+			return out
+	# Crowded in: whoever is left stands in a second row at the front.
+	var i: int = 0
+	while out.size() < count:
+		out.append(Vector3(rect.position.x + 0.3 + (i % maxi(rect.size.x, 1)) * 0.9, 0.06, rect.end.y + 1.1))
+		i += 1
 	return out
 
 
