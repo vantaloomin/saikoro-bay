@@ -1,26 +1,61 @@
 #!/usr/bin/env python3
-"""Fails if a Godot .pck contains anything from content/adult/.
+"""Proves a Godot .pck has nothing from content/adult/ (AC-6).
 
-Used on the SFW export in CI (AC-6): the SFW presets exclude content/adult/,
-and this proves it on the actual exported pack, including imported
-textures, whose cache names start with the source file's name.
+A SFW pack fails if any of these is true:
+  - it holds a file under content/adult/,
+  - it holds an imported or exported copy of one (.godot/imported/ and
+    .godot/exported/ name their cache files after the source file),
+  - its project.binary lacks the "sfw" feature tag, which is what makes
+    Settings cap the content level at SFW,
+  - any file in it, apart from game data in data/, mentions content/adult/.
+    That catches the UID cache and the script class cache, which list
+    every file the project had when it was exported, so a pack made from a
+    tree that still has the folder leaks the adult file names even though
+    their contents are excluded. CI deletes the folder before SFW exports.
 
-Run: python3 tools/check_pck.py build/sfw/check.pck
+content/adult/ci_canary/ always holds a tiny stand-in adult asset, so the
+check is never vacuous: `--expect-adult` runs it on a full pack and fails
+unless the canary is found there.
+
+Run:
+  python3 tools/check_pck.py --self-test
+  python3 tools/check_pck.py build/sfw/windows.pck [more.pck ...]
+  python3 tools/check_pck.py --expect-adult build/full/windows.pck
 """
 
 from __future__ import annotations
 
 import pathlib
 import struct
+import subprocess
 import sys
+import tempfile
+from dataclasses import dataclass
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ADULT = ROOT / "content" / "adult"
+NEEDLE = b"content/adult/"
+SFW_FEATURE = "sfw"
+CANARY = "content/adult/ci_canary/"
+CANARY_NAMES = ("adult_canary.png", "adult_canary.scn")
+## Files allowed to mention adult paths: scene data picks a variant by
+## content level and falls back to the SFW one (tools/lint_content.py).
+DATA_PREFIX = "data/"
 SUPPORTED_PACK_FORMATS = {3}
 FLAG_ENCRYPTED_DIRECTORY = 1
+FLAG_REL_FILEBASE = 2
+FILE_ENCRYPTED = 1
 
 
-def list_pack(path: pathlib.Path) -> list[str]:
+@dataclass
+class Entry:
+    path: str
+    offset: int
+    size: int
+    flags: int
+
+
+def read_pack(path: pathlib.Path) -> tuple[bytes, list[Entry]]:
     data = path.read_bytes()
     if data[:4] != b"GDPC":
         raise ValueError(f"{path} is not a Godot pack")
@@ -29,37 +64,204 @@ def list_pack(path: pathlib.Path) -> list[str]:
         raise ValueError(f"unsupported pack format {pack_format}; update tools/check_pck.py")
     if flags & FLAG_ENCRYPTED_DIRECTORY:
         raise ValueError("encrypted pack directories can't be checked")
-    _file_base, dir_offset = struct.unpack_from("<QQ", data, 24)
+    file_base, dir_offset = struct.unpack_from("<QQ", data, 24)
+    if not flags & FLAG_REL_FILEBASE:
+        file_base = 0
     pos = dir_offset
     (count,) = struct.unpack_from("<I", data, pos)
     pos += 4
-    paths = []
+    entries = []
     for _ in range(count):
         (length,) = struct.unpack_from("<I", data, pos)
         pos += 4
-        paths.append(data[pos:pos + length].rstrip(b"\0").decode("utf-8"))
-        pos += length + 8 + 8 + 16 + 4  # offset, size, md5, flags
-    return paths
+        name = data[pos:pos + length].rstrip(b"\0").decode("utf-8")
+        pos += length
+        offset, size = struct.unpack_from("<QQ", data, pos)
+        pos += 8 + 8 + 16  # offset, size, md5
+        (entry_flags,) = struct.unpack_from("<I", data, pos)
+        pos += 4
+        name = name.removeprefix("res://")
+        entries.append(Entry(name, file_base + offset, size, entry_flags))
+    return data, entries
 
 
-def main() -> int:
-    if len(sys.argv) != 2:
+def list_pack(path: pathlib.Path) -> list[str]:
+    return [entry.path for entry in read_pack(path)[1]]
+
+
+def custom_features(data: bytes, entries: list[Entry]) -> list[str]:
+    """The export's feature tags, from project.binary's _custom_features."""
+    for entry in entries:
+        if entry.path != "project.binary":
+            continue
+        binary = data[entry.offset:entry.offset + entry.size]
+        key = binary.find(b"_custom_features")
+        if key < 0:
+            return []
+        pos = key + len(b"_custom_features")
+        _size, variant_type, length = struct.unpack_from("<III", binary, pos)
+        if variant_type != 4:  # Variant::STRING
+            return []
+        text = binary[pos + 12:pos + 12 + length].decode("utf-8")
+        return [part.strip() for part in text.split(",") if part.strip()]
+    return []
+
+
+def _cache_name(entry: str) -> str:
+    """The source file name a .godot/imported or .godot/exported file was made from."""
+    name = entry.rsplit("/", 1)[-1]
+    if entry.startswith(".godot/imported/"):
+        return name.rsplit("-", 1)[0]  # adult_canary.png-<md5>.ctex
+    if entry.startswith(".godot/exported/"):
+        return name.split("-", 2)[-1]  # export-<md5>-adult_canary.scn
+    return ""
+
+
+def adult_files() -> list[pathlib.PurePosixPath]:
+    """Every file in content/adult/: git's index and the disk together.
+
+    CI deletes the folder before the SFW exports, but the index still lists
+    what was checked out (the canary), so the cache-name check keeps
+    something to match (Imogen's #56 audit). On a maintainer's machine the
+    disk adds the untracked adult files.
+    """
+    found: set[str] = set()
+    try:
+        listed = subprocess.run(["git", "ls-files", "content/adult"], cwd=ROOT,
+                                capture_output=True, text=True, check=True).stdout
+        found |= {line for line in listed.splitlines() if line}
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    found |= {p.relative_to(ROOT).as_posix() for p in ADULT.rglob("*") if p.is_file()}
+    return [pathlib.PurePosixPath(f) for f in sorted(found)]
+
+
+def adult_names(files: list[pathlib.PurePosixPath]) -> set[str]:
+    """The names Godot gives cache copies of these files."""
+    names = {f.name for f in files if f.suffix not in {".md", ".import"}}
+    names |= {f.with_suffix(".scn").name for f in files if f.suffix == ".tscn"}
+    return names
+
+
+def sfw_problems(path: pathlib.Path, names: set[str] | None = None) -> list[str]:
+    data, entries = read_pack(path)
+    return pack_problems(data, entries, adult_names(adult_files()) if names is None else names)
+
+
+def pack_problems(data: bytes, entries: list[Entry], names: set[str]) -> list[str]:
+    problems = []
+    if SFW_FEATURE not in custom_features(data, entries):
+        problems.append(f'project.binary has no "{SFW_FEATURE}" feature tag, so the content level isn\'t capped')
+    for entry in entries:
+        if entry.path.startswith("content/adult/"):
+            problems.append(entry.path)
+            continue
+        source = _cache_name(entry.path)
+        if source and source in names:
+            problems.append(f"{entry.path} (made from a file in content/adult/)")
+            continue
+        if entry.path.startswith(DATA_PREFIX):
+            continue
+        if entry.flags & FILE_ENCRYPTED:
+            problems.append(f"{entry.path} is encrypted and can't be checked")
+            continue
+        if NEEDLE in data[entry.offset:entry.offset + entry.size]:
+            problems.append(f"{entry.path} mentions content/adult/")
+    return problems
+
+
+def canary_found(path: pathlib.Path) -> bool:
+    paths = list_pack(path)
+    if not any(p.startswith(CANARY) for p in paths):
+        return False
+    return all(any(_cache_name(p) == name for p in paths) for name in CANARY_NAMES)
+
+
+def _write_pack(path: pathlib.Path, files: dict[str, bytes]) -> None:
+    """A minimal format-3 pack, for the self-test."""
+    directory = bytearray(struct.pack("<I", len(files)))
+    blobs = bytearray()
+    for name, blob in files.items():
+        encoded = name.encode("utf-8") + b"\0"
+        encoded += b"\0" * (-len(encoded) % 4)
+        directory += struct.pack("<I", len(encoded)) + encoded
+        directory += struct.pack("<QQ", len(blobs), len(blob)) + b"\0" * 16 + struct.pack("<I", 0)
+        blobs += blob
+    header_size = 4 + 5 * 4 + 16 + 16 * 4
+    file_base = header_size
+    dir_offset = file_base + len(blobs)
+    header = b"GDPC" + struct.pack("<5I", 3, 4, 6, 3, FLAG_REL_FILEBASE) + struct.pack("<QQ", file_base, dir_offset)
+    header += b"\0" * (header_size - len(header))
+    path.write_bytes(bytes(header) + bytes(blobs) + bytes(directory))
+
+
+def _project_binary(features: str) -> bytes:
+    text = features.encode("utf-8")
+    return b"ECFG" + b"_custom_features" + struct.pack("<III", 8 + len(text), 4, len(text)) + text
+
+
+def self_test() -> int:
+    """Each check catches what it's for, on packs made here."""
+    names = adult_names([pathlib.PurePosixPath("content/adult/ci_canary/adult_canary.png"),
+                         pathlib.PurePosixPath("content/adult/ci_canary/adult_canary.tscn")])
+    clean = {"project.binary": _project_binary("sfw"), "data/scenes.json": b'{"full": "res://content/adult/x.png"}'}
+    cases: dict[str, tuple[dict[str, bytes], bool]] = {
+        "a clean SFW pack (data/ may name adult paths)": (clean, False),
+        "an adult file": ({**clean, "content/adult/ci_canary/adult_canary.png.import": b""}, True),
+        "an imported copy": ({**clean, ".godot/imported/adult_canary.png-0123abcd.ctex": b""}, True),
+        "an exported scene": ({**clean, ".godot/exported/1/export-0123abcd-adult_canary.scn": b""}, True),
+        "a UID cache naming an adult file": ({**clean, ".godot/uid_cache.bin": b"res://content/adult/a.png"}, True),
+        "no sfw feature tag": ({**clean, "project.binary": _project_binary("")}, True),
+    }
+    failed = 0
+    with tempfile.TemporaryDirectory() as scratch:
+        for label, (files, should_fail) in cases.items():
+            pack = pathlib.Path(scratch) / "test.pck"
+            _write_pack(pack, files)
+            data, entries = read_pack(pack)
+            caught = bool(pack_problems(data, entries, names))
+            if caught != should_fail:
+                failed += 1
+                print(f"self-test FAILED: {label}: {'caught' if caught else 'missed'}")
+        canary = pathlib.Path(scratch) / "full.pck"
+        _write_pack(canary, {"content/adult/ci_canary/adult_canary.png.import": b"",
+                             ".godot/imported/adult_canary.png-0123abcd.ctex": b"",
+                             ".godot/exported/1/export-0123abcd-adult_canary.scn": b""})
+        if not canary_found(canary):
+            failed += 1
+            print("self-test FAILED: canary not found in a full pack")
+        _write_pack(canary, clean)
+        if canary_found(canary):
+            failed += 1
+            print("self-test FAILED: canary found in a pack without it")
+    print(f"check_pck self-test: {len(cases) + 2} cases, {failed} failed")
+    return 1 if failed else 0
+
+
+def main(argv: list[str]) -> int:
+    if argv == ["--self-test"]:
+        return self_test()
+    expect_adult = "--expect-adult" in argv
+    packs = [pathlib.Path(a) for a in argv if a != "--expect-adult"]
+    if not packs:
         print(__doc__)
         return 2
-    paths = list_pack(pathlib.Path(sys.argv[1]))
-    adult_names = {p.name for p in ADULT.rglob("*") if p.is_file() and p.suffix != ".md"}
-    problems = []
-    for entry in paths:
-        name = entry.rsplit("/", 1)[-1]
-        if entry.startswith("content/adult/"):
-            problems.append(entry)
-        elif entry.startswith(".godot/imported/") and any(name.startswith(a + "-") for a in adult_names):
-            problems.append(f"{entry} (imported from content/adult/)")
-    for problem in problems:
-        print(f"adult content in SFW pack: {problem}")
-    print(f"check_pck: {len(paths)} files, {len(problems)} problem(s)")
-    return 1 if problems else 0
+    failed = False
+    for pack in packs:
+        if expect_adult:
+            found = canary_found(pack)
+            print(f"check_pck: {pack}: canary {'found' if found else 'MISSING'}")
+            if not found:
+                print("  the full pack should carry content/adult/ci_canary/; if it doesn't, this check can't see adult files")
+                failed = True
+            continue
+        problems = sfw_problems(pack)
+        for problem in problems:
+            print(f"adult content in SFW pack {pack}: {problem}")
+        print(f"check_pck: {pack}: {len(list_pack(pack))} files, {len(problems)} problem(s)")
+        failed = failed or bool(problems)
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

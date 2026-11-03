@@ -15,10 +15,21 @@ enum Level {
 	FULL,        ## The game's maximum: topless and bare-rear nudity, no sex (PRD).
 }
 
+## The age gate's answer (AC-1), kept in Settings so the gate shows once
+## per machine. Only ADULT may pick a level above SFW.
+enum AgeAnswer { UNANSWERED, ADULT, UNDER_18 }
+
 const NAMES: Dictionary[Level, String] = {
 	Level.SFW: "Safe for work",
 	Level.SUGGESTIVE: "Suggestive",
 	Level.FULL: "Full",
+}
+
+## What each level shows, in one line, for the pickers and the scene notice.
+const DESCRIPTIONS: Dictionary[Level, String] = {
+	Level.SFW: "Swimsuits, towels and careful framing. No nudity.",
+	Level.SUGGESTIVE: "Partial undress. No nudity.",
+	Level.FULL: "Topless and bare-rear nudity. Never sex.",
 }
 
 
@@ -39,3 +50,28 @@ static func from_value(value: Variant) -> Level:
 	if number < Level.SFW or number > Level.FULL:
 		return Level.SFW
 	return number as Level
+
+
+## The level a scene actually plays at (AC-5): the highest of the scene's
+## `available` levels that `effective` allows. Every scene has a SFW
+## version (AC-3), so SFW is the floor even if `available` leaves it out.
+static func shown_level(effective: Level, available: Array[Level]) -> Level:
+	var shown: Level = Level.SFW
+	for level: Level in available:
+		if level <= effective and level > shown:
+			shown = level
+	return shown
+
+
+## The scene notice's first line (AC-5): "This scene: Suggestive".
+static func notice_line(shown: Level) -> String:
+	return "This scene: %s" % NAMES[shown]
+
+
+## The notice's second line, only when the scene tops out below the
+## player's level, so a lower level doesn't read as the setting not
+## working (Mara's #56 review); "" otherwise.
+static func cap_line(shown: Level, effective: Level) -> String:
+	if shown >= effective:
+		return ""
+	return "Your setting is %s. This scene goes no further than %s." % [NAMES[effective], NAMES[shown]]
