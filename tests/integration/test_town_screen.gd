@@ -209,6 +209,23 @@ func test_a_build_goes_list_card_carry_stamp() -> void:
 	assert_eq(board.selected, {"kind": "building", "uid": Game.state.town.placed[0]["uid"]}, "the new home is picked")
 
 
+func test_the_ledger_preview_keeps_each_name_on_one_line_and_its_width() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	var ledger: Control = town.find_child("Ledger", true, false) as Control
+	await wait_process_frames(2)
+	var width: float = ledger.size.x
+	town.start_carry("cottage")
+	board._pick_at(_cell_point(board, Vector2i(1, 1)))
+	assert_eq(town.sheet["kind"], "confirm")
+	await wait_process_frames(2)
+	for label: Node in town.find_child("Ledger", true, false).find_children("*", "Label", true, false):
+		if (label as Label).is_visible_in_tree():
+			assert_eq((label as Label).get_line_count(), 1, "\"%s\" stays on one line" % (label as Label).text)
+	assert_eq(ledger.size.x, width, "the sheet's edge holds still for the preview (Mara's #47 review)")
+
+
 func test_backing_out_of_a_build_changes_nothing() -> void:
 	_rich()
 	var town: TownScreen = _open()

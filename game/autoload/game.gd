@@ -12,6 +12,8 @@ signal save_failed(error: Error)
 signal delve_started(number: int, seed_value: int)
 ## The player left delve `number` for town.
 signal returned_to_town(number: int)
+## load_or_new has the campaign (or the test town) in place.
+signal campaign_loaded
 
 const TOWN_SCENE: String = "res://game/town/town.tscn"
 const DELVE_SCENE: String = "res://game/delve/delve.tscn"
@@ -35,6 +37,9 @@ var store: SaveStore:
 var saving_locked: bool = false
 ## Why saving is off or the last save failed, for the town to show, or "".
 var save_problem: String = ""
+## True while playing the M3 exit check's test town (FakeTown), so the
+## notice board and the playtest log can say so.
+var fake_town: bool = false
 
 
 func _init() -> void:
@@ -55,7 +60,12 @@ func _ready() -> void:
 ## an abandoned delve (Imogen's #6 audit): it washes up in the barrel with
 ## nothing kept, it's saved at once, and the town shows it. So quitting
 ## can't be used to retry a bad delve.
-func load_or_new() -> String:
+func load_or_new(test_town: bool = FakeTown.requested()) -> String:
+	fake_town = test_town
+	if test_town:
+		var scene: String = _start_fake_town()
+		campaign_loaded.emit()
+		return scene
 	var result: SaveStore.ReadResult = store.read()
 	saving_locked = result.status == SaveCodec.Status.TOO_NEW
 	save_problem = "Saving is off: your save is from a newer version of the game." if saving_locked else ""
@@ -87,6 +97,20 @@ func load_or_new() -> String:
 			save()
 		elif state.arrive(data):
 			save()
+	campaign_loaded.emit()
+	return scene_for_phase()
+
+
+## The M3 exit check's town (FakeTown): its own slot, fresh every launch.
+func _start_fake_town() -> String:
+	store = SaveStore.new(FakeTown.SAVE_PATH)
+	saving_locked = false
+	state = FakeTown.build(data)
+	if state == null:
+		push_error("FakeTown: a sim move refused; starting a plain new campaign.")
+		state = GameState.new(_new_campaign_seed())
+		state.arrive(data)
+	save()
 	return scene_for_phase()
 
 
