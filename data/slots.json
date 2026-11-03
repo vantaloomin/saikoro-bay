@@ -1,26 +1,61 @@
 {
 	"schema": 1,
-	"note": "Action card slots (DR-1, DR-3). Effect amount = die total x mult + add. A slot takes up to max_dice dice and fires with at least min_dice. accepts: pair and three_kind match the first die, run needs consecutive numbers, sum_at_least takes any die and needs a total of at least min. A persists slot that is complete at the end of a turn keeps its dice (they leave the hand) and takes no more. Placeholder numbers, tuned with the bot.",
+	"note": "Action card slots (DR-1, DR-3). Effect amount = die total x mult + add. A slot takes up to max_dice dice and fires with at least min_dice. accepts: pair and three_kind match the first die, run needs consecutive numbers, sum_at_least takes any die and needs a total of at least min. A persists slot that is complete at the end of a turn keeps its dice (they leave the hand) and takes no more. Effects: damage, block and heal by the amount; resource pays the amount of `resource` into the haul; open does nothing but count as open (a rescue cage lock). `resource` is empty unless the effect is resource. Placeholder numbers, tuned with the bot.",
 	"items": [
 		{
 			"id": "strike", "name": "Strike", "text": "Deal damage equal to the die.",
 			"accepts": "any", "min": 1, "max": 6, "min_dice": 1, "max_dice": 1, "persists": false,
-			"effect": "damage", "mult": 1, "add": 0, "icon_shape": "blade"
+			"effect": "damage", "resource": "", "mult": 1, "add": 0, "icon_shape": "blade"
 		},
 		{
 			"id": "guard", "name": "Guard", "text": "Low die (1-4): gain block equal to the die + 1.",
 			"accepts": "range", "min": 1, "max": 4, "min_dice": 1, "max_dice": 1, "persists": false,
-			"effect": "block", "mult": 1, "add": 1, "icon_shape": "shield"
+			"effect": "block", "resource": "", "mult": 1, "add": 1, "icon_shape": "shield"
 		},
 		{
 			"id": "high_roller", "name": "High Roller", "text": "High die (5-6): deal 8 damage.",
 			"accepts": "range", "min": 5, "max": 6, "min_dice": 1, "max_dice": 1, "persists": false,
-			"effect": "damage", "mult": 0, "add": 8, "icon_shape": "crown"
+			"effect": "damage", "resource": "", "mult": 0, "add": 8, "icon_shape": "crown"
 		},
 		{
 			"id": "pair_bet", "name": "Pair Bet", "text": "Two dice showing the same number: deal their total x 2.",
 			"accepts": "pair", "min": 1, "max": 6, "min_dice": 2, "max_dice": 2, "persists": false,
-			"effect": "damage", "mult": 2, "add": 0, "icon_shape": "twin_dice"
+			"effect": "damage", "resource": "", "mult": 2, "add": 0, "icon_shape": "twin_dice"
+				},
+		{
+			"id": "small_lock", "name": "Small lock", "text": "Any die: driftwood equal to the die.",
+			"accepts": "any", "min": 1, "max": 6, "min_dice": 1, "max_dice": 1, "persists": false,
+			"effect": "resource", "resource": "driftwood", "mult": 1, "add": 0, "icon_shape": "padlock"
+		},
+		{
+			"id": "pearl_lock", "name": "Pearl lock", "text": "Two dice showing the same number: 2 pearls.",
+			"accepts": "pair", "min": 1, "max": 6, "min_dice": 2, "max_dice": 2, "persists": false,
+			"effect": "resource", "resource": "pearls", "mult": 0, "add": 2, "icon_shape": "pearl"
+		},
+		{
+			"id": "jackpot_lock", "name": "Jackpot lock", "text": "Three dice showing the same number: 1 koban coin.",
+			"accepts": "three_kind", "min": 1, "max": 6, "min_dice": 3, "max_dice": 3, "persists": false,
+			"effect": "resource", "resource": "koban_coins", "mult": 0, "add": 1, "icon_shape": "coin"
+		},
+		{
+			"id": "soak", "name": "Soak", "text": "Up to two dice: heal by their total.",
+			"accepts": "any", "min": 1, "max": 6, "min_dice": 1, "max_dice": 2, "persists": false,
+			"effect": "heal", "resource": "", "mult": 1, "add": 0, "icon_shape": "wave"
+		},
+		{
+			"id": "cage_sum", "name": "Sum lock", "text": "Two or three dice totalling 10 or more.",
+			"accepts": "sum_at_least", "min": 10, "max": 18, "min_dice": 2, "max_dice": 3, "persists": true,
+			"effect": "open", "resource": "", "mult": 0, "add": 0, "icon_shape": "plus"
+		},
+		{
+			"id": "cage_pair", "name": "Pair lock", "text": "Two dice showing the same number.",
+			"accepts": "pair", "min": 1, "max": 6, "min_dice": 2, "max_dice": 2, "persists": true,
+			"effect": "open", "resource": "", "mult": 0, "add": 0, "icon_shape": "twin_dice"
+		},
+		{
+			"id": "cage_run", "name": "Run lock", "text": "Three dice in a row, like 3, 4, 5.",
+			"accepts": "run", "min": 1, "max": 6, "min_dice": 3, "max_dice": 3, "persists": true,
+			"effect": "open", "resource": "", "mult": 0, "add": 0, "icon_shape": "steps"
 		}
 	]
 }

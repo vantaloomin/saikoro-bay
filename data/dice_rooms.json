@@ -1,0 +1,9 @@
+{
+	"schema": 1,
+	"note": "Rooms played with your dice that aren't fights (specs/delve-map.md section 3). Each id is a room type. You roll your kit's dice; the Nudge perk works as in a fight. turns: how many turns the room lasts. open_all: the room succeeds only when every slot is open (a rescue cage); otherwise it pays whatever its slots pay and ends after its turns. tide_damage: HP lost at the end of each turn the room hasn't succeeded, ignoring block. Placeholder numbers, tuned with the delve bot.",
+	"items": [
+		{ "id": "treasure", "slots": ["small_lock", "pearl_lock", "jackpot_lock"], "turns": 1, "rerolls_per_turn": 1, "open_all": false, "tide_damage": 0 },
+		{ "id": "rest", "slots": ["soak"], "turns": 1, "rerolls_per_turn": 0, "open_all": false, "tide_damage": 0 },
+		{ "id": "rescue", "slots": ["cage_sum", "cage_pair", "cage_run"], "turns": 3, "rerolls_per_turn": 1, "open_all": true, "tide_damage": 2 }
+	]
+}

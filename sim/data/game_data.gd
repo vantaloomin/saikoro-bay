@@ -43,7 +43,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"id": "id", "name": "string", "text": "string",
 		"accepts": "enum:any|range|even|odd|exact|pair|three_kind|run|sum_at_least",
 		"min": "int", "max": "int", "min_dice": "int", "max_dice": "int", "persists": "bool",
-		"effect": "enum:damage|block|heal", "mult": "int", "add": "int",
+		"effect": "enum:damage|block|heal|resource|open", "resource": "string?", "mult": "int", "add": "int",
 		"icon_shape": "string",
 	},
 	"enemies": {
@@ -67,6 +67,10 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"landmarks": {
 		"id": "id", "name": "string",
+	},
+	"dice_rooms": {
+		"id": "ref:rooms", "slots": "ref_list:slots", "turns": "int", "rerolls_per_turn": "int",
+		"open_all": "bool", "tide_damage": "int",
 	},
 	"loadouts": {
 		"id": "id", "hp": "int", "dice": "ref_list:dice", "slots": "ref_list:slots",
@@ -245,6 +249,19 @@ func _check_rows() -> void:
 		var fewest: int = {"pair": 2, "three_kind": 3}.get(slot_row["accepts"], 1)
 		if (slot_row["min_dice"] as int) < fewest:
 			errors.append("slots \"%s\": %s needs min_dice of at least %d" % [id, slot_row["accepts"], fewest])
+		# A resource slot names what it pays; no other slot names one.
+		var pays: String = slot_row["resource"]
+		if slot_row["effect"] == "resource":
+			if not has_row("resources", pays):
+				errors.append("slots \"%s\": a resource slot needs a resource, got \"%s\"" % [id, pays])
+		elif not pays.is_empty():
+			errors.append("slots \"%s\": only a resource slot names a resource" % id)
+	for id: String in ids("dice_rooms"):
+		var room_row: Dictionary = row("dice_rooms", id)
+		if (room_row["turns"] as int) < 1 or (room_row["slots"] as Array).is_empty():
+			errors.append("dice_rooms \"%s\": needs at least one turn and one slot" % id)
+		if (room_row["rerolls_per_turn"] as int) < 0 or (room_row["tide_damage"] as int) < 0:
+			errors.append("dice_rooms \"%s\": rerolls and tide damage can't be negative" % id)
 	# Every tier needs an enemy: the map places fight and elite rooms.
 	if _tables.has("enemies"):
 		var tiers: Dictionary[String, int] = {"regular": 0, "elite": 0}

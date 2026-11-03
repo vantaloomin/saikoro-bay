@@ -100,13 +100,13 @@ func test_a_copy_shares_nothing_and_cant_roll() -> void:
 
 const ROOM_SLOTS: Array[Dictionary] = [
 	{"id": "lock_sum", "name": "Sum", "text": "t", "accepts": "sum_at_least", "min": 10, "max": 18,
-		"min_dice": 2, "max_dice": 3, "persists": true, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 2, "max_dice": 3, "persists": true, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 	{"id": "lock_pair", "name": "Pair", "text": "t", "accepts": "pair", "min": 1, "max": 6,
-		"min_dice": 2, "max_dice": 2, "persists": true, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 2, "max_dice": 2, "persists": true, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 	{"id": "lock_run", "name": "Run", "text": "t", "accepts": "run", "min": 1, "max": 6,
-		"min_dice": 3, "max_dice": 3, "persists": true, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 3, "max_dice": 3, "persists": true, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 	{"id": "triple", "name": "Triple", "text": "t", "accepts": "three_kind", "min": 1, "max": 6,
-		"min_dice": 3, "max_dice": 3, "persists": false, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 3, "max_dice": 3, "persists": false, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 ]
 
 

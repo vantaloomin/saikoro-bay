@@ -439,6 +439,12 @@ func _set_preview(card: SlotCard, s: Fight.Slot) -> void:
 	card.preview_tone = "ok"
 	card.held_value = fight.die(_selected).value if _selected >= 0 else 0
 	card.held_fit = 0
+	if s.sealed:
+		# Fired on the turn it completed; it won't fire again.
+		card.preview_text = "Done"
+		if _selected >= 0:
+			card.held_fit = -1
+		return
 	if s.is_complete():
 		card.preview_text = _effect_text(s.row["effect"] as String, fight.slot_amount(s), -1)
 		if _selected >= 0:
