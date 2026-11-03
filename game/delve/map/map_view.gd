@@ -60,6 +60,7 @@ var _lit_links: Dictionary = {}
 var _guard_until: int = 0
 var _pulse_time: float = 0.0
 var _last_floor: bool = false
+var _pad: bool = false
 var _prize: String = ""
 
 var _title: Label
@@ -145,6 +146,24 @@ func _current() -> MapNode:
 	return found
 
 
+## The hint follows the last input used (Mara, #29): moving focus with a
+## controller or keys, or pointing with the mouse.
+func _look_hint() -> String:
+	if _pad:
+		return "Move to a room to see the paths through it."
+	return "Point at a room to see the paths through it."
+
+
+func _input(event: InputEvent) -> void:
+	# Controller and keyboard move focus; the mouse points.
+	var pad: bool = event is InputEventJoypadButton or event is InputEventJoypadMotion or event is InputEventKey
+	var other: bool = event is InputEventMouseButton or event is InputEventMouseMotion
+	if (pad and not _pad) or (other and _pad):
+		_pad = pad
+		if _room_name != null and _room_name.text == "Ways down":
+			_set_lit(Vector2i(-1, -1))
+
+
 func _process(delta: float) -> void:
 	if Settings.reduce_motion:
 		if _pulse_time != 0.0:
@@ -176,7 +195,7 @@ func _set_lit(cell: Vector2i) -> void:
 	_lit_links = {}
 	if cell.x < 0 or not _nodes.has(cell) or _nodes[cell].state in ["visited", "current"] and _is_here(cell):
 		_room_name.text = "Ways down"
-		_summary.text = "%s\nPoint at a room to see the paths through it." % paths_text(_paths)
+		_summary.text = "%s\n%s" % [paths_text(_paths), _look_hint()]
 	else:
 		var n: MapNode = _nodes[cell]
 		_room_name.text = room_name(n.type)
@@ -192,6 +211,7 @@ func _set_lit(cell: Vector2i) -> void:
 				_summary.text = "You've been here."
 	for c: Vector2i in _nodes:
 		_nodes[c].lit = _lit_cells.has(c)
+		_nodes[c].pointed = c == cell and not _lit_cells.is_empty()
 	if _canvas != null:
 		_canvas.queue_redraw()
 

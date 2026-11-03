@@ -172,3 +172,35 @@ func test_the_strip_says_how_far_the_next_safe_exit_is() -> void:
 	assert_eq(HaulStrip.progress_text(RunView.new(run)), "Floor 1 of 3 · landing in 3 rooms")
 	run.choose(run.reachable()[0])
 	assert_eq(HaulStrip.progress_text(RunView.new(run)), "Floor 1 of 3 · landing 2 rooms after this")
+
+
+func test_dice_rooms_play_on_the_room_board() -> void:
+	for s: int in range(1, 80):
+		var run: DelveRun = _new_run(s)
+		for guard: int in 40:
+			if run.step == DelveRun.Step.CHOOSE_ROOM:
+				var picked: int = run.reachable()[0]
+				for c: int in run.reachable():
+					if DelveRun.is_dice_room(run.map.room(run.floor_index, run.row + 1, c).type):
+						picked = c
+				run.choose(picked)
+			elif run.step == DelveRun.Step.IN_ROOM and run.fight != null:
+				PlannerBot.new().play_fight(run.fight)
+				run.finish_room()
+				run.hp = maxi(run.hp, 12)
+			else:
+				break
+		if run.step != DelveRun.Step.IN_ROOM or run.room == null:
+			continue
+		var screen: Control = _screen(run)
+		var board: RoomBoard = screen.get("_room_board")
+		assert_not_null(board)
+		assert_eq(board.top_inset, HaulStrip.HEIGHT)
+		while run.room.state == DiceRoom.State.PLAYER_TURN:
+			board._on_verb()
+		board._results_shown_at -= RoomBoard.RESULT_GUARD_MS
+		board._continue.pressed.emit()
+		assert_null(run.room, "the room finished")
+		assert_true(run.step in [DelveRun.Step.CHOOSE_ROOM, DelveRun.Step.LANDING, DelveRun.Step.WASHED_UP])
+		return
+	fail_test("no run reached a dice room")
