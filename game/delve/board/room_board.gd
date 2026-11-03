@@ -15,6 +15,7 @@ extends Control
 
 signal finished
 
+const RESULT_GUARD_MS: int = 400
 const VERBS: Dictionary[String, String] = {"treasure": "Open", "rest": "Soak", "rescue": "End turn"}
 const INTROS: Dictionary[String, String] = {
 	"treasure": "One roll, one reroll. Fill any locks you can, then open them.",
@@ -88,6 +89,7 @@ var _results: PanelContainer
 var _results_text: Label
 var _continue: Button
 var _sounds: BoardSounds
+var _results_shown_at: int = 0
 
 
 func setup(new_room: DiceRoom, game_data: GameData, caged: String = "") -> void:
@@ -298,7 +300,7 @@ func turn_preview() -> Dictionary:
 				if copy.state == DiceRoom.State.LOST:
 					parts.append("Down")
 				elif room.turns_left() <= 1:
-					parts.append("last turn")
+					parts.append("last turn: they stay caged")
 			out["headline"] = " · ".join(parts)
 			out["detail"] = "Each turn the cage stays shut, the tide takes %d HP, ignoring block." % room.tide_damage
 	return out
@@ -343,6 +345,11 @@ func slot_preview(s: DiceRoom.Slot) -> Dictionary:
 	if s.sealed:
 		return {"text": "Open · its dice came back", "tone": "ok", "fit": -1 if _selected >= 0 else 0}
 	var values: Array[int] = room.table.values_in(s)
+	if _selected >= 0 and s.dice.size() >= s.max_dice():
+		# A full slot is a plan, not a mistake: say what it holds, in a
+		# neutral tone (Mara, #30). Red is for a drop that was refused.
+		var held: String = _effect_text(s, DiceTable.amount(s, values)) if s.is_complete() else "doesn't match yet"
+		return {"text": "Full · " + held, "tone": "ok" if s.is_complete() else "wait", "fit": -1}
 	if _selected >= 0:
 		var reason: String = room.place_refusal(_selected, s.id)
 		if not reason.is_empty():
@@ -399,7 +406,7 @@ func results_text() -> String:
 			elif room.state == DiceRoom.State.LOST:
 				lines.append("The tide took you under.")
 			else:
-				lines.append("They're still caged. You'll find them again.")
+				lines.append("The %s is still caged. You'll find them again." % _villager_role().to_lower())
 	lines.append("HP %d / %d" % [room.hp, room.max_hp])
 	return "\n".join(lines)
 
@@ -434,6 +441,7 @@ func _refresh() -> void:
 	_hp_bar.max_hp = room.max_hp
 	_hp_bar.hp = room.hp
 	_hp_bar.ghost = t["lost"] if room.state == DiceRoom.State.PLAYER_TURN else 0
+	_hp_bar.gain = t["healed"] if room.state == DiceRoom.State.PLAYER_TURN else 0
 	if room.room_id == DelveMap.RESCUE:
 		_turns.text = "Turn %d / %d" % [mini(room.turn, room.turns), room.turns]
 		_tide.turn = room.turn if room.state == DiceRoom.State.PLAYER_TURN else room.turns + 1
@@ -472,9 +480,16 @@ func _focus_first_free_die() -> void:
 	_verb.grab_focus()
 
 
+func _on_continue() -> void:
+	# A press meant for the button before can't skip the result (Mara, #30).
+	if Time.get_ticks_msec() >= _results_shown_at + RESULT_GUARD_MS:
+		finished.emit()
+
+
 func _show_results() -> void:
 	_results_text.text = results_text()
 	_results.visible = true
+	_results_shown_at = Time.get_ticks_msec()
 	_continue.grab_focus()
 	PlaytestLog.log_event("room_result", {"room": room.room_id, "turns": room.turn, "payout": room.payout, "hp": room.hp,
 		"opened": room.succeeded})
@@ -633,7 +648,7 @@ func _build() -> void:
 	_results_text.custom_minimum_size = Vector2(680, 0)
 	results_box.add_child(_results_text)
 	_continue = _button("Continue", 72)
-	_continue.pressed.connect(finished.emit)
+	_continue.pressed.connect(_on_continue)
 	results_box.add_child(_continue)
 
 

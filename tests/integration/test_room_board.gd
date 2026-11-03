@@ -51,6 +51,9 @@ func test_treasure_previews_its_loot_and_opens_with_one_press() -> void:
 	assert_true(board._results.visible)
 	assert_string_starts_with(board._results_text.text, "You found 6 driftwood, 2 pearls.")
 	board._continue.pressed.emit()
+	assert_false(finished[0], "the result can't be skipped by a press meant for Open")
+	board._results_shown_at -= RoomBoard.RESULT_GUARD_MS
+	board._continue.pressed.emit()
 	assert_true(finished[0])
 
 
@@ -61,6 +64,7 @@ func test_rest_caps_the_heal_before_showing_it() -> void:
 	assert_eq(board._end_preview.text, "Heal 4 (7 wasted, you're at 26/30)")
 	assert_eq(board._slot_cards["soak"].preview_text, "Heal 4 (7 wasted)")
 	assert_eq(board._verb.text, "Soak")
+	assert_eq(board._hp_bar.gain, 4, "the heal shows on the HP bar")
 	board._on_verb()
 	assert_eq(board.room.hp, 30)
 
@@ -96,7 +100,7 @@ func test_a_failed_rescue_is_kind() -> void:
 	while board.room.state == DiceRoom.State.PLAYER_TURN:
 		board._on_verb()
 	assert_false(board.room.succeeded)
-	assert_string_starts_with(board._results_text.text, "They're still caged. You'll find them again.")
+	assert_string_starts_with(board._results_text.text, "The pearl diver is still caged. You'll find them again.")
 
 
 func test_the_board_only_moves_through_the_room() -> void:
@@ -110,3 +114,21 @@ func test_the_board_only_moves_through_the_room() -> void:
 		replay.hand[i].value = [4, 4, 2, 6][i]
 	assert_true(replay.apply_moves(board.room.moves))
 	assert_eq(replay.slot("jackpot_lock").dice, board.room.slot("jackpot_lock").dice)
+
+
+func test_a_full_lock_reads_as_a_plan_not_an_error() -> void:
+	var board: RoomBoard = _board("treasure", [4, 4, 2, 6])
+	_place(board, 0, "pearl_lock")
+	_place(board, 1, "pearl_lock")
+	board._on_die_pressed(3)
+	assert_eq(board._slot_cards["pearl_lock"].preview_text, "Full · +2 pearls")
+	assert_eq(board._slot_cards["pearl_lock"].preview_tone, "ok")
+	board._on_slot_pressed("pearl_lock")
+	assert_eq(board._slot_cards["pearl_lock"].preview_tone, "error", "a refused drop is still red")
+
+
+func test_the_last_rescue_turn_says_what_failing_means() -> void:
+	var board: RoomBoard = _board("rescue", [1, 2, 4, 6], 22, "pearl_diver")
+	board._on_verb()
+	board._on_verb()
+	assert_eq(board._end_preview.text, "Opens no locks · Lose 2 · tide · last turn: they stay caged")
