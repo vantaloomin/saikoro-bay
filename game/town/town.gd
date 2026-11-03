@@ -28,11 +28,13 @@ extends Control
 ## everyone came out, with the shells after it.
 ##
 ## The kit (M4 PR 2, specs/bridge.md section 5): a third tab, "Kit" (K, or
-## the shoulders), shows the dice the next delve takes, each a strip of its
-## faces with changed faces outlined and a source chip, then every perk
-## with its gain and cost, a happy bonus or the ghost of a missing one. A
-## read-only strip of mini dice above Go down opens it. A shop's Build card
-## and stamp say what it adds to the kit.
+## the shoulders), shows the dice the next delve takes, plain ones grouped
+## into one "Standard" row and each changed one a strip of its faces with
+## the changes outlined and a chip saying who and what, then every perk
+## with its gain (a villager's happy bonus folded in) and cost. A read-only
+## strip of blank mini dice above Go down opens it. A shop's Build card and
+## stamp say what it adds to the kit, and while the stamp is up the strip
+## previews it.
 
 ## What the notice board says about the last delve. An abandoned delve is
 ## said plainly, so a player who quit mid-delve knows what it cost.
@@ -201,7 +203,8 @@ func _show_hud() -> void:
 	_fill(_tray_panel, "Actions", tray)
 	_show_tray()
 	_go_down.text = Game.state.go_down_label(Game.data)
-	_kit_strip.show_kit(Game.data, Kit.build(Game.data, Game.state))
+	var kit: Kit = Kit.build(Game.data, Game.state)
+	_kit_strip.show_kit(Game.data, kit, _kit_after(kit))
 
 
 ## The shell tray: while the arrival is staged round a landmark the panel
@@ -918,9 +921,7 @@ func _list_entry(entry: Dictionary) -> Button:
 	var second: String = str(entry["cost"]) if entry["status"] == "" else str(entry["status"])
 	if str(entry["status"]) == BuildList.WAITING:
 		second = "%s · %s" % [entry["cost"], entry["status"]]
-	# An amount never wraps away from what it counts ("1 / pearl").
-	var amounts: RegEx = RegEx.create_from_string("(\\d) ")
-	second = amounts.sub(second, "$1\u00a0", true)
+	second = _keep_amounts(second)
 	var row: Button = _button("%s\n%s" % [entry["name"], second], choose_building.bind(str(entry["id"])))
 	row.name = str(entry["id"])
 	# Rows are read more than pressed, so they take the body weight.
@@ -946,45 +947,65 @@ func _list_entry(entry: Dictionary) -> Button:
 	return row
 
 
-## The Kit tab: the dice, each a strip of its faces with what changed
-## outlined and who changed it, then the perks with their gains and costs.
+## The kit a pending stamp would make, for the strip's preview, or null.
+func _kit_after(kit: Kit) -> Kit:
+	if kit == null or sheet.get("kind", "") != "confirm":
+		return null
+	var building: String = str(sheet["id"])
+	var perk_id: String = str(Game.data.row("buildings", building).get("perk", ""))
+	if perk_id.is_empty() or kit.has_perk(perk_id):
+		return null
+	var after: Kit = kit.copy()
+	after.add_perk(Game.data, perk_id, building)
+	return after
+
+
+## An amount never wraps away from what it counts ("1 / pearl").
+static func _keep_amounts(text: String) -> String:
+	return RegEx.create_from_string("(\\d) ").sub(text, "$1\u00a0", true)
+
+
+## The Kit tab: the dice, plain ones grouped and each changed one a strip
+## of its faces with what changed outlined and who changed it, then the
+## perks with their gains and costs.
 func _show_kit() -> void:
 	var kit: Kit = Kit.build(Game.data, Game.state)
 	var rows: VBoxContainer = VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 8)
 	rows.add_child(_kit_heading("Dice"))
 	if kit != null:
-		for die: Dictionary in KitSheet.dice_rows(Game.data, kit):
-			var row: HBoxContainer = HBoxContainer.new()
-			row.add_theme_constant_override("separation", 10)
-			var strip: KitMarks.FaceStrip = KitMarks.FaceStrip.new(die["faces"], die["changed"])
-			row.add_child(strip)
-			if not str(die["source"]).is_empty():
-				row.add_child(_chip(str(die["source"]) + (" · added" if die["added"] else "")))
+		for die: Dictionary in KitSheet.dice_groups(Game.data, kit):
+			# The chip sits over its faces, so the sheet keeps its width.
+			var row: VBoxContainer = VBoxContainer.new()
+			row.add_theme_constant_override("separation", 4)
+			var chip: PanelContainer = _chip(str(die["chip"]))
+			chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			row.add_child(chip)
+			row.add_child(KitMarks.FaceStrip.new(die["faces"], die["changed"]))
 			rows.add_child(row)
 	rows.add_child(_kit_heading("Perks"))
-	var lines: Array[Dictionary] = KitSheet.perk_lines(Game.data, Game.state, kit) if kit != null else []
+	var lines: Array[Dictionary] = KitSheet.perk_lines(Game.data, kit) if kit != null else []
 	if lines.is_empty():
 		rows.add_child(TownStyle.label(NO_PERKS, TownStyle.SMALL, TownStyle.DIM))
 	for line: Dictionary in lines:
-		match str(line["kind"]):
-			"perk":
-				var title: Label = TownStyle.label("%s · %s" % [line["source"], line["perk"]])
-				title.add_theme_font_override("font", TownStyle.strong_font())
-				rows.add_child(title)
-				rows.add_child(_mark_line(str(line["gain"]), false))
-				if not str(line["cost"]).is_empty():
-					rows.add_child(_mark_line(str(line["cost"]), true))
-			"happy":
-				rows.add_child(TownStyle.label(str(line["text"]), TownStyle.SMALL, TownStyle.HAPPY.darkened(0.2)))
-			"ghost":
-				rows.add_child(TownStyle.label(str(line["text"]), TownStyle.SMALL, TownStyle.DIM))
+		var title: Label = TownStyle.label("%s · %s" % [line["source"], line["perk"]])
+		title.add_theme_font_override("font", TownStyle.strong_font())
+		rows.add_child(title)
+		rows.add_child(_mark_line(KitSheet.gain_text(line), false))
+		if not str(line["cost"]).is_empty():
+			rows.add_child(_mark_line(str(line["cost"]), true))
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.name = "Rows"
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	scroll.add_child(rows)
 	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_fill(_card, "", [scroll])
+	# The fade sits over the scroll's bottom edge while there's more below.
+	var holder: MarginContainer = MarginContainer.new()
+	holder.add_child(scroll)
+	var fade: KitMarks.Fade = KitMarks.Fade.new(scroll)
+	fade.name = "Fade"
+	holder.add_child(fade)
+	_fill(_card, "", [holder])
 	_card.visible = true
 	_fit_list.call_deferred(scroll, rows)
 
@@ -1036,10 +1057,11 @@ func _chip(text: String) -> PanelContainer:
 func _show_building(building_id: String) -> void:
 	var card: Dictionary = BuildList.card_for(Game.data, Game.state, building_id)
 	var children: Array[Control] = []
-	for i: int in (card["lines"] as PackedStringArray).size():
-		children.append(TownStyle.label(card["lines"][i]))
-		if i == 0:
-			children.append_array(_shop_lines(building_id))
+	for line: String in card["lines"]:
+		children.append(TownStyle.label(line))
+	# Costs first, as on any card; what the shop adds to the kit is the new
+	# part, last, above Pick a spot (Mara's #51 review).
+	children.append_array(_shop_lines(building_id))
 	if Game.data.row("buildings", building_id)["kind"] == "landmark":
 		var place: Button = _button("Place now", start_carry.bind(building_id, 0))
 		place.disabled = not card["can_place"]
@@ -1075,7 +1097,7 @@ func _show_carry() -> void:
 func _show_confirm() -> void:
 	var building: String = sheet["id"]
 	var name: String = str(BuildList.card_for(Game.data, Game.state, building)["title"])
-	var children: Array[Control] = [TownStyle.label(BuildList.cost_text(Game.data, building))]
+	var children: Array[Control] = [TownStyle.label(_keep_amounts(BuildList.cost_text(Game.data, building)))]
 	children.append_array(_shop_lines(building))
 	for refusal: Dictionary in sheet.get("refusals", []) as Array:
 		children.append(TownStyle.label(str(refusal["text"])))

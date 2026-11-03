@@ -640,11 +640,11 @@ func test_the_kit_tab_shows_the_dice_and_every_perk_with_its_gain_and_cost() -> 
 	assert_true(card.visible)
 	var strips: Array = card.find_children("*", "Control", true, false).filter(
 		func(node: Node) -> bool: return node is KitMarks.FaceStrip)
-	assert_eq(strips.size(), 4, "one strip of faces per die")
+	assert_eq(strips.size(), 1, "four plain dice are one Standard row")
 	var texts: Array = _texts_in(card)
-	for line: String in ["Dice", "Perks", "Shipwright · Brace", "Start every turn with 2 block",
-			"If a home: +1 block, so 3 a turn", "Bait shop · Chum", "+1 of each resource from treasure rooms",
-			"Every enemy hits 1 harder"]:
+	for line: String in ["Dice", "Standard × 4", "Perks", "Shipwright · Brace",
+			"Start every turn with 2 block · if happy: +1 block, so 3 a turn", "Bait shop · Chum",
+			"+1 of each resource from treasure rooms", "Every enemy hits 1 harder"]:
 		assert_true(texts.has(line), "the Kit tab says \"%s\"" % line)
 	town.show_tab(TownScreen.TAB_NOTICE)
 	assert_eq(town.sheet, {})
@@ -668,6 +668,7 @@ func test_k_and_the_kit_strip_open_the_kit_and_the_shoulders_step_through_tabs()
 	var strip: Button = town.find_child("KitStrip", true, false) as Button
 	assert_not_null(strip, "the kit strip sits above Go down")
 	assert_eq(strip.tooltip_text, "Your kit: 4 dice · 0 perks")
+	assert_eq((strip as KitMarks.Strip).perks_text, "0 perks")
 	strip.pressed.emit()
 	assert_eq(town.current_tab(), TownScreen.TAB_KIT, "the strip opens the kit")
 	var shoulder: InputEventJoypadButton = InputEventJoypadButton.new()
@@ -712,3 +713,7 @@ func test_a_shop_card_and_its_stamp_say_what_it_adds_to_the_kit() -> void:
 	texts = _texts_in(town.get_node("%Card"))
 	assert_true(texts.has("Kit: + Weighted die (2 3 3 4 4 5)"), "the stamp says it too")
 	assert_true(texts.has("It never rolls a 6 either"))
+	assert_true(texts.has("1\u00a0shell + 6\u00a0driftwood"), "an amount never wraps from its noun")
+	var strip: KitMarks.Strip = town.find_child("KitStrip", true, false) as KitMarks.Strip
+	assert_eq(strip.perks_text, "0 → 1 perks", "the strip previews the stamp, as the ledger does")
+	assert_true(strip.dice[0]["new"], "the weighted die is the new one")

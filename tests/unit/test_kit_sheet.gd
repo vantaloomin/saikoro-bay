@@ -58,27 +58,47 @@ func test_every_perk_line_has_its_gain_and_a_shop_its_cost() -> void:
 		{"perk": "brace", "source": "shipwright"},
 		{"perk": "chum", "source": "bait_shop"},
 	] as Array[Dictionary])
-	var lines: Array[Dictionary] = KitSheet.perk_lines(data, _state(["shipwright"] as Array[String]), kit)
-	assert_eq(lines[0], {"kind": "perk", "source": "Shipwright", "source_id": "shipwright", "perk": "Brace",
-		"gain": "Start every turn with 2 block", "cost": ""})
-	assert_eq(lines[1]["kind"], "ghost", "a homeless villager's bonus is a ghost")
-	assert_eq(lines[1]["text"], "If a home: +1 block, so 3 a turn")
-	assert_eq(lines[2]["kind"], "perk")
-	assert_eq([lines[2]["source"], lines[2]["perk"], lines[2]["gain"], lines[2]["cost"]],
-		["Bait shop", "Chum", "+1 of each resource from treasure rooms", "Every enemy hits 1 harder"])
-	assert_eq(lines.size(), 3, "a shop has no happy bonus")
+	var lines: Array[Dictionary] = KitSheet.perk_lines(data, kit)
+	assert_eq(lines[0], {"source": "Shipwright", "source_id": "shipwright", "perk": "Brace",
+		"gain": "Start every turn with 2 block", "cost": "", "bonus": "+1 block, so 3 a turn", "happy": false})
+	assert_eq(KitSheet.gain_text(lines[0]), "Start every turn with 2 block · if happy: +1 block, so 3 a turn",
+		"a bonus not yet earned folds into the gain line")
+	assert_eq([lines[1]["source"], lines[1]["perk"], lines[1]["gain"], lines[1]["cost"], lines[1]["bonus"]],
+		["Bait shop", "Chum", "+1 of each resource from treasure rooms", "Every enemy hits 1 harder", ""])
+	assert_eq(KitSheet.gain_text(lines[1]), "+1 of each resource from treasure rooms", "a shop has no happy bonus")
+	assert_eq(lines.size(), 2)
 
 
-func test_a_happy_villager_gets_a_happy_line_and_an_unhappy_one_a_ghost() -> void:
+func test_a_happy_villager_s_bonus_says_it_applies() -> void:
 	var state: GameState = _state(["pearl_diver"] as Array[String])
 	state.build(data, "cottage", Vector2i(0, 6))
 	assert_eq(state.mood(data, "pearl_diver"), Town.Mood.UNHAPPY)
-	var lines: Array[Dictionary] = KitSheet.perk_lines(data, state, Kit.build(data, state))
-	assert_eq(lines[1], {"kind": "ghost", "text": "If their home suited them: twice a turn"})
+	var line: Dictionary = KitSheet.perk_lines(data, Kit.build(data, state))[0]
+	assert_eq(KitSheet.gain_text(line), "Raise one die by 1, once a turn · if happy: twice a turn")
 	assert_eq(state.move_building(data, state.town.placed[0]["uid"], Vector2i(0, 7)), "")
 	assert_eq(state.mood(data, "pearl_diver"), Town.Mood.HAPPY)
-	lines = KitSheet.perk_lines(data, state, Kit.build(data, state))
-	assert_eq(lines[1], {"kind": "happy", "text": "Happy · Twice a turn"})
+	line = KitSheet.perk_lines(data, Kit.build(data, state))[0]
+	assert_eq(KitSheet.gain_text(line), "Raise one die by 1, once a turn · happy: twice a turn")
+
+
+func test_plain_dice_group_and_a_changed_one_says_what_changed() -> void:
+	var kit: Kit = Kit.fresh(data, [
+		{"perk": "weighted_die", "source": "net_shed"},
+		{"perk": "spare_die", "source": "boat_shed"},
+	] as Array[Dictionary])
+	var groups: Array = KitSheet.dice_groups(data, kit).map(
+		func(row: Dictionary) -> Array: return [row["chip"], row["count"]])
+	assert_eq(groups, [["Net shed · no 1s or 6s", 1], ["Standard × 3", 3], ["Boat shed · added", 1]])
+	assert_eq(KitSheet.dice_groups(data, Kit.fresh(data)).map(
+		func(row: Dictionary) -> String: return row["chip"]), ["Standard × 4"])
+
+
+func test_a_change_names_the_numbers_a_die_lost() -> void:
+	assert_eq(KitSheet.change_text([1, 2, 3, 4, 5, 6], [2, 3, 3, 4, 4, 5] as Array[int]), "no 1s or 6s")
+	assert_eq(KitSheet.change_text([1, 2, 3, 4, 5, 6], [2, 2, 3, 4, 5, 6] as Array[int]), "no 1s")
+	assert_eq(KitSheet.change_text([1, 2, 3, 4, 5, 6], [3, 3, 4, 4, 5, 5] as Array[int]), "no 1s, 2s or 6s")
+	assert_eq(KitSheet.change_text([1, 2, 3, 4, 5, 6], [1, 1, 2, 3, 4, 5, 6] as Array[int]), "changed")
+	assert_eq(KitSheet.change_text([1, 2, 3, 4, 5, 6], [1, 2, 3, 4, 5, 6] as Array[int]), "")
 
 
 func test_a_shop_card_says_what_it_adds_to_the_kit() -> void:
