@@ -27,10 +27,13 @@ const VERMILION: Color = Color(0.85, 0.3, 0.2)
 const DRIFTWOOD: Color = Color(0.72, 0.57, 0.4)
 const DRIFTWOOD_DARK: Color = Color(0.48, 0.35, 0.24)
 const INDIGO: Color = Color(0.22, 0.27, 0.42)
+## The notice board's pins. Vermilion is only ever the hanko seal (#42).
+const BRASS: Color = Color(0.78, 0.62, 0.3)
 const SHADOW: Color = Color(0.2, 0.15, 0.1, 0.22)
-## A fresh tide shell is shell pink, so it stands out on the tray's sand;
+## A fresh tide shell is coral, a step darker than the tray's sand so the
+## fill reads in greyscale too, and well away from the seal's vermilion;
 ## a spent one is only a faded outline.
-const SHELL: Color = Color(0.97, 0.78, 0.7)
+const SHELL: Color = Color(0.9, 0.6, 0.5)
 const SPENT: Color = Color(0.64, 0.56, 0.46)
 const ROOF: Dictionary[String, Color] = {
 	"home": Color(0.96, 0.95, 0.92), "shop": Color(0.83, 0.86, 0.9),

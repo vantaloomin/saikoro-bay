@@ -90,7 +90,7 @@ func _draw_spine(item: RID, rect: Rect2) -> void:
 
 
 ## The notice board's pinned note: washi inset in the driftwood, with a
-## vermilion pin at each top corner.
+## brass pin at each top corner (vermilion is only ever the seal).
 func _draw_note(item: RID, rect: Rect2) -> void:
 	var note: Rect2 = rect.grow(-RIM)
 	var paper: PackedVector2Array = _rounded(note, 4.0, false)
@@ -98,7 +98,8 @@ func _draw_note(item: RID, rect: Rect2) -> void:
 	RenderingServer.canvas_item_add_polygon(item, paper, [TownStyle.WASHI])
 	for corner: Vector2 in [note.position + Vector2(16, 12), Vector2(note.end.x - 16, note.position.y + 12)]:
 		RenderingServer.canvas_item_add_circle(item, corner + Vector2(0, 1.5), 5.0, TownStyle.SHADOW)
-		RenderingServer.canvas_item_add_circle(item, corner, 5.0, TownStyle.VERMILION)
+		RenderingServer.canvas_item_add_circle(item, corner, 5.0, TownStyle.BRASS)
+		RenderingServer.canvas_item_add_circle(item, corner + Vector2(-1.5, -1.5), 1.6, TownStyle.WASHI)
 
 
 ## The shell tray: sand in a driftwood rim, a little shade under the top

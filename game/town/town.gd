@@ -679,7 +679,8 @@ func _show_list() -> void:
 	var built: PackedStringArray = []
 	for entry: Dictionary in BuildList.entries(Game.data, Game.state):
 		if entry["done"]:
-			built.append(str(entry["name"]))
+			# A name never wraps in the middle ("Tea / stall", Mara's #44 review).
+			built.append(str(entry["name"]).replace(" ", "\u00a0"))
 		else:
 			rows.add_child(_list_entry(entry))
 	if not built.is_empty():
