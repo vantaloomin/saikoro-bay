@@ -14,6 +14,7 @@ extends RefCounted
 ##   "string"    non-empty string
 ##   "string?"   string, may be empty (for things still being written)
 ##   "int"       whole number
+##   "bool"      true or false
 ##   "int_list"  non-empty list of whole numbers
 ##   "string_list"  list of non-empty strings (may be empty)
 ##   "enum:a|b"  one of the listed words
@@ -40,8 +41,8 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"slots": {
 		"id": "id", "name": "string", "text": "string",
-		"accepts": "enum:any|range|even|odd|exact|pair",
-		"min": "int", "max": "int", "min_dice": "int", "max_dice": "int",
+		"accepts": "enum:any|range|even|odd|exact|pair|three_kind|run|sum_at_least",
+		"min": "int", "max": "int", "min_dice": "int", "max_dice": "int", "persists": "bool",
 		"effect": "enum:damage|block|heal", "mult": "int", "add": "int",
 		"icon_shape": "string",
 	},
@@ -197,6 +198,10 @@ func _read_row(where: String, item: Dictionary, fields: Dictionary) -> Variant:
 					ok = false
 				else:
 					value = SaveCodec.to_int_or(value, 0)
+			"bool":
+				if not value is bool:
+					errors.append("%s: \"%s\" must be true or false" % [where, field])
+					ok = false
 			"int_list":
 				var numbers: Variant = _int_list(value)
 				if numbers == null:

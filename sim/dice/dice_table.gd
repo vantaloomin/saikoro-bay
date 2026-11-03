@@ -49,6 +49,11 @@ class Slot:
 	var id: String = ""
 	var row: Dictionary = {}
 	var dice: Array[int] = []
+	## A persistent slot that was complete when a turn ended: it keeps its
+	## dice, which have left the hand, and takes no more.
+	var sealed: bool = false
+	## The table's hand (the same array), so the slot can read its dice.
+	var hand: Array[Die] = []
 
 	## Fewest dice the slot fires with.
 	func min_dice() -> int:
@@ -58,9 +63,29 @@ class Slot:
 	func max_dice() -> int:
 		return row["max_dice"] as int
 
-	## Enough dice to fire. Each die's rule is checked as it goes in.
+	func persists() -> bool:
+		return row.get("persists", false) as bool
+
+	func values() -> Array[int]:
+		var out: Array[int] = []
+		for die_id: int in dice:
+			out.append(hand[die_id].value)
+		return out
+
+	## Enough dice to fire. Each die's rule is checked as it goes in; a
+	## sum_at_least slot checks its total here instead.
 	func is_complete() -> bool:
-		return dice.size() >= min_dice()
+		return is_complete_with(values())
+
+	func is_complete_with(dice_values: Array[int]) -> bool:
+		if dice_values.size() < min_dice():
+			return false
+		if row["accepts"] == "sum_at_least":
+			var total: int = 0
+			for v: int in dice_values:
+				total += v
+			return total >= (row["min"] as int)
+		return true
 
 
 var hand: Array[Die] = []
@@ -108,6 +133,7 @@ static func create(data: GameData, dice_ids: Array, slot_ids: Array, rng: RngStr
 		var s: Slot = Slot.new()
 		s.id = slot_ref as String
 		s.row = data.row("slots", slot_ref as String)
+		s.hand = table.hand
 		table.slots.append(s)
 	return table
 
@@ -129,19 +155,30 @@ func can_roll() -> bool:
 
 # --- Turn -----------------------------------------------------------------------
 
-## Empties the slots and resets the per-turn counters. Doesn't roll.
+## Empties the slots and resets the per-turn counters. Doesn't roll. A
+## persistent slot that's complete is sealed instead: its dice stay put.
 func reset_turn() -> void:
 	rerolls_left = rerolls_per_turn
 	nudges_left = nudge_uses_per_turn
 	for s: Slot in slots:
-		s.dice.clear()
+		if s.persists() and s.is_complete():
+			s.sealed = true
+		if not s.sealed:
+			s.dice.clear()
 
 
-## Rolls every die in die-id order and returns the values. The owner logs
-## the turn start, then calls apply_lock().
+
+
+
+## Rolls every die in die-id order and returns the values. Dice in a
+## sealed slot are spent: they keep their value and aren't rolled. The
+## owner logs the turn start, then calls apply_lock().
 func roll_hand() -> Array[int]:
 	var values: Array[int] = []
 	for d: Die in hand:
+		if not d.slot_id.is_empty() and slot(d.slot_id).sealed:
+			values.append(d.value)
+			continue
 		d.slot_id = ""
 		d.discarded = false
 		d.locked = false
@@ -181,6 +218,8 @@ func place_refusal(die_id: int, slot_id: String) -> String:
 		return "That die is already placed."
 	if d.locked:
 		return "House lock: this die is locked this turn."
+	if s.sealed:
+		return "This lock is already open."
 	if s.dice.size() >= s.max_dice():
 		return "This slot is full."
 	match s.row["accepts"] as String:
@@ -196,9 +235,18 @@ func place_refusal(die_id: int, slot_id: String) -> String:
 		"exact":
 			if d.value != (s.row["min"] as int):
 				return "Needs exactly %d." % s.row["min"]
-		"pair":
+		"pair", "three_kind":
 			if not s.dice.is_empty() and hand[s.dice[0]].value != d.value:
 				return "Needs a %d to match." % hand[s.dice[0]].value
+		"run":
+			# Each die must keep a run possible: no repeats, and every value
+			# within max_dice - 1 of the others.
+			var values: Array[int] = values_in(s)
+			if values.has(d.value):
+				return "The run already has a %d." % d.value
+			values.append(d.value)
+			if (values.max() as int) - (values.min() as int) > s.max_dice() - 1:
+				return "Too far from the run."
 	return ""
 
 
@@ -215,7 +263,7 @@ func place(die_id: int, slot_id: String) -> bool:
 ## Returns a placed die to the hand. Free, any number of times.
 func take_back(die_id: int) -> bool:
 	var d: Die = die(die_id)
-	if d == null or d.slot_id.is_empty():
+	if d == null or d.slot_id.is_empty() or slot(d.slot_id).sealed:
 		return false
 	slot(d.slot_id).dice.erase(die_id)
 	events.append({"type": "take_back", "die": die_id, "slot": d.slot_id})
@@ -347,6 +395,8 @@ func copy(into_events: Array[Dictionary], into_moves: Array[Dictionary]) -> Dice
 		ss.id = s.id
 		ss.row = s.row
 		ss.dice = s.dice.duplicate()
+		ss.sealed = s.sealed
+		ss.hand = t.hand
 		t.slots.append(ss)
 	return t
 
