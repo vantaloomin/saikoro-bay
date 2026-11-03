@@ -1,7 +1,7 @@
-# Pearl diver: Natsu, 27. Bold, outdoorsy, talks when nervous, which is often.
+# Pearl diver: Isoko, 27. Bold, outdoorsy, talks when nervous, which is often.
 # An ama who dove the bay for eleven years. Four minutes on one breath, once.
 # Bet lost: her breath. She bet Koban she could swim to the palace gate and back
-# on one breath; Koban said they'd settle it with dice, and Natsu rolled a two.
+# on one breath; Koban said they'd settle it with dice, and Isoko rolled a two.
 # She breathes fine but can't hold it longer than it takes to say "pearl".
 # Koban's seal: a small gold coin mark at the base of her throat.
 # Perk: Nudge (raise one die by 1). First to be rescued.
@@ -31,7 +31,7 @@ pearl_diver: The water comes up every time you take too long, so maybe don't tak
 
 The last lock clicks open and the cage door swings wide. She's out and up on the rim in one pull, gulping air like it might run out. [#face=tease]
 pearl_diver: Air! Free air! Don't tell the cat, she'll start charging for it. [#face=tease]
-pearl_diver: I'm Natsu. I dove this bay for eleven years. Best lungs on the coast, everyone said so. Four minutes on one breath. [#face=happy]
+pearl_diver: I'm Isoko. Iso, to anyone who's pulled me out of a cage. I dove this bay for eleven years. Best lungs on the coast, everyone said so. Four minutes on one breath. [#face=happy]
 - So how did you end up in a cage?
 	pearl_diver: Bragging. How else? [#face=tease]
 - Four minutes? Show me.
@@ -94,13 +94,13 @@ pearl_diver: There's something I want to show you, and I can only show it to som
 ~ date
 
 if spot == "hot_spring"
-	The Hot Spring steams in the cool air. Natsu is already in to her shoulders, waving at you before you've got your sandals off. [#face=tease]
+	The Hot Spring steams in the cool air. Isoko is already in to her shoulders, waving at you before you've got your sandals off. [#face=tease]
 	if dates_done > 0
 		pearl_diver: You came back! I saved you the warm corner. I've been guarding it from a frog. [#face=tease]
 	else
 		pearl_diver: Warm water! I forgot how much I missed warm water. The sea's never warm, not where the pearls are. [#face=tease]
 else
-	The Café smells of roasted barley and sugar. Natsu has taken the table by the window, the one with the sea in it. [#face=tease]
+	The Café smells of roasted barley and sugar. Isoko has taken the table by the window, the one with the sea in it. [#face=tease]
 	if dates_done > 0
 		pearl_diver: Same table! I told them it's ours now. They didn't argue, but they didn't agree either. [#face=tease]
 	else
