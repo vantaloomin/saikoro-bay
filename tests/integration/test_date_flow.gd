@@ -10,7 +10,8 @@ const TEST_SAVE: String = "user://test_date_flow.save"
 var _original_state: GameState
 var _original_store: SaveStore
 var _original_motion: bool
-var _original_age: bool
+var _original_age: ContentLevel.AgeAnswer = ContentLevel.AgeAnswer.UNANSWERED
+var _original_sfw_build: bool = false
 var _original_level: ContentLevel.Level
 
 
@@ -18,7 +19,9 @@ func before_each() -> void:
 	_original_state = Game.state
 	_original_store = Game.store
 	_original_motion = Settings.reduce_motion
-	_original_age = Settings.age_confirmed
+	_original_age = Settings.age_answer
+	_original_sfw_build = Settings.sfw_build
+	Settings.sfw_build = false
 	_original_level = Settings.content_level
 	Settings.reduce_motion = true
 	Game.store = SaveStore.new(TEST_SAVE)
@@ -41,7 +44,8 @@ func after_each() -> void:
 	Game.store = _original_store
 	Game.state = _original_state
 	Settings.reduce_motion = _original_motion
-	Settings.age_confirmed = _original_age
+	Settings.age_answer = _original_age
+	Settings.sfw_build = _original_sfw_build
 	Settings.content_level = _original_level
 
 
@@ -161,19 +165,19 @@ func test_leaving_midway_spends_and_keeps_nothing() -> void:
 
 
 func test_the_date_reads_the_content_level_from_settings() -> void:
-	Settings.age_confirmed = false
+	Settings.age_answer = ContentLevel.AgeAnswer.UNANSWERED
 	Settings.content_level = ContentLevel.Level.FULL
 	assert_eq(Game.begin_date("pearl_diver", "cafe").content_level, ContentLevel.Level.SFW, "no age check, no adult lines")
-	Settings.age_confirmed = true
+	Settings.age_answer = ContentLevel.AgeAnswer.ADULT
 	assert_eq(Game.begin_date("pearl_diver", "cafe").content_level, Settings.effective_content_level())
 
 
 func test_a_date_follows_the_setting_when_it_changes() -> void:
-	Settings.age_confirmed = false
+	Settings.age_answer = ContentLevel.AgeAnswer.UNANSWERED
 	var town: TownScreen = _open_card("pearl_diver")
 	var screen: DateScreen = await _start_date(town, "pearl_diver", "cafe")
 	assert_eq(screen.session.content_level, ContentLevel.Level.SFW)
-	Settings.age_confirmed = true
+	Settings.age_answer = ContentLevel.AgeAnswer.ADULT
 	Settings.content_level = ContentLevel.Level.SUGGESTIVE
 	Settings.changed.emit()
 	assert_eq(screen.session.content_level, ContentLevel.Level.SUGGESTIVE)

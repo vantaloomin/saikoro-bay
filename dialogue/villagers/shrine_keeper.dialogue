@@ -3,23 +3,24 @@
 # Vain, flirty, dry, a show-off. Speaks like a grown woman who's sure of herself.
 # Never cutesy, no childish tics, no sibling-style address to the player.
 # Kept the fox shrine on the hill above the town.
+# Looks: fox ears, two tails, painted claws (Vanta, 2026-11-03).
 # Bet lost: her tails. After Tama lost the town, Akane went down to win it back. She bet
-# eight of her nine tails against the deed and cheated with a fox's glamour on her dice.
+# seven of her nine tails against the deed and cheated with a fox's glamour on her dice.
 # Koban caught her. Cheats forfeit the stake and themselves, so the House kept her tails
-# and her. Koban now wears the eight tails as a stole. Akane has one tail left.
-# Koban's seal: a gold coin mark at the root of her remaining tail, where the others were.
-# Perk: Foresight (see one extra room ahead). One tail's worth of sight. Fourth to be rescued.
+# and her. Koban now wears the seven tails as a stole. Akane has two tails left.
+# Koban's seal: a gold coin mark between the roots of her two tails, where the others were.
+# Perk: Foresight (see one extra room ahead). Two tails' worth of sight. Fourth to be rescued.
 # Speaker id: shrine_keeper. Faces: neutral, happy, tease, flustered, sad, surprised.
 
 ~ rescue_start
 
-A gilded cage hangs from the ceiling like a jewelry box, with a velvet cushion inside. A woman with fox ears lounges on it, one red tail curled round her, looking down at you as if you're late. [#face=happy]
+A gilded cage hangs from the ceiling like a jewelry box, with a velvet cushion inside. A woman with fox ears lounges on it, two red tails curled round her, tapping one painted claw on the bars and looking down at you as if you're late. [#face=happy]
 shrine_keeper: Ah. A visitor. Finally, someone worth performing for. [#face=tease]
-shrine_keeper: You'll want to stare at the tail. Everyone does. Stare at the face instead. It's the better feature. [#face=happy]
+shrine_keeper: You'll want to stare at the tails. Everyone does. Stare at the face instead. It's the better feature. [#face=happy]
 - Are you all right up there?
 	shrine_keeper: I'm bored, dusty and humiliated, but my posture is excellent. [#face=sad]
-- Is that your only tail?
-	shrine_keeper: For now. Don't make me cry in front of the locks. [#face=sad]
+- Only two tails? I thought foxes had more.
+	shrine_keeper: Nine, on a good day. Don't make me cry in front of the locks. [#face=sad]
 shrine_keeper: Three locks. I could tell you which dice you'll roll, once. These days I can only tell you the water's coming. [#face=neutral]
 shrine_keeper: Be quick, and be clever. Quick is optional. [#face=tease]
 => END
@@ -39,13 +40,13 @@ shrine_keeper: Beautifully done. Akane, keeper of the fox shrine on the hill, an
 	shrine_keeper: Straight to the wound. I like you. [#face=happy]
 - You look well, for someone in a cage.
 	shrine_keeper: I've been moisturizing out of spite. Thank you for noticing. [#face=tease]
-shrine_keeper: When your grandmother lost the town, I went down to win it back. Eight tails against the deed. [#face=neutral]
+shrine_keeper: When your grandmother lost the town, I went down to win it back. Seven tails against the deed. [#face=neutral]
 shrine_keeper: And I cheated, naturally. A little fox glamour on the dice, so every one looked like a six. [#face=tease]
 shrine_keeper: She caught me on the first roll. A cheat forfeits the stake and herself, so the House kept my tails, and me. [#face=sad]
 shrine_keeper: She wears them now. As a stole. Over one shoulder, on the nights she wants me to see it. [#face=sad]
-She turns so you can see the root of her last tail. A small gold coin mark sits there, where the others used to be.
+She turns so you can see where her two tails meet. A small gold coin mark sits between them, where the others used to be.
 shrine_keeper: Do you know how she caught me so fast? She knew exactly what to look for. Think about that, the next time she rolls a six. [#face=happy]
-shrine_keeper: Nine tails saw a year ahead. One sees a room or so. That room is yours, whenever you go down. [#face=happy]
+shrine_keeper: Nine tails saw a year ahead. Two see a room or so. That room is yours, whenever you go down. [#face=happy]
 => END
 
 ~ rescue_failed
@@ -72,7 +73,7 @@ shrine_keeper: Visit me. Bring fried tofu. That isn't a stereotype. It's a stand
 ~ home_happy
 
 % shrine_keeper: The lantern burned all night. Three ghosts and a moth came to visit. The moth was the best company. [#face=tease]
-% shrine_keeper: I brushed my tail for an hour this morning. It deserved it. [#face=happy]
+% shrine_keeper: I brushed my tails for an hour this morning. They deserved it. [#face=happy]
 % shrine_keeper: Shall I tell your fortune? Rain tomorrow, a good roll the day after. Free of charge. Once. [#face=happy]
 % shrine_keeper: The town's coming back. I can feel it in the ears. [#face=happy]
 => END
@@ -99,11 +100,11 @@ shrine_keeper: Bring a brush. I'll explain when you get there. It's the most per
 ~ date
 
 if spot == "hot_spring"
-	Akane sits on the rocks at the edge of the Hot Spring with her feet in the water and her tail held carefully up and away from it. [#face=neutral]
+	Akane sits on the rocks at the edge of the Hot Spring with her feet in the water and both tails held carefully up and away from it. [#face=neutral]
 	if dates_done > 0
 		shrine_keeper: You came back. I foresaw it, of course. I also hoped. Those aren't the same thing. [#face=happy]
 	else
-		shrine_keeper: The water is lovely. The tail stays dry. That's not up for discussion. [#face=tease]
+		shrine_keeper: The water is lovely. The tails stay dry. That's not up for discussion. [#face=tease]
 else
 	Akane has the best table in the Café and three plates in front of her, all fried tofu. [#face=tease]
 	if dates_done > 0
@@ -111,9 +112,9 @@ else
 	else
 		shrine_keeper: Sit. I ordered for both of us, and then I ate yours. You were late. [#face=tease]
 shrine_keeper: So. Say something nice about me. Warm me up. [#face=happy]
-- Your tail's gorgeous.
+- Your tails are gorgeous.
 	set affection += 1
-	shrine_keeper: It is. You should have seen the other eight. [#face=flustered]
+	shrine_keeper: They are. You should have seen the other seven. [#face=flustered]
 - You've got sauce on your chin.
 	shrine_keeper: I do not. [#face=surprised]
 	shrine_keeper: I did. Thank you. That was nice in its own way. [#face=tease]
@@ -122,7 +123,7 @@ shrine_keeper: So. Say something nice about me. Warm me up. [#face=happy]
 	shrine_keeper: Nobody has ever noticed that. You're dangerous. [#face=flustered]
 shrine_keeper: Let's play a game. I'm hiding a pearl under one of these cups. Which one? [#face=tease]
 if spot == "hot_spring"
-	She lines up three teacups on the rocks and shuffles them, quick as a minnow.
+	She lines up three teacups on the rocks and shuffles them, quick as a minnow, her claws clicking on the china.
 else
 	She turns three teacups over on the table and shuffles them, quick as a minnow.
 - The left one.
@@ -139,7 +140,7 @@ else
 	shrine_keeper: Rude, clever, effective. I approve on all counts. [#face=tease]
 shrine_keeper: Do you know what I miss? The weight. Nine tails are heavy. You lean back into them like a chair. [#face=sad]
 shrine_keeper: Now I lean back and there's nothing there. Every time. I keep falling into chairs that aren't there. [#face=sad]
-- We'll win them back. All eight.
+- We'll win them back. All seven.
 	set affection += 1
 	shrine_keeper: Off her shoulders? I'd pay to watch that. [#face=happy]
 	shrine_keeper: I'd pay twice. [#face=tease]
@@ -149,7 +150,7 @@ shrine_keeper: Now I lean back and there's nothing there. Every time. I keep fal
 - Was it worth it? Trying to win the town?
 	shrine_keeper: I lost, so no. I'd try again tomorrow, so yes. Don't ask a fox for a straight answer. [#face=happy]
 if spot == "hot_spring"
-	shrine_keeper: My feet are warm and my tail is dry. A perfect evening. Almost. Come back and finish it some time. [#face=happy]
+	shrine_keeper: My feet are warm and my tails are dry. A perfect evening. Almost. Come back and finish it some time. [#face=happy]
 else
 	shrine_keeper: You can pay. I left my purse in a cage at the bottom of the sea. [#face=tease]
 => END
