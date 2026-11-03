@@ -190,3 +190,22 @@ func test_twist_banner_shows_on_first_meeting_until_the_first_turn() -> void:
 	assert_string_contains((other._banner.get_child(0) as Label).text, "New twist · Snake eyes")
 	await other._on_end_turn()
 	assert_false(other._banner.visible)
+
+
+func test_moves_make_their_sounds() -> void:
+	board._on_die_pressed(0)
+	board._on_slot_pressed("high_roller")
+	board._on_die_pressed(1)
+	board._on_slot_pressed("high_roller")
+	board._on_die_pressed(1)
+	board._on_reroll()
+	board._on_die_pressed(0)
+	board._on_reroll()
+	assert_eq(board._sounds.played, ["invalid", "place", "take_back", "roll", "land"] as Array[String])
+
+
+func test_every_cue_is_a_short_sound() -> void:
+	for cue: String in BoardSounds.CUES:
+		var wav: AudioStreamWAV = BoardSounds.stream(cue)
+		assert_not_null(wav, cue)
+		assert_between(wav.get_length(), 0.03, 0.6, cue)

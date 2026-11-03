@@ -71,6 +71,7 @@ var _intent: IntentView
 var _twist: Label
 var _message: Label
 var _badge: Label
+var _sounds: BoardSounds
 var _nudge_chip: FaceChip
 var _slot_cards: Dictionary[String, SlotCard] = {}
 var _dice: Array[DieView] = []
@@ -104,6 +105,8 @@ func _ready() -> void:
 	_ensure_actions()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	theme = BoardStyle.theme()
+	_sounds = BoardSounds.new()
+	add_child(_sounds)
 	_build()
 	_refresh_all()
 	if not _dice.is_empty():
@@ -184,9 +187,11 @@ func _on_slot_pressed(slot_id: String) -> void:
 		card.preview_text = reason
 		card.preview_tone = "error"
 		_pulse(card, fight.slot(slot_id).dice.size() >= fight.slot(slot_id).needed())
+		_sounds.play("invalid")
 		return
 	PlaytestLog.log_event("place", {"die": _selected, "slot": slot_id, "hover_ms": Time.get_ticks_msec() - _selected_at_ms})
 	fight.place(_selected, slot_id)
+	_sounds.play("place")
 	_selected = -1
 	_say("", false)
 	_refresh_all()
@@ -204,6 +209,7 @@ func _on_slot_secondary(slot_id: String) -> void:
 func _take_back(die_id: int) -> void:
 	if fight.take_back(die_id):
 		PlaytestLog.log_event("take_back", {"die": die_id, "turn": fight.turn})
+		_sounds.play("take_back")
 		_refresh_all()
 
 
@@ -241,6 +247,7 @@ func _on_reroll() -> void:
 		_say("Pick a die to discard first.", false)
 		return
 	fight.reroll(_reroll_discard)
+	_roll_sound()
 	_reroll_mode = false
 	_reroll_discard = -1
 	_say("", false)
@@ -264,11 +271,19 @@ func _on_end_turn() -> void:
 	fight.end_turn()
 	var turn_events: Array[Dictionary] = fight.events.slice(start)
 	await _play(turn_events)
+	if fight.state == Fight.State.PLAYER_TURN:
+		_roll_sound()
 	_last_turn.text = "Last turn: " + _describe(turn_events)
 	_moves_seen = fight.moves.size()
 	_refresh_all()
 	if fight.state != Fight.State.PLAYER_TURN:
 		_show_results()
+
+
+## The rattle of a roll, then the dice landing.
+func _roll_sound() -> void:
+	_sounds.play("roll")
+	_sounds.play("land")
 
 
 # --- Resolution playback ------------------------------------------------------
