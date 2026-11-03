@@ -3,8 +3,11 @@ extends RefCounted
 ## Turns a save payload (a plain Dictionary) into file text and back.
 ##
 ## File layout, two lines:
-##   1. Header JSON: {"format": "saikoro-bay-save", "version": N, "sha256": "..."}
+##   1. Header JSON: {"format": "saikoro-bay-save", "version": N, "seq": S, "sha256": "..."}
 ##   2. Payload JSON, exactly as hashed.
+##
+## `seq` goes up by one with every write to a slot, so when a slot has
+## several good copies (save, .tmp, .bak) the newest one is easy to find.
 ##
 ## The hash is over the payload line's raw text, so a truncated or edited
 ## file is caught before it is trusted. Saves from a newer version of the
@@ -43,17 +46,19 @@ class DecodeResult:
 	extends RefCounted
 	var status: Status = Status.OK
 	var version: int = 0
+	var seq: int = 0
 	var payload: Dictionary = {}
 
 	func is_ok() -> bool:
 		return status == Status.OK
 
 
-static func encode(payload: Dictionary) -> String:
+static func encode(payload: Dictionary, seq: int = 0) -> String:
 	var body: String = JSON.stringify(payload, "", true, true)
 	var header: Dictionary = {
 		"format": FORMAT,
 		"version": CURRENT_VERSION,
+		"seq": seq,
 		"sha256": body.sha256_text(),
 	}
 	return JSON.stringify(header, "", true) + "\n" + body + "\n"
@@ -85,6 +90,7 @@ static func decode(text: String, target_version: int = CURRENT_VERSION) -> Decod
 		result.status = Status.BAD_VERSION
 		return result
 	result.version = version
+	result.seq = maxi(read_int(header, "seq", 0), 0)
 	if version > target_version:
 		result.status = Status.TOO_NEW
 		return result
@@ -103,7 +109,11 @@ static func decode(text: String, target_version: int = CURRENT_VERSION) -> Decod
 		if not MIGRATIONS.has(next_version):
 			result.status = Status.BAD_VERSION
 			return result
-		payload = MIGRATIONS[next_version].call(payload)
+		var migrated: Variant = MIGRATIONS[next_version].call(payload)
+		if not migrated is Dictionary:
+			result.status = Status.BAD_VERSION
+			return result
+		payload = migrated
 	result.version = target_version
 	result.payload = payload
 	return result

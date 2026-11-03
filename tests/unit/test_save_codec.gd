@@ -16,6 +16,11 @@ func test_round_trip() -> void:
 	assert_eq(game["name"], "Bay")
 
 
+func test_seq_round_trips() -> void:
+	assert_eq(SaveCodec.decode(SaveCodec.encode({}, 41)).seq, 41)
+	assert_eq(SaveCodec.decode(SaveCodec.encode({})).seq, 0)
+
+
 func test_empty_text() -> void:
 	assert_eq(SaveCodec.decode("").status, SaveCodec.Status.EMPTY)
 	assert_eq(SaveCodec.decode("  \n ").status, SaveCodec.Status.EMPTY)
@@ -76,6 +81,13 @@ func test_migrations_run_in_order() -> void:
 	assert_true(result.is_ok())
 	assert_eq(result.version, 3)
 	assert_eq(SaveCodec.read_int(result.payload, "coins_v3"), 51)
+
+
+func test_migration_must_return_a_dictionary() -> void:
+	SaveCodec.MIGRATIONS[2] = func(_p: Dictionary) -> Variant:
+		return null
+	var result: SaveCodec.DecodeResult = SaveCodec.decode(SaveCodec.encode({"coins": 5}), 2)
+	assert_eq(result.status, SaveCodec.Status.BAD_VERSION)
 
 
 func test_payload_must_be_an_object() -> void:

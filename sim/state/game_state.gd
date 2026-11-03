@@ -120,6 +120,8 @@ static func from_dict(data: Dictionary) -> GameState:
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
 	state.phase = Phase[phase_name as String] as Phase
 	state.delve_count = SaveCodec.to_int_or(count, 0)
+	if state.phase == Phase.DELVE and state.delve_count < 1:
+		return null
 	for id: Variant in resource_data as Dictionary:
 		var amount: Variant = (resource_data as Dictionary)[id]
 		if not id is String or not SaveCodec.is_int_like(amount):

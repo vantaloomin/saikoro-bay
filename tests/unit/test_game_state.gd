@@ -72,6 +72,7 @@ func test_from_dict_rejects_bad_data() -> void:
 		"numeric seed": {"campaign_seed": 5},
 		"fraction count": {"delve_count": 1.5},
 		"negative count": {"delve_count": -1},
+		"in a delve before any delve": {"phase": "DELVE", "delve_count": 0},
 		"fraction resource": {"resources": {"pearls": 2.5}},
 		"negative resource": {"resources": {"pearls": -2}},
 		"text resource": {"resources": {"pearls": "lots"}},

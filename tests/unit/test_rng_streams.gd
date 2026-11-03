@@ -7,15 +7,15 @@ const SEED: int = 20261103
 ## Golden sequence. If this fails, the same seed no longer gives the same
 ## delve: saved delves, bug reports and balance numbers all stop matching.
 ## That happens if a Godot upgrade changes its generator, or if the stream
-## derivation or the Stream enum order changes. Don't just update the
-## numbers: decide whether old seeds need to keep working first.
+## derivation or a stream's name changes. Don't just update the numbers:
+## decide whether old seeds need to keep working first.
 func test_golden_sequence_per_stream() -> void:
 	var expected: Dictionary[RngStreams.Stream, Array] = {
-		RngStreams.Stream.MAP: [5, 1, 5, 1, 3, 5, 1, 5, 5, 1],
-		RngStreams.Stream.ROLLS: [6, 1, 3, 4, 3, 5, 4, 4, 3, 1],
-		RngStreams.Stream.LOOT: [5, 6, 3, 1, 5, 1, 6, 5, 4, 6],
-		RngStreams.Stream.ENEMIES: [1, 3, 4, 4, 4, 6, 6, 2, 4, 5],
-		RngStreams.Stream.COSMETIC: [2, 4, 4, 3, 2, 2, 6, 2, 5, 6],
+		RngStreams.Stream.MAP: [4, 6, 6, 6, 6, 2, 3, 4, 3, 6],
+		RngStreams.Stream.ROLLS: [1, 4, 2, 1, 5, 1, 4, 3, 3, 6],
+		RngStreams.Stream.LOOT: [2, 6, 3, 5, 2, 2, 6, 6, 5, 4],
+		RngStreams.Stream.ENEMIES: [2, 6, 2, 3, 4, 3, 6, 6, 2, 3],
+		RngStreams.Stream.COSMETIC: [2, 4, 3, 6, 4, 1, 6, 4, 1, 6],
 	}
 	var rng: RngStreams = RngStreams.new(SEED)
 	for stream: RngStreams.Stream in expected:
@@ -27,7 +27,42 @@ func test_golden_wide_range() -> void:
 	var values: Array[int] = []
 	for _i: int in 5:
 		values.append(rng.range_int(RngStreams.Stream.MAP, 0, 1000000))
-	assert_eq(values, [712911, 808844, 833709, 133529, 227524])
+	assert_eq(values, [33148, 84965, 818986, 214321, 474070])
+
+
+func test_stream_seed_depends_on_name_not_order() -> void:
+	assert_eq(RngStreams.stream_seed(SEED, "MAP"), RngStreams.stream_seed(SEED, "MAP"))
+	assert_ne(RngStreams.stream_seed(SEED, "MAP"), RngStreams.stream_seed(SEED, "ROLLS"))
+	assert_ne(RngStreams.stream_seed(SEED, "MAP"), RngStreams.stream_seed(SEED + 1, "MAP"))
+	assert_gt(RngStreams.stream_seed(SEED, "MAP"), 0)
+
+
+func test_ranges_beyond_32_bits_are_refused() -> void:
+	var rng: RngStreams = RngStreams.new(SEED)
+	var untouched: RngStreams = RngStreams.new(SEED)
+	assert_eq(rng.range_int(RngStreams.Stream.LOOT, 3000000000, 3000000005), 3000000000)
+	assert_push_error("bad range")
+	assert_eq(rng.range_int(RngStreams.Stream.LOOT, 0, 10000000000), 0)
+	assert_eq(rng.range_int(RngStreams.Stream.LOOT, -2147483648, 2147483647), -2147483648, "span too wide")
+	assert_eq(rng.range_int(RngStreams.Stream.LOOT, 5, 4), 5, "reversed")
+	assert_push_error_count(4)
+	assert_eq(_rolls(rng, RngStreams.Stream.LOOT, 10), _rolls(untouched, RngStreams.Stream.LOOT, 10),
+		"refused ranges don't consume draws")
+	# The widest allowed ranges still work.
+	assert_between(rng.range_int(RngStreams.Stream.LOOT, 0, 2147483647), 0, 2147483647)
+	assert_between(rng.range_int(RngStreams.Stream.LOOT, -2147483648, -1), -2147483648, -1)
+
+
+func test_bad_inputs_return_safe_values() -> void:
+	var rng: RngStreams = RngStreams.new(SEED)
+	assert_eq(rng.index(RngStreams.Stream.MAP, 0), -1)
+	assert_null(rng.pick(RngStreams.Stream.MAP, []))
+	assert_eq(rng.roll(RngStreams.Stream.ROLLS, 0), 1)
+	assert_false(rng.chance(RngStreams.Stream.LOOT, 1, 0))
+	assert_eq(rng.weighted_index(RngStreams.Stream.LOOT, PackedInt32Array([0, 0])), -1)
+	assert_eq(rng.weighted_index(RngStreams.Stream.LOOT, PackedInt32Array([1, -1])), -1)
+	assert_eq(rng.weighted_index(RngStreams.Stream.LOOT, PackedInt32Array([2147483647, 1])), -1, "total too big")
+	assert_push_error_count(7)
 
 
 func test_same_seed_same_numbers() -> void:
