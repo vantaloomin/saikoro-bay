@@ -19,8 +19,8 @@ func _run(seed_value: int = 11, perks: Array[Dictionary] = []) -> DelveRun:
 	return run
 
 
-## Plays with the greedy bot, taking the leftmost room and always going
-## deeper, until the vault, a wash-up, or `stop_at` is reached.
+## Plays with the greedy bot (and the room bot), taking the leftmost room
+## and always going deeper, until the vault, a wash-up, or `stop_at`.
 func _play(run: DelveRun, stop_at: DelveRun.Step = DelveRun.Step.VAULT) -> void:
 	var bot: GreedyBot = GreedyBot.new()
 	for guard: int in 200:
@@ -32,11 +32,42 @@ func _play(run: DelveRun, stop_at: DelveRun.Step = DelveRun.Step.VAULT) -> void:
 			DelveRun.Step.IN_ROOM:
 				if run.fight != null:
 					bot.play_fight(run.fight)
+				if run.room != null:
+					RoomBot.new().play_room(run.room)
 				assert_true(run.finish_room())
 			DelveRun.Step.LANDING:
 				run.go_deeper()
 			_:
 				return
+
+
+## Plays the leftmost path until a room of `type` can be walked into, and
+## walks in. Returns false if the delve ends or passes the floor first.
+func _walk_into(run: DelveRun, type: String) -> bool:
+	var bot: GreedyBot = GreedyBot.new()
+	for guard: int in 200:
+		match run.step:
+			DelveRun.Step.CHOOSE_ROOM:
+				for c: int in run.reachable():
+					if run.map.room(run.floor_index, run.row + 1, c).type == type:
+						return run.choose(c)
+				run.choose(run.reachable()[0])
+			DelveRun.Step.IN_ROOM:
+				if run.fight != null:
+					bot.play_fight(run.fight)
+				if run.room != null:
+					RoomBot.new().play_room(run.room)
+				run.finish_room()
+			DelveRun.Step.LANDING:
+				run.go_deeper()
+			_:
+				return false
+	return false
+
+
+func _set_hand(room: DiceRoom, values: Array[int]) -> void:
+	for i: int in values.size():
+		room.hand[i].value = values[i]
 
 
 func test_a_delve_starts_at_full_hp_with_an_empty_haul() -> void:
@@ -195,17 +226,84 @@ func test_nothing_is_kept_mid_delve() -> void:
 	assert_true(run.kept_haul().is_empty())
 
 
-func test_placeholder_rooms_pass_without_paying() -> void:
-	for s: int in range(1, 60):
+func _seed_with(type: String) -> DelveRun:
+	for s: int in range(1, 80):
 		var run: DelveRun = _run(s)
-		_play(run, DelveRun.Step.LANDING)
-		for i: int in run.path.size():
-			var p: Array = run.path[i]
-			var type: String = run.map.room(p[0], p[1], p[2]).type
-			if type in [DelveMap.TREASURE, DelveMap.REST, DelveMap.RESCUE]:
-				assert_eq(run.choices.filter(func(e: Dictionary) -> bool: return e.has("room"))[i]["room"], [], "no moves in a placeholder")
-				return
-	fail_test("no placeholder room reached")
+		if _walk_into(run, type):
+			return run
+	fail_test("no seed reaches a %s room" % type)
+	return null
+
+
+func test_treasure_pays_into_the_haul() -> void:
+	var run: DelveRun = _seed_with(DelveMap.TREASURE)
+	var before: Haul = run.haul.copy()
+	assert_eq(run.room.room_id, "treasure")
+	assert_false(run.finish_room(), "not until the room is played")
+	_set_hand(run.room, [6, 2, 2, 1])
+	run.room.place(0, "small_lock")
+	run.room.place(1, "pearl_lock")
+	run.room.place(2, "pearl_lock")
+	run.room.end_turn()
+	assert_true(run.finish_room())
+	assert_eq(run.haul.resource("driftwood"), before.resource("driftwood") + 6)
+	assert_eq(run.haul.resource("pearls"), before.resource("pearls") + 2)
+	assert_eq(run.last_loot, {"driftwood": 6, "pearls": 2} as Dictionary[String, int])
+	assert_eq((run.choices.back()["room"] as Array).back(), {"move": "end_turn"})
+
+
+func test_rest_heals_the_run() -> void:
+	for s: int in range(1, 80):
+		var run: DelveRun = _run(s)
+		if not _walk_into(run, DelveMap.REST):
+			continue
+		var came_in: int = run.hp
+		RoomBot.new().play_room(run.room)
+		var healed_to: int = run.room.hp
+		assert_true(run.finish_room())
+		assert_eq(run.hp, healed_to)
+		assert_gte(run.hp, came_in)
+		return
+	fail_test("no seed reaches a rest")
+
+
+func test_the_rescue_tide_can_wash_you_up() -> void:
+	var run: DelveRun = _seed_with(DelveMap.RESCUE)
+	run.room.hp = 2
+	run.room.end_turn()
+	assert_eq(run.room.state, DiceRoom.State.LOST)
+	assert_true(run.finish_room())
+	assert_eq(run.step, DelveRun.Step.WASHED_UP)
+	assert_eq(run.hp, 0)
+	assert_false(run.haul.villagers.has("pearl_diver"))
+
+
+func test_opening_the_cage_adds_the_villager_to_the_haul() -> void:
+	var run: DelveRun = _seed_with(DelveMap.RESCUE)
+	var cage: DiceRoom = run.room
+	_set_hand(cage, [5, 5, 6, 4])
+	cage.place(0, "cage_pair")
+	cage.place(1, "cage_pair")
+	cage.place(2, "cage_sum")
+	cage.place(3, "cage_sum")
+	cage.end_turn()
+	_set_hand(cage, [2, 3, 4, 1])
+	for die_id: int in [0, 1, 2]:
+		cage.place(die_id, "cage_run")
+	cage.end_turn()
+	assert_true(cage.succeeded)
+	assert_true(run.finish_room())
+	assert_eq(run.haul.villagers, ["pearl_diver"] as Array[String])
+	assert_false(run.is_over(), "you carry on with them")
+
+
+func test_a_shut_cage_leaves_the_villager_below() -> void:
+	var run: DelveRun = _seed_with(DelveMap.RESCUE)
+	for turn: int in 3:
+		run.room.end_turn()
+	assert_true(run.finish_room())
+	assert_false(run.is_over(), "you carry on either way")
+	assert_eq(run.haul.villagers, [] as Array[String])
 
 
 func test_the_same_seed_plays_the_same_delve() -> void:

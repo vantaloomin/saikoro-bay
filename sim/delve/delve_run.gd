@@ -20,8 +20,11 @@ extends RefCounted
 ## cleared. `choices` records every choice and each room's moves, so the seed,
 ## the perks, the pools and the choices replay a whole delve (replay()).
 ##
-## Not built yet: treasure, rest and rescue rooms are placeholders that pay
-## nothing (the rooms PR), and the vault is a stop (the vault PR).
+## Treasure, rest and rescue rooms are DiceRooms: what they pay goes into
+## the haul, rest heals, and opening the rescue cage adds the villager. The
+## tide in a rescue can wash you up like a lost fight.
+##
+## Not built yet: the vault is a stop (the vault PR).
 
 enum Step { CHOOSE_ROOM, IN_ROOM, LANDING, VAULT, SURFACED, WASHED_UP, CLEARED }
 
@@ -37,9 +40,11 @@ var col: int = -1
 var hp: int = 0
 var max_hp: int = 0
 var haul: Haul = Haul.new()
-## The room being played: its type, and the fight for fight and elite rooms.
+## The room being played: its type, and the fight for fight and elite rooms
+## or the dice room for treasure, rest and rescue.
 var room_type: String = ""
 var fight: Fight
+var room: DiceRoom
 ## Rooms walked into, in order, as [floor, row, col].
 var path: Array[Array] = []
 ## What the last cleared room paid: {resource id: amount}.
@@ -93,7 +98,8 @@ static func replay(data: GameData, seed_value: int, with_perks: Array[Dictionary
 		elif entry.has("room"):
 			var room_moves: Array[Dictionary] = []
 			room_moves.assign(entry["room"] as Array)
-			ok = (run.fight == null or run.fight.apply_moves(room_moves)) and run.finish_room()
+			ok = (run.fight == null or run.fight.apply_moves(room_moves)) \
+				and (run.room == null or run.room.apply_moves(room_moves)) and run.finish_room()
 		elif entry.has("landing"):
 			ok = run.surface() if str(entry["landing"]) == "surface" else run.go_deeper()
 		if not ok:
@@ -132,8 +138,9 @@ func rooms_to_landing() -> int:
 	return map.rows_in_floor(floor_index) - 1 - row
 
 
-## Walks into a room. A fight room whose fight can't be built (no enemy of
-## its tier in the data) is refused with an error, never entered empty.
+## Walks into a room. A fight or dice room that can't be built (no enemy of
+## its tier, or no dice_rooms row) is refused with an error, never entered
+## empty.
 func choose(next_col: int) -> bool:
 	if not reachable().has(next_col):
 		return false
@@ -153,6 +160,12 @@ func choose(next_col: int) -> bool:
 			return false
 		# Who you meet depends on the path, so logs name them (replay ignores it).
 		entry["enemy"] = enemy_id
+	var next_room: DiceRoom = null
+	if is_dice_room(next_type):
+		next_room = DiceRoom.create(_data, LOADOUT, next_type, _rng, perks, hp)
+		if next_room == null:
+			push_error("DelveRun: can't build a %s room at %d HP" % [next_type, hp])
+			return false
 	row += 1
 	col = next_col
 	path.append([floor_index, row, col])
@@ -160,6 +173,7 @@ func choose(next_col: int) -> bool:
 	step = Step.IN_ROOM
 	room_type = next_type
 	fight = next_fight
+	room = next_room
 	last_loot = {}
 	return true
 
@@ -168,8 +182,14 @@ static func is_fight_room(type: String) -> bool:
 	return type == DelveMap.FIGHT or type == DelveMap.ELITE
 
 
-## Ends the room once its play is over: a fight room needs its fight won or
-## lost. A win pays loot and moves on; a loss washes up in the barrel.
+static func is_dice_room(type: String) -> bool:
+	return type in [DelveMap.TREASURE, DelveMap.REST, DelveMap.RESCUE]
+
+
+## Ends the room once its play is over: a fight won or lost, or a dice room
+## done. A win pays loot and moves on; a loss (or the tide reaching 0 HP)
+## washes up in the barrel. A dice room pays what its slots paid, and an
+## opened rescue cage adds its villager to the haul.
 func finish_room() -> bool:
 	if step != Step.IN_ROOM:
 		return false
@@ -183,6 +203,22 @@ func finish_room() -> bool:
 		if not won:
 			step = Step.WASHED_UP
 			return true
+	elif is_dice_room(room_type):
+		if room == null or room.state == DiceRoom.State.PLAYER_TURN:
+			return false
+		choices.append({"room": room.moves.duplicate(true)})
+		hp = room.hp
+		var finished: DiceRoom = room
+		room = null
+		if finished.state == DiceRoom.State.LOST:
+			step = Step.WASHED_UP
+			return true
+		for id: String in finished.payout:
+			if haul.add_resource(id, finished.payout[id]):
+				last_loot[id] = last_loot.get(id, 0) + finished.payout[id]
+		if finished.succeeded and room_type == DelveMap.RESCUE and not map.rescue_villager.is_empty() \
+				and not haul.villagers.has(map.rescue_villager):
+			haul.villagers.append(map.rescue_villager)
 	else:
 		choices.append({"room": []})
 	_pay_loot(room_type)

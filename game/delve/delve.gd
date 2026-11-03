@@ -1,14 +1,17 @@
 extends Control
 ## Greybox delve (M2 stand-in until the map screen): plays Game.run room by
 ## room, always taking the leftmost room it can reach. Fights show on the
-## board; treasure, rest and rescue rooms are placeholders that pass for
-## now. At a landing, Surface and Deeper choose; a wash-up or surfacing
-## goes back to town, where the haul is banked.
+## board. Treasure, rest and rescue rooms have no board yet, so the room
+## bot plays them and the status line says what they gave. At a landing,
+## Surface and Deeper choose; a wash-up or surfacing goes back to town,
+## where the haul is banked.
 
 const BOARD_SCENE: PackedScene = preload("res://game/delve/board/fight_board.tscn")
 
 var _board: FightBoard
 var _deeper: Button
+## What the rooms played since the last stop gave, for the status line.
+var _notes: PackedStringArray = []
 
 @onready var _surface: Button = %Surface
 @onready var _status: Label = %Status
@@ -41,6 +44,8 @@ func _advance() -> void:
 				if run.fight != null:
 					_show_fight(run)
 					return
+				if run.room != null:
+					_play_room(run)
 				run.finish_room()
 			DelveRun.Step.LANDING:
 				_surface.visible = true
@@ -57,6 +62,26 @@ func _advance() -> void:
 					_surface.visible = true
 					_surface.grab_focus()
 				return
+
+
+## Stand-in until the room boards (Mara's UX): the room bot plays it.
+func _play_room(run: DelveRun) -> void:
+	var played: DiceRoom = run.room
+	RoomBot.new().play_room(played)
+	var gave: PackedStringArray = []
+	for id: String in played.payout:
+		gave.append("+%d %s" % [played.payout[id], Game.data.row("resources", id)["name"]])
+	var before: int = run.hp
+	if played.hp > before:
+		gave.append("+%d HP" % (played.hp - before))
+	elif played.hp < before:
+		gave.append("-%d HP" % (before - played.hp))
+	if played.room_id == DelveMap.RESCUE:
+		gave.append("cage open" if played.succeeded else "cage still shut")
+	var room_name: String = Game.data.row("rooms", played.room_id)["name"]
+	_notes.append("%s: %s" % [room_name, ", ".join(gave) if not gave.is_empty() else "nothing"])
+	PlaytestLog.log_event("room_played", {"room": played.room_id, "floor": run.floor_index, "row": run.row,
+		"payout": played.payout, "hp": played.hp, "opened": played.succeeded})
 
 
 func _show_fight(run: DelveRun) -> void:
@@ -97,4 +122,8 @@ func _on_deeper_pressed() -> void:
 
 
 func _set_status(run: DelveRun, text: String) -> void:
-	_status.text = "Delve %d · HP %d/%d · %s" % [Game.state.delve_count, run.hp, run.max_hp, text]
+	var shown: String = text
+	if not _notes.is_empty():
+		shown = "%s · %s" % [" · ".join(_notes), text]
+		_notes.clear()
+	_status.text = "Delve %d · HP %d/%d · %s" % [Game.state.delve_count, run.hp, run.max_hp, shown]
