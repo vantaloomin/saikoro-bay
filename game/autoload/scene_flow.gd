@@ -18,7 +18,7 @@ const NAV_ACTIONS: Array[StringName] = [
 	&"ui_up", &"ui_down", &"ui_left", &"ui_right", &"ui_focus_next", &"ui_focus_prev", &"ui_accept",
 ]
 
-## Swaps the sweep for a short fade (SA-7). Settings will own this later.
+## Swaps the sweep for a short fade (SA-7). Set from Settings.
 var reduce_motion: bool = false
 
 var busy: bool:

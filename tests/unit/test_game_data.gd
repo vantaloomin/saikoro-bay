@@ -1,0 +1,66 @@
+extends GutTest
+## GameData: the real data files load cleanly, and bad data is reported.
+
+
+func test_shipped_data_is_valid() -> void:
+	var data: GameData = GameData.load_dir()
+	assert_eq(data.errors, PackedStringArray(), "\n".join(data.errors))
+	assert_true(data.is_valid())
+
+
+func test_slice_villagers_and_their_perks() -> void:
+	var data: GameData = GameData.load_dir()
+	assert_eq(data.ids("villagers"), PackedStringArray(["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"]))
+	assert_eq(data.row("villagers", "shrine_keeper")["perk"], "foresight")
+	assert_eq(data.row("perks", "foresight")["kind"], "map")
+
+
+func test_whole_numbers_come_back_as_ints() -> void:
+	var data: GameData = GameData.load_dir()
+	assert_typeof(data.row("perks", "brace")["amount"], TYPE_INT)
+
+
+func test_rows_are_read_only() -> void:
+	var data: GameData = GameData.load_dir()
+	assert_true(data.row("perks", "nudge").is_read_only())
+
+
+func test_missing_row_is_empty() -> void:
+	var data: GameData = GameData.load_dir()
+	assert_false(data.has_row("perks", "nope"))
+	assert_eq(data.row("perks", "nope"), {})
+	assert_eq(data.ids("nope"), PackedStringArray())
+
+
+func test_bad_rows_are_reported() -> void:
+	var perks: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "ok", "name": "Ok", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
+		{"id": "ok", "name": "Dup", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
+		{"id": "Bad Id", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
+		{"id": "frac", "name": "N", "kind": "x", "text": "t", "amount": 1.5, "uses_per_turn": 0},
+		{"id": "typo", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "amout": 2},
+		{"id": "missing", "name": "N", "kind": "x", "text": "t", "amount": 1},
+		{"id": "blank", "name": "", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
+	]})
+	var villagers: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost"},
+	]})
+	var data: GameData = GameData.new()
+	data.load_texts({"perks": perks, "villagers": villagers})
+	var all: String = "\n".join(data.errors)
+	assert_string_contains(all, "duplicate id \"ok\"")
+	assert_string_contains(all, "snake_case id")
+	assert_string_contains(all, "\"amount\" must be a whole number")
+	assert_string_contains(all, "unknown field \"amout\"")
+	assert_string_contains(all, "missing \"uses_per_turn\"")
+	assert_string_contains(all, "\"name\" must be some text")
+	assert_string_contains(all, "points to missing perks \"ghost\"")
+	assert_eq(data.ids("perks"), PackedStringArray(["ok"]), "only the good row loads")
+
+
+func test_bad_files_are_reported() -> void:
+	var data: GameData = GameData.new()
+	data.load_texts({"perks": "{not json", "rooms": JSON.stringify({"schema": 2, "items": []})})
+	var all: String = "\n".join(data.errors)
+	assert_string_contains(all, "perks: JSON error")
+	assert_string_contains(all, "rooms: schema must be 1")

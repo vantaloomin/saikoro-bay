@@ -1,0 +1,11 @@
+{
+	"schema": 1,
+	"note": "Room types for the delve map (DR-5). Icon shapes must read without color (SA-5).",
+	"items": [
+		{ "id": "fight", "name": "Fight", "icon_shape": "crossed_dice" },
+		{ "id": "treasure", "name": "Treasure", "icon_shape": "chest" },
+		{ "id": "rescue", "name": "Rescue", "icon_shape": "open_hand" },
+		{ "id": "rest", "name": "Rest", "icon_shape": "lantern" },
+		{ "id": "vault", "name": "Koban's vault", "icon_shape": "cat_coin" }
+	]
+}

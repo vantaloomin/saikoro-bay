@@ -1,0 +1,34 @@
+{
+	"schema": 1,
+	"note": "Working names and roles from the PRD. The shrine keeper's personality and bet are still open.",
+	"items": [
+		{
+			"id": "pearl_diver",
+			"role": "Pearl diver",
+			"personality": "Bold, outdoorsy",
+			"bet_lost": "Their breath: they can no longer dive",
+			"perk": "nudge"
+		},
+		{
+			"id": "shipwright",
+			"role": "Shipwright",
+			"personality": "Gruff, dependable",
+			"bet_lost": "Their hands",
+			"perk": "brace"
+		},
+		{
+			"id": "onsen_keeper",
+			"role": "Onsen keeper",
+			"personality": "Teasing, nurturing",
+			"bet_lost": "The hot spring itself",
+			"perk": "mend"
+		},
+		{
+			"id": "shrine_keeper",
+			"role": "Kitsune shrine keeper",
+			"personality": "",
+			"bet_lost": "",
+			"perk": "foresight"
+		}
+	]
+}
