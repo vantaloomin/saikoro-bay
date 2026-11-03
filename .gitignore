@@ -26,8 +26,13 @@ $RECYCLE.BIN/
 *~
 *.sublime-workspace
 
-# Claude Code local settings (shared settings in .claude/settings.json are kept)
-.claude/settings.local.json
+# AI assistant files, prompts and local-only notes (kept out of the repo)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+prompts/
+*.prompt.md
+notes/
 
 # Secrets and local env
 .env

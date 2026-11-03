@@ -22,4 +22,3 @@
 - [ ] Linked the issue (`Closes #...`) if there is one
 - [ ] Added a `type:` label and any `area:` labels
 - [ ] Checks pass locally / in CI
-- [ ] Updated `CLAUDE.md` or `docs/` if this changes how things work

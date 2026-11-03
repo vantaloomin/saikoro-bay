@@ -21,8 +21,6 @@ Early pre-production. The engine and stack are still being chosen, so this repos
 
 ```
 .github/          PR and issue templates, labels, workflows
-docs/             Design notes and decisions
-CLAUDE.md         Context and conventions for Claude-driven work
 ```
 
 ## How work happens here
@@ -30,7 +28,6 @@ CLAUDE.md         Context and conventions for Claude-driven work
 - `main` is always the source of truth. Nothing is pushed to it directly.
 - Every change lands through a pull request, usually squash-merged.
 - Issues are labeled by **type**, **area** and **priority** (see [`.github/labels.yml`](.github/labels.yml)).
-- Much of the work is done by Claude through PRs; [`CLAUDE.md`](CLAUDE.md) holds the context it works from.
 
 ## License
 

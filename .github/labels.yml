@@ -78,9 +78,6 @@
   description: "Cannot proceed until something else lands"
 
 # ---- Other ----
-- name: "claude"
-  color: "d97757"
-  description: "Picked up or driven by Claude"
 - name: "dependencies"
   color: "0366d6"
   description: "Dependency updates (used by Dependabot)"
