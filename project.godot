@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+DialogueManager="*res://addons/dialogue_manager/dialogue_manager.gd"
 SceneFlow="*res://game/autoload/scene_flow.gd"
 Settings="*res://game/autoload/settings.gd"
 Game="*res://game/autoload/game.gd"
@@ -26,12 +27,10 @@ PlaytestLog="*res://game/playtest/playtest_log.gd"
 
 [debug]
 
-gdscript/warnings/exclude_addons=true
 gdscript/warnings/untyped_declaration=2
 gdscript/warnings/unsafe_property_access=2
 gdscript/warnings/unsafe_method_access=2
 gdscript/warnings/unsafe_call_argument=1
-gdscript/warnings/return_value_discarded=0
 
 [display]
 
@@ -42,13 +41,16 @@ window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/dialogue_manager/plugin.cfg", "res://addons/gut/plugin.cfg")
+
+[internationalization]
+
+locale/translations_pot_files=PackedStringArray("res://dialogue/trial/onsen_keeper_trial.dialogue")
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
-textures/canvas_textures/default_texture_filter=1
 textures/vram_compression/import_etc2_astc=true
-
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/gut/plugin.cfg")
