@@ -2,9 +2,16 @@ class_name AgeGate
 extends Control
 ## The first screen of a build with adult content (AC-1): who the game is
 ## for, what's in it, and the age question. An adult then picks a content
-## level (AC-2); a player under 18 is told adult content stays off and the
-## whole game still plays. The answer is saved only at "Start", so closing
-## the game partway asks again next time.
+## level (AC-2). A player under 18 is told adult content stays off and the
+## whole game still plays at SFW (Vanta's call on #56).
+##
+## Nothing is focused when it opens, so mashing A or Enter through a first
+## launch can't answer for you: the first press only focuses "I'm 18 or
+## older" (SceneFlow's default focus, Mara's #56 review). "Under 18" is
+## saved the moment it's pressed and its page has no Back, so it isn't a
+## one-press retry; an adult who misclicked can ask again from the pause
+## menu, which takes effect next launch. The adult answer is saved at
+## "Start".
 ##
 ## Boot shows it while Settings.needs_age_gate(). SFW builds never do.
 
@@ -12,10 +19,15 @@ signal finished
 
 enum Step { WARNING, LEVEL, UNDER_18 }
 
+## Keep in step with the store pages' content descriptions (Nori: reviewers
+## compare them).
 const WARNINGS: Array[String] = [
 	"Flirting, dates and romance",
+	"Swimsuits and towels, even with nudity off",
 	"Optional nudity: topless and bare-rear, never sex",
-	"Casino-style dice games, with no real money",
+	"Casino-style dice games. No real money can be spent or won",
+	"Characters drinking alcohol",
+	"Mild cartoon fights",
 ]
 
 var step: Step = Step.WARNING
@@ -52,7 +64,9 @@ func show_step(value: Step) -> void:
 		_pages[key].visible = key == value
 	match value:
 		Step.WARNING:
-			_adult.grab_focus()
+			var focused: Control = get_viewport().gui_get_focus_owner()
+			if focused != null:
+				focused.release_focus()
 		Step.LEVEL:
 			_picker.row(_picker.level).grab_focus()
 		Step.UNDER_18:
@@ -74,13 +88,14 @@ func _warning_page() -> Control:
 	buttons.add_theme_constant_override("separation", 16)
 	_adult = NeutralSkin.button("I'm 18 or older")
 	_adult.name = "Adult"
+	_adult.add_to_group(&"default_focus")  # SceneFlow.FOCUS_GROUP
 	_adult.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_adult.pressed.connect(show_step.bind(Step.LEVEL))
 	buttons.add_child(_adult)
 	var under_18: Button = NeutralSkin.button("I'm under 18")
 	under_18.name = "Under18"
 	under_18.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	under_18.pressed.connect(show_step.bind(Step.UNDER_18))
+	under_18.pressed.connect(_on_under_18)
 	buttons.add_child(under_18)
 	page.add_child(buttons)
 	return page
@@ -115,19 +130,10 @@ func _under_18_page() -> Control:
 	page.add_child(NeutralSkin.label("Adult content stays off", 40))
 	page.add_child(NeutralSkin.paragraph(
 		"You can still play the whole game. Every scene plays its safe-for-work version.", 24))
-	var buttons: HBoxContainer = HBoxContainer.new()
-	buttons.add_theme_constant_override("separation", 16)
-	var back: Button = NeutralSkin.button("Back")
-	back.name = "Back"
-	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	back.pressed.connect(show_step.bind(Step.WARNING))
-	buttons.add_child(back)
 	_start_under_18 = NeutralSkin.button("Start")
 	_start_under_18.name = "Start"
-	_start_under_18.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_start_under_18.pressed.connect(func() -> void: _finish(ContentLevel.AgeAnswer.UNDER_18))
-	buttons.add_child(_start_under_18)
-	page.add_child(buttons)
+	_start_under_18.pressed.connect(finished.emit)
+	page.add_child(_start_under_18)
 	return page
 
 
@@ -143,8 +149,14 @@ func _finish(answer: ContentLevel.AgeAnswer) -> void:
 	finished.emit()
 
 
+## Saved at once: the under-18 page has no way back.
+func _on_under_18() -> void:
+	Settings.answer_age_gate(ContentLevel.AgeAnswer.UNDER_18)
+	show_step(Step.UNDER_18)
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	# Back steps back to the question; on the question it does nothing.
-	if event.is_action_pressed(&"ui_cancel") and step != Step.WARNING:
+	# Back steps from the level page to the question; nothing else goes back.
+	if event.is_action_pressed(&"ui_cancel") and step == Step.LEVEL:
 		show_step(Step.WARNING)
 		get_viewport().set_input_as_handled()

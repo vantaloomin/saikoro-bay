@@ -68,7 +68,7 @@ func level_locked_reason() -> String:
 	if age_answer == ContentLevel.AgeAnswer.UNDER_18:
 		return "Adult content is off because you said you're under 18."
 	if age_answer == ContentLevel.AgeAnswer.UNANSWERED:
-		return "Adult content is off until you confirm your age."
+		return "Adult content is off. The age question comes back next time you start the game."
 	return ""
 
 
@@ -77,6 +77,23 @@ func level_locked_reason() -> String:
 func answer_age_gate(answer: ContentLevel.AgeAnswer, level: ContentLevel.Level = ContentLevel.Level.SFW) -> void:
 	age_answer = answer
 	content_level = level if answer == ContentLevel.AgeAnswer.ADULT else ContentLevel.Level.SFW
+	save_settings()
+
+
+## Whether the pause menu offers to ask the age question again: only for
+## a player locked out by an "under 18" answer (Mara's #56 review).
+func can_ask_age_again() -> bool:
+	return build_cap() > ContentLevel.Level.SFW and age_answer == ContentLevel.AgeAnswer.UNDER_18
+
+
+## Clears the age answer so the gate shows at the next launch: the way
+## back for an adult who misclicked "under 18". The level stays SFW until
+## the gate is answered again; nothing changes in this session.
+func ask_age_again() -> void:
+	if not can_ask_age_again():
+		return
+	age_answer = ContentLevel.AgeAnswer.UNANSWERED
+	content_level = ContentLevel.Level.SFW
 	save_settings()
 
 

@@ -63,11 +63,15 @@ static func shown_level(effective: Level, available: Array[Level]) -> Level:
 	return shown
 
 
-## The scene notice's line (AC-5): "This scene plays at Suggestive." When
-## the scene tops out below the player's level, it says so, so a lower
-## level doesn't read as the setting not working.
-static func notice_line(shown: Level, effective: Level) -> String:
-	var line: String = "This scene plays at %s." % NAMES[shown]
-	if shown < effective:
-		line += " That's the most it shows."
-	return line
+## The scene notice's first line (AC-5): "This scene: Suggestive".
+static func notice_line(shown: Level) -> String:
+	return "This scene: %s" % NAMES[shown]
+
+
+## The notice's second line, only when the scene tops out below the
+## player's level, so a lower level doesn't read as the setting not
+## working (Mara's #56 review); "" otherwise.
+static func cap_line(shown: Level, effective: Level) -> String:
+	if shown >= effective:
+		return ""
+	return "Your setting is %s. This scene goes no further than %s." % [NAMES[effective], NAMES[shown]]

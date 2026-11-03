@@ -4,7 +4,9 @@ extends Control
 ## two-halves spec, plain ink on off-white, so it belongs to neither half.
 ## It holds Resume, the three volumes (Music, Sounds, Menus), the content
 ## level (AC-2: change it at any time) and Quit; more settings join it
-## later. Quit lives here, away from the town's only hold-to-commit button
+## later. The content level is one row on the main page that opens the
+## level rows on a page of their own, so the menu fits a 16:10 screen
+## (Mara's #56 review). Quit lives here, away from the town's only hold-to-commit button
 ## (Mara's #41 review).
 
 signal closed
@@ -14,7 +16,12 @@ const INK: Color = NeutralSkin.INK
 const VOLUME_NAMES: Dictionary[String, String] = {"Music": "Music", "SFX": "Sounds", "UI": "Menus"}
 
 var _resume: Button
+var _main: VBoxContainer
+var _content_page: VBoxContainer
+var _content_row: Button
 var _content: ContentPicker
+var _ask_again: Button
+var _confirm: VBoxContainer
 
 
 ## The neutral skin's theme (NeutralSkin.theme).
@@ -35,25 +42,90 @@ func _ready() -> void:
 	var panel: PanelContainer = NeutralSkin.panel(640)
 	center.add_child(panel)
 	var stack: VBoxContainer = VBoxContainer.new()
+	stack.name = "Main"
 	stack.add_theme_constant_override("separation", 16)
 	panel.add_child(stack)
+	_main = stack
 	stack.add_child(NeutralSkin.label("Paused", 36))
 	_resume = _button("Resume")
 	_resume.pressed.connect(close)
 	stack.add_child(_resume)
 	for bus: String in Settings.BUSES:
 		stack.add_child(_volume_row(bus))
-	stack.add_child(_content_section())
+	_content_row = _button("")
+	_content_row.name = "ContentRow"
+	_content_row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_content_row.pressed.connect(open_content_page)
+	stack.add_child(_content_row)
 	var quit: Button = _button("Quit to desktop")
 	quit.name = "Quit"
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	stack.add_child(quit)
+	_content_page = _make_content_page()
+	panel.add_child(_content_page)
+	Settings.changed.connect(_show_content)
+	_show_content()
 
 
 func open() -> void:
-	_content.show_settings()
+	_show_main()
 	visible = true
 	_resume.grab_focus()
+
+
+## Back: from the content page to the main page, otherwise closes. The
+## half's Esc or B calls this.
+func cancel() -> void:
+	if _confirm.visible:
+		_show_confirm(false)
+	elif _content_page.visible:
+		_show_main()
+		_content_row.grab_focus()
+	else:
+		close()
+
+
+func open_content_page() -> void:
+	_main.visible = false
+	_content_page.visible = true
+	_show_content()
+	var target: Control = _content.focus_target()
+	(target if target != null else _content_page.get_node("Back") as Control).grab_focus()
+
+
+func is_content_page_open() -> bool:
+	return visible and _content_page.visible
+
+
+## "Adult content · Suggestive  >"
+static func content_row_text(level: ContentLevel.Level) -> String:
+	return "Adult content · %s  >" % ContentLevel.NAMES[level]
+
+
+func _show_main() -> void:
+	_confirm.visible = false
+	_content_page.visible = false
+	_main.visible = true
+	_show_content()
+
+
+func _show_content() -> void:
+	_content_row.text = content_row_text(Settings.effective_content_level())
+	_content.show_settings()
+	(_content_page.get_node("Hint") as Control).visible = not _content.is_locked()
+	_ask_again.visible = Settings.can_ask_age_again() and not _confirm.visible
+
+
+## Swaps the ask-again button for its confirm, or back.
+func _show_confirm(open_it: bool) -> void:
+	_confirm.visible = open_it
+	_show_content()
+	if open_it:
+		(_confirm.find_child("No", true, false) as Control).grab_focus()
+	elif Settings.can_ask_age_again():
+		_ask_again.grab_focus()
+	else:
+		(_content_page.get_node("Back") as Control).grab_focus()
 
 
 func close() -> void:
@@ -107,20 +179,55 @@ func _volume_row(bus: String) -> Control:
 	return row
 
 
-## "Adult content" over the three levels, saved as soon as one is picked.
-func _content_section() -> Control:
-	var section: VBoxContainer = VBoxContainer.new()
-	section.name = "Content"
-	section.add_theme_constant_override("separation", 8)
-	section.add_child(NeutralSkin.label("Adult content", 24))
+## The content level's own page: the three rows, saved as soon as one is
+## picked (or why it's locked), and Back.
+func _make_content_page() -> VBoxContainer:
+	var page: VBoxContainer = VBoxContainer.new()
+	page.name = "ContentPage"
+	page.visible = false
+	page.add_theme_constant_override("separation", 16)
+	page.add_child(NeutralSkin.label("Adult content", 36))
 	_content = ContentPicker.new()
 	_content.name = "Picker"
 	_content.picked.connect(func(level: ContentLevel.Level) -> void:
 		if not Settings.set_content_level(level):
-			_content.show_settings())
-	Settings.changed.connect(_content.show_settings)
-	section.add_child(_content)
-	return section
+			_show_content())
+	page.add_child(_content)
+	var hint: Label = NeutralSkin.paragraph("Changes the level for every scene.", 22, NeutralSkin.SOFT_INK)
+	hint.name = "Hint"
+	page.add_child(hint)
+	# The way back for an adult who misclicked "under 18": behind a
+	# confirm, and only from the next launch (Mara's and Nori's #56 reviews).
+	_ask_again = _button("Answer the age question again")
+	_ask_again.name = "AskAgain"
+	_ask_again.pressed.connect(_show_confirm.bind(true))
+	page.add_child(_ask_again)
+	_confirm = VBoxContainer.new()
+	_confirm.name = "Confirm"
+	_confirm.visible = false
+	_confirm.add_theme_constant_override("separation", 12)
+	_confirm.add_child(NeutralSkin.paragraph("Ask the age question again next time you start the game?", 24))
+	var choices: HBoxContainer = HBoxContainer.new()
+	choices.add_theme_constant_override("separation", 16)
+	var yes: Button = _button("Ask again")
+	yes.name = "Yes"
+	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	yes.pressed.connect(func() -> void:
+		Settings.ask_age_again()
+		_show_confirm(false))
+	choices.add_child(yes)
+	var no: Button = _button("Cancel")
+	no.name = "No"
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	no.pressed.connect(_show_confirm.bind(false))
+	choices.add_child(no)
+	_confirm.add_child(choices)
+	page.add_child(_confirm)
+	var back: Button = _button("Back")
+	back.name = "Back"
+	back.pressed.connect(cancel)
+	page.add_child(back)
+	return page
 
 
 ## A volume as the menu reads it: "75%".

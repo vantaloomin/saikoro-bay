@@ -60,10 +60,10 @@ func test_a_scene_plays_at_the_highest_version_the_level_allows() -> void:
 
 
 func test_the_notice_says_when_a_scene_tops_out_below_your_level() -> void:
-	assert_eq(ContentLevel.notice_line(ContentLevel.Level.SUGGESTIVE, ContentLevel.Level.SUGGESTIVE),
-		"This scene plays at Suggestive.")
-	assert_eq(ContentLevel.notice_line(ContentLevel.Level.SUGGESTIVE, ContentLevel.Level.FULL),
-		"This scene plays at Suggestive. That's the most it shows.")
+	assert_eq(ContentLevel.notice_line(ContentLevel.Level.SUGGESTIVE), "This scene: Suggestive")
+	assert_eq(ContentLevel.cap_line(ContentLevel.Level.SUGGESTIVE, ContentLevel.Level.SUGGESTIVE), "")
+	assert_eq(ContentLevel.cap_line(ContentLevel.Level.SUGGESTIVE, ContentLevel.Level.FULL),
+		"Your setting is Full. This scene goes no further than Suggestive.")
 
 
 func test_settings_stay_sfw_until_the_player_says_they_are_an_adult() -> void:

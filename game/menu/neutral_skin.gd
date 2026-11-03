@@ -73,8 +73,9 @@ static func button(text: String) -> Button:
 	return plain
 
 
-## Ink on off-white; a thick frame when focused, and a darker fill when
-## it's the picked one of a row of toggle buttons.
+## Ink on off-white. The thick frame means focus and nothing else; the
+## picked one of a row of toggle buttons gets a darker fill (Mara's #56
+## review).
 static func style_button(target: Button) -> void:
 	for state: String in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
 		var box: StyleBoxFlat = StyleBoxFlat.new()
@@ -85,8 +86,6 @@ static func style_button(target: Button) -> void:
 			box.bg_color = PICKED
 		box.border_color = INK if state != "disabled" else SOFT_INK
 		box.set_border_width_all(4 if state == "focus" else 1)
-		if state in ["pressed", "hover_pressed"]:
-			box.set_border_width_all(3)
 		box.set_corner_radius_all(4)
 		box.set_content_margin_all(12)
 		box.draw_center = state != "focus"
