@@ -145,6 +145,20 @@ func test_die_streams_save_and_restore() -> void:
 		"a bad die id")
 
 
+func test_a_restore_forgets_dice_the_snapshot_never_rolled() -> void:
+	var used: RngStreams = RngStreams.new(SEED)
+	for _i: int in 5:
+		used.die_index(4, 6)
+	assert_true(used.load_dict(RngStreams.new(SEED).to_dict()))
+	var fresh: RngStreams = RngStreams.new(SEED)
+	var a: Array[int] = []
+	var b: Array[int] = []
+	for _i: int in 10:
+		a.append(used.die_index(4, 6))
+		b.append(fresh.die_index(4, 6))
+	assert_eq(a, b, "die 4 starts again from its seed (Imogen's #48 audit)")
+
+
 func test_load_rejects_malformed_data() -> void:
 	var rng: RngStreams = RngStreams.new(5)
 	var before: Array[int] = _rolls(RngStreams.new(5), RngStreams.Stream.MAP, 5)
