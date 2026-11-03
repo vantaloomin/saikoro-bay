@@ -89,6 +89,9 @@ var carry_building: String = ""
 var carry_lifted: int = 0
 var carry_cell: Vector2i = TownView.NO_CELL
 var carry_problem: String = ""
+## move_tag, kept until the ghost or the town changes.
+var _move_tag: Dictionary = {}
+var _move_tag_key: Array = []
 ## A spot already chosen and waiting on the stamp: the ghost stays put.
 var carry_held: bool = false
 ## Where the pointer can go to make someone happier (the sim's wish spots,
@@ -744,17 +747,56 @@ func _draw_ground() -> void:
 func _draw_carry_tag() -> void:
 	if carry_cell == TownView.NO_CELL:
 		return
+	var tag: Dictionary = carry_tag()
+	if tag.is_empty():
+		return
+	if tag["icon"]:
+		_draw_mood_tag_in(tag["text"], tag["rect"], tag["mood"])
+	else:
+		_draw_tag_in(tag["text"], tag["rect"], 1.0)
+
+
+## The tag under the carried ghost, where it's drawn: {"text", "rect",
+## "mood", "icon"}, or {} with nothing to say. Names keep off it, as they
+## do off the swap preview.
+func carry_tag() -> Dictionary:
+	if mode != Mode.CARRY or carry_cell == TownView.NO_CELL or (carry_problem.is_empty() and carry_lifted == 0):
+		return {}
 	var foot: Rect2i = Town.footprint(_data, carry_building, carry_cell)
 	var front: Vector2 = view.to_screen(Vector3(foot.end.x, 0.0, foot.end.y)) + Vector2(0, 10)
-	if not carry_problem.is_empty():
-		_draw_tag(carry_problem, front, false, 1.0)
-	elif carry_lifted != 0:
-		var losses: Array[String] = _state.wish_losses(_data, carry_building, carry_cell, carry_lifted)
-		var words: PackedStringArray = [BuildList.FREE]
-		for villager: String in losses:
-			words.append("%s unhappy" % _data.row("villagers", villager).get("role", villager))
-		_draw_mood_tag(" · ".join(words), front, Town.Mood.UNHAPPY if not losses.is_empty() else Town.Mood.HAPPY,
-			not losses.is_empty())
+	var tag: Dictionary = {"text": carry_problem, "mood": Town.Mood.UNHAPPY, "icon": false}
+	if carry_problem.is_empty():
+		tag = move_tag()
+	tag["rect"] = _mood_tag_rect(tag["text"], front) if tag["icon"] else _keep_on_screen(_tag_rect(tag["text"], front, false))
+	return tag
+
+
+## A move's tag: "Free", then anyone it would leave unhappy or make happy,
+## each with what their perk loses or gains ("Shipwright unhappy · Brace
+## 3 → 2"). {"text", "mood", "icon"}; the bubble shows when a mood changes.
+## Tried on copies of the town, so it's kept until the ghost moves.
+func move_tag() -> Dictionary:
+	var key: Array = [carry_building, carry_cell, carry_lifted, _state.town.to_dict().hash(), _state.villagers().size()]
+	if _move_tag_key == key:
+		return _move_tag.duplicate()
+	var losses: Array[String] = _state.wish_losses(_data, carry_building, carry_cell, carry_lifted)
+	var gains: Array[String] = _state.wish_gains(_data, carry_building, carry_cell, carry_lifted)
+	var words: PackedStringArray = [BuildList.FREE]
+	for villager: String in losses:
+		words.append(_mood_words(villager, false))
+	for villager: String in gains:
+		words.append(_mood_words(villager, true))
+	_move_tag = {"text": " · ".join(words), "mood": Town.Mood.UNHAPPY if not losses.is_empty() else Town.Mood.HAPPY,
+		"icon": not losses.is_empty() or not gains.is_empty()}
+	_move_tag_key = key
+	return _move_tag.duplicate()
+
+
+## "Shipwright happy · Brace 2 → 3", or without the perk if it has no bonus.
+func _mood_words(villager: String, happy: bool) -> String:
+	var words: String = "%s %s" % [_data.row("villagers", villager).get("role", villager), "happy" if happy else "unhappy"]
+	var change: String = KitSheet.happy_change(_data, villager, happy)
+	return words if change.is_empty() else "%s · %s" % [words, change]
 
 
 ## While picking a home: over the hovered home, how both villagers would
@@ -770,7 +812,10 @@ func swap_tag() -> Dictionary:
 	var any_unhappy: bool = false
 	for villager: String in moods:
 		var role: String = str(_data.row("villagers", villager).get("role", villager))
-		words.append("%s %s" % [role, SWAP_MOOD[moods[villager]]])
+		var now_happy: bool = _state.mood(_data, villager) == Town.Mood.HAPPY
+		var after_happy: bool = moods[villager] == Town.Mood.HAPPY
+		var change: String = KitSheet.happy_change(_data, villager, after_happy) if now_happy != after_happy else ""
+		words.append("%s %s%s" % [role, SWAP_MOOD[moods[villager]], "" if change.is_empty() else " · " + change])
 		any_unhappy = any_unhappy or moods[villager] != Town.Mood.HAPPY
 	var text: String = " · ".join(words)
 	var box: AABB = TownView.block_box(_data, _state.town.entry(hovered["uid"]))
@@ -859,6 +904,9 @@ func map_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
 	var swap: Dictionary = swap_tag()
 	if not swap.is_empty():
 		taken.append(swap["rect"])
+	var carried: Dictionary = carry_tag()
+	if not carried.is_empty():
+		taken.append(carried["rect"])
 	var villagers: Array[Dictionary] = []
 	for villager: String in spots:
 		var role: String = str(_data.row("villagers", villager).get("role", villager))

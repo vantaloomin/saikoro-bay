@@ -54,8 +54,8 @@ class FaceStrip:
 			if i < changed.size() and changed[i]:
 				var edge: Rect2 = rect.grow(2.0)
 				draw_rect(edge, TownStyle.INK, false, 3.0)
-				var corner: Vector2 = Vector2(edge.end.x, edge.position.y)
-				draw_colored_polygon(PackedVector2Array([corner + Vector2(-11, 0), corner, corner + Vector2(0, 11)]),
+				# The notch sits where the table's kit dice carry theirs.
+				draw_colored_polygon(PackedVector2Array([edge.end - Vector2(11, 0), edge.end, edge.end - Vector2(0, 11)]),
 					TownStyle.INK)
 
 

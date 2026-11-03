@@ -271,3 +271,19 @@ func test_slow_pour_rerolls_in_one_press_and_shows_what_it_costs() -> void:
 	assert_true(pour_board._reroll.disabled)
 	pour_board._on_reroll()
 	assert_eq(poured.moves.size(), 2, "a third press does nothing")
+
+
+func test_chum_names_itself_on_the_attack_and_kit_dice_are_marked() -> void:
+	var kit: Kit = Kit.fresh(data, [
+		{"perk": "chum", "source": "bait_shop"},
+		{"perk": "weighted_die", "source": "net_shed"},
+	] as Array[Dictionary])
+	var chummed: Fight = Fight.create(data, "fresh", "snake_eyes_eel", RngStreams.new(11), kit.perks, -1, kit.die_specs())
+	var chum_board: FightBoard = BOARD.instantiate() as FightBoard
+	chum_board.setup(chummed, data)
+	add_child_autofree(chum_board)
+	assert_eq(chum_board._intent.chum_source, "Bait shop", "the extra damage has a cause")
+	assert_eq(chum_board._intent.current.get("chum", 0), 1)
+	assert_true(chum_board._dice[0].kit_mark, "the weighted die is marked on the table")
+	assert_eq(chum_board._dice[0].tooltip_text, "Weighted die")
+	assert_false(chum_board._dice[1].kit_mark, "a plain die isn't")

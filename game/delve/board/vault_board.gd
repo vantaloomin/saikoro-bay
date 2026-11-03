@@ -936,6 +936,7 @@ func _build() -> void:
 	for d: DiceTable.Die in vault.table.hand:
 		var view: DieView = DieView.new()
 		view.die_id = d.id
+		view.show_type(data, d.type_id)
 		view.custom_minimum_size = Vector2(150, 150)
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))

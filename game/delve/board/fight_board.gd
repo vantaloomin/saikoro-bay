@@ -27,6 +27,9 @@ class IntentView:
 	extends Control
 	var current: Dictionary = {}
 	var next: Dictionary = {}
+	## Who chummed the water ("Bait shop"), for the badge after an attack
+	## Chum raised: "8 ↑(+1 · Bait shop)" (specs/bridge.md section 5).
+	var chum_source: String = ""
 
 	func _init() -> void:
 		custom_minimum_size = Vector2(420, 150)
@@ -38,32 +41,38 @@ class IntentView:
 			if current.has(kind):
 				BoardStyle.draw_intent_glyph(self, Rect2(x, 10, 72, 72), kind, BoardStyle.INK)
 				draw_string(font, Vector2(x + 80, 70), str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG, BoardStyle.INK)
+				var after: float = x + 80 + font.get_string_size(str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG).x + 8
 				if kind == "attack" and current.has("raised"):
 					# Rising stakes, shown climbing (Mara, #32).
-					_draw_raise(font, Vector2(x + 80 + font.get_string_size(str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG).x + 8, 70),
-						current["raised"] as int, BoardStyle.BODY, BoardStyle.AMBER)
-					x += 90
-				x += 190
+					after = _draw_raise(font, Vector2(after, 70), current["raised"] as int, BoardStyle.BODY, BoardStyle.AMBER) + 8
+				if kind == "attack" and current.has("chum"):
+					# Chum's cost, named so the extra damage has a cause.
+					var label: String = str(current["chum"]) if chum_source.is_empty() else "%d · %s" % [current["chum"], chum_source]
+					after = _draw_raise(font, Vector2(after, 70), 0, BoardStyle.BODY, BoardStyle.GOLD, label) + 8
+				x = maxf(x + 190, after + 24)
 		draw_string(font, Vector2(0, 128), "next", HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL, BoardStyle.DIM)
 		x = 60
 		for kind: String in ["attack", "guard"]:
 			if next.has(kind):
 				BoardStyle.draw_intent_glyph(self, Rect2(x, 104, 32, 32), kind, BoardStyle.DIM)
 				draw_string(font, Vector2(x + 36, 130), str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.DIM)
-				if kind == "attack" and next.has("raised"):
-					_draw_raise(font, Vector2(x + 36 + font.get_string_size(str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY).x + 6, 130),
-						next["raised"] as int, BoardStyle.SMALL, BoardStyle.DIM)
-					x += 70
-				x += 90
+				var bump: int = int(next.get("raised", 0)) + int(next.get("chum", 0))
+				var after: float = x + 36 + font.get_string_size(str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY).x + 6
+				if kind == "attack" and bump > 0:
+					after = _draw_raise(font, Vector2(after, 130), bump, BoardStyle.SMALL, BoardStyle.DIM) + 6
+				x = maxf(x + 90, after + 20)
 
-	## "(+2)" after an attack raised by Rising stakes, with a small up arrow
-	## drawn in front so it reads as climbing, not as the base number.
-	func _draw_raise(font: Font, at: Vector2, amount: int, font_size: int, color: Color) -> void:
+	## "(+2)" after an attack raised by Rising stakes (or "(+1 · Bait shop)"
+	## by Chum, from `label`), with a small up arrow drawn in front so it
+	## reads as climbing, not as the base number. Returns where it ends.
+	func _draw_raise(font: Font, at: Vector2, amount: int, font_size: int, color: Color, label: String = "") -> float:
 		var h: float = font_size * 0.5
 		var tip: Vector2 = at + Vector2(h * 0.5, -font_size * 0.75)
 		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(h * 0.5, h * 0.6), tip + Vector2(-h * 0.5, h * 0.6)]), color)
 		draw_line(tip + Vector2(0, h * 0.5), tip + Vector2(0, h * 1.3), color, 3.0)
-		draw_string(font, at + Vector2(h + 4, 0), "(+%d)" % amount, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+		var text: String = "(+%s)" % (label if not label.is_empty() else str(amount))
+		draw_string(font, at + Vector2(h + 4, 0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+		return at.x + h + 4 + font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 
 var fight: Fight
@@ -411,6 +420,7 @@ func _refresh_all() -> void:
 	_shown_player_hp = fight.player_hp
 	_shown_player_block = fight.player_block
 	_refresh_numbers()
+	_intent.chum_source = _source_name(fight.perk_source(Fight.CHUM_PERK)) if fight.has_perk(Fight.CHUM_PERK) else ""
 	_intent.current = fight.current_intent()
 	_intent.next = fight.next_intent()
 	_intent.queue_redraw()
@@ -773,6 +783,7 @@ func _build() -> void:
 	for d: Fight.Die in fight.hand:
 		var view: DieView = DieView.new()
 		view.die_id = d.id
+		view.show_type(data, d.type_id)
 		view.custom_minimum_size = Vector2(150, 150)
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))

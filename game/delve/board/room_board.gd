@@ -392,12 +392,38 @@ func _villager_role() -> String:
 	return "villager"
 
 
+## Chum's badge in a treasure room (specs/bridge.md section 5), so the
+## extra resource has a cause: "Bait shop · Chum · +1 of each resource you
+## take here". "" without it.
+func chum_line() -> String:
+	if room.chum_amount <= 0:
+		return ""
+	return "%s · Chum · +%d of each resource you take here" % [_source_name(room.chum_source), room.chum_amount]
+
+
+func _source_name(source: String) -> String:
+	if data.has_row("villagers", source):
+		return str(data.row("villagers", source)["role"])
+	if data.has_row("buildings", source):
+		return str(data.row("buildings", source)["name"])
+	return source.capitalize()
+
+
 func results_text() -> String:
 	var lines: PackedStringArray = []
 	match room.room_id:
 		DelveMap.TREASURE:
 			var gains: PackedStringArray = _gains({}, room.payout)
 			lines.append("You found " + ", ".join(gains).replace("+", "") + "." if not gains.is_empty() else "Nothing this time.")
+			var chummed: Dictionary = {}
+			for event: Dictionary in room.events:
+				if event["type"] == "perk" and event.get("perk", "") == DiceRoom.CHUM_PERK:
+					chummed[str(event["resource"])] = int(chummed.get(str(event["resource"]), 0)) + int(event["amount"])
+			if not chummed.is_empty():
+				var brought: PackedStringArray = []
+				for id: String in chummed:
+					brought.append("%d %s" % [chummed[id], GameState.amount_name(data, id, chummed[id])])
+				lines.append("%s's chum brought %s." % [_source_name(room.chum_source), ", ".join(brought)])
 		DelveMap.REST:
 			lines.append("You healed %d HP." % (room.hp - room.start_hp))
 		_:
@@ -534,6 +560,10 @@ func _build() -> void:
 	_intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_intro.custom_minimum_size = Vector2(800, 0)
 	head_text.add_child(_intro)
+	if not chum_line().is_empty():
+		var chum: Label = BoardStyle.label(chum_line(), BoardStyle.SMALL, BoardStyle.GOLD)
+		chum.name = "Chum"
+		head_text.add_child(chum)
 	_turns = BoardStyle.label("", BoardStyle.NUMBER, BoardStyle.INK)
 	_turns.add_theme_font_override("font", BoardStyle.strong_font())
 	head_text.add_child(_turns)
@@ -596,6 +626,7 @@ func _build() -> void:
 	for d: DiceRoom.Die in room.hand:
 		var view: DieView = DieView.new()
 		view.die_id = d.id
+		view.show_type(data, d.type_id)
 		view.custom_minimum_size = Vector2(150, 150)
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))

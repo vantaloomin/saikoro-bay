@@ -132,3 +132,20 @@ func test_the_last_rescue_turn_says_what_failing_means() -> void:
 	board._on_verb()
 	board._on_verb()
 	assert_eq(board._end_preview.text, "Opens no locks · Lose 2 · tide · last turn: they stay caged")
+
+
+func test_chum_says_why_a_treasure_room_pays_more() -> void:
+	var perks: Array[Dictionary] = [{"perk": "chum", "source": "bait_shop"}]
+	var room: DiceRoom = DiceRoom.create(data, "fresh", "treasure", RngStreams.new(7), perks, 30)
+	for i: int in 4:
+		room.hand[i].value = [4, 4, 2, 6][i]
+	var board: RoomBoard = RoomBoard.new()
+	board.setup(room, data, "")
+	add_child_autofree(board)
+	assert_eq(board.chum_line(), "Bait shop · Chum · +1 of each resource you take here")
+	assert_not_null(board.find_child("Chum", true, false))
+	_place(board, 0, "pearl_lock")
+	_place(board, 1, "pearl_lock")
+	board._on_verb()
+	assert_string_contains(board.results_text(), "Bait shop's chum brought 1 pearl.")
+	assert_eq(_board("treasure", [1, 1, 1, 1]).chum_line(), "", "no chum, no line")

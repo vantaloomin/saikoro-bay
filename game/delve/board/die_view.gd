@@ -39,11 +39,25 @@ var placed: bool = false:
 		queue_redraw()
 ## The order number of the slot it's in, shown as "→3" on the outline.
 var placed_order: int = 0
+## A die the town changed or added (the kit): a notched corner, the Kit
+## tab's mark, so the Weighted die and the d4 read as yours on the table
+## too (specs/bridge.md section 5). Its name is the tooltip.
+var kit_mark: bool = false:
+	set(v):
+		kit_mark = v
+		queue_redraw()
 ## Shows "-1 if unplaced" against Snake eyes.
 var bite_marker: bool = false:
 	set(v):
 		bite_marker = v
 		queue_redraw()
+
+
+## Marks a die whose type isn't one of the loadout's, and names it.
+func show_type(data: GameData, type_id: String) -> void:
+	var loadout: Array = data.row("loadouts", Kit.LOADOUT).get("dice", []) as Array
+	kit_mark = not loadout.has(type_id)
+	tooltip_text = str(data.row("dice", type_id).get("name", type_id)) if kit_mark else ""
 
 
 func _init() -> void:
@@ -117,6 +131,10 @@ func _draw() -> void:
 	if discarded:
 		face = BoardStyle.DIM
 	BoardStyle.draw_die(self, rect, value, face)
+	if kit_mark:
+		var notch: float = rect.size.x * 0.14
+		draw_colored_polygon(PackedVector2Array([rect.end - Vector2(notch, 0), rect.end, rect.end - Vector2(0, notch)]),
+			BoardStyle.DIE_PIP)
 	if locked:
 		# Lightly greyed so the pips still show what it is; the padlock sits
 		# in a corner badge, like the bite tag, instead of over the pips.
