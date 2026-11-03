@@ -67,6 +67,11 @@ const MUSIC_PATH: String = "res://content/sfw/music/town_loop.ogg"
 const MUSIC_DB: float = -14.0
 const MUSIC_FADE_SECONDS: float = 1.5
 const SHELLS_FILL_SECONDS: float = 0.5
+## The widest a ledger amount gets: the stamp's spend preview.
+const AMOUNT_ROOM: String = "00 → 00"
+
+## The width AMOUNT_ROOM takes in the town's type, measured once.
+static var _amount_width: float = 0.0
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -744,6 +749,9 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 ## One row per resource. With `spending` (a building on the stamp), what
 ## it would cost reads "3 → 2".
 func _ledger_rows(spending: String = "") -> Array[Control]:
+	if _amount_width == 0.0:
+		_amount_width = ceilf(TownStyle.theme().default_font.get_string_size(AMOUNT_ROOM, HORIZONTAL_ALIGNMENT_LEFT,
+			-1, TownStyle.BODY).x)
 	var cost: Dictionary = {}
 	if not spending.is_empty():
 		cost = TownMap.parse_cost(Game.data.row("buildings", spending)["cost"] as Array)
@@ -753,14 +761,16 @@ func _ledger_rows(spending: String = "") -> Array[Control]:
 		row.add_theme_constant_override("separation", 16)
 		var name_label: Label = TownStyle.label(str(Game.data.row("resources", id).get("name", id)))
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		# The sheet widens instead: "Driftwood 20 → 16" broke the name in two
-		# (the M3 exit frames).
+		# "Driftwood 20 → 16" broke the name in two (the M3 exit frames).
 		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		row.add_child(name_label)
 		var have: int = Game.state.resource(id)
 		var amount: Label = TownStyle.label(str(have) if not cost.has(id) else "%d → %d" % [have, have - int(cost[id])])
 		amount.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		amount.autowrap_mode = TextServer.AUTOWRAP_OFF
+		# Always room for "00 → 00", so the stamp's preview never moves the
+		# sheet's edge while the player checks the numbers (Mara's #47 review).
+		amount.custom_minimum_size.x = _amount_width
 		row.add_child(amount)
 		rows.append(row)
 	return rows
