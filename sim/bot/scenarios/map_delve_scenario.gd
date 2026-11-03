@@ -6,7 +6,8 @@ extends BotScenario
 ## VaultBot Koban's vault.
 ##
 ## Outcome: won = cleared the vault, depth = rooms played, turns = fight
-## turns. Counters: stalemates (a fight hit the turn cap), reached_vault, cleared, washed_up, surfaced_floor_<n>,
+## turns. Counters: stalemates (a fight hit the turn cap), stuck (the run
+## couldn't go on: both must stay 0), reached_vault, cleared, washed_up, surfaced_floor_<n>,
 ## rooms:<type>, hp_lost:<type>, rescued, and haul:<outcome>:<resource>
 ## (what the haul held when the delve ended).
 ##
@@ -77,6 +78,10 @@ func play(rng: RngStreams) -> BotScenario.Outcome:
 				run.finish_vault()
 			_:
 				break
+	if not run.is_over():
+		# A refused step or no room to pick: the run is stuck, which the
+		# band check treats as a failure, never as a loss.
+		_count(outcome, "stuck", 1)
 	if run.step == DelveRun.Step.CLEARED:
 		outcome.won = true
 		_count(outcome, "cleared", 1)

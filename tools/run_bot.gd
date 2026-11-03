@@ -15,9 +15,11 @@ extends SceneTree
 ##   --first-seed=S    first seed (default 1)
 ##   --out=PATH        also write the JSON report to PATH
 ##   --min-win=P --max-win=P   fail (exit 1) if the win rate in percent is outside
+##   --min-vault=P --max-vault=P   map only: fail if the share of delves that
+##                     reach Koban's vault and then clear it is outside
 ##
-## Exits 1 if any seed played differently on replay or a fight stalemated,
-## 2 on bad options.
+## Exits 1 if any seed played differently on replay, a fight stalemated or a
+## delve got stuck, 2 on bad options.
 
 
 func _initialize() -> void:
@@ -84,6 +86,19 @@ func _initialize() -> void:
 	if args.has("max-win") and rate_percent > str(args["max-win"]).to_int():
 		printerr("Win rate %d%% is above the maximum %s%%" % [rate_percent, args["max-win"]])
 		failed = true
+	if report.counters.get("stuck", 0) > 0:
+		printerr("%d delves got stuck" % report.counters["stuck"])
+		failed = true
+	if args.has("min-vault") or args.has("max-vault"):
+		var reached: int = report.counters.get("reached_vault", 0)
+		var vault_percent: int = 0 if reached == 0 else report.counters.get("cleared", 0) * 100 / reached
+		print("Vault conversion: %d%% of %d delves that reached it" % [vault_percent, reached])
+		if args.has("min-vault") and vault_percent < str(args["min-vault"]).to_int():
+			printerr("Vault conversion %d%% is below the minimum %s%%" % [vault_percent, args["min-vault"]])
+			failed = true
+		if args.has("max-vault") and vault_percent > str(args["max-vault"]).to_int():
+			printerr("Vault conversion %d%% is above the maximum %s%%" % [vault_percent, args["max-vault"]])
+			failed = true
 	quit(1 if failed else 0)
 
 

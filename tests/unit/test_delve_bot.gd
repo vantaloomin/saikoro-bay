@@ -110,3 +110,18 @@ func test_the_map_scenario_plays_whole_delves_the_same_way_twice() -> void:
 	assert_eq(ended, 30, "every delve ends: cleared, washed up or surfaced")
 	assert_gt(report.counters.get("reached_vault", 0), 0)
 	assert_gt(report.counters.get("rooms:treasure", 0), 0)
+
+
+func test_a_delve_that_cant_go_on_counts_as_stuck() -> void:
+	var scenario: MapDelveScenario = MapDelveScenario.new(data, GreedyBot.new())
+	scenario.delve_bot = StuckBot.new()
+	var outcome: BotScenario.Outcome = scenario.play(RngStreams.new(1))
+	assert_eq(outcome.counters.get("stuck", 0), 1)
+	assert_false(outcome.won)
+
+
+class StuckBot:
+	extends DelveBot
+
+	func choose_room(_view: RunView) -> int:
+		return -1
