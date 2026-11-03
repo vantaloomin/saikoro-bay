@@ -348,6 +348,8 @@ func test_putting_a_landmark_off_shows_the_budget() -> void:
 	town.close_sheet()
 	assert_eq(town.staging, "")
 	assert_true((town.get_node("%GoDown") as Button).disabled, "Later: Go down waits while the shells fill")
+	town.refresh()
+	assert_true((town.get_node("%GoDown") as Button).disabled, "even if the HUD redraws mid-fill")
 	await wait_seconds(TownScreen.SHELLS_FILL_SECONDS + 0.2)
 	assert_false((town.get_node("%GoDown") as Button).disabled, "then the shells and Go down are back")
 
@@ -821,6 +823,8 @@ func test_coming_back_counts_up_walks_in_then_fills_the_shells() -> void:
 	assert_eq(_gain_labels(town), ["+6"], "with what came up beside it")
 	assert_true((town.get_node("%GoDown") as Button).disabled)
 	assert_eq(town._shells.lit, 0, "the shells wait")
+	assert_eq(board.view.villager_spots(Game.data, Game.state)["pearl_diver"], board.view.arrival_spot(0),
+		"the rescued wait on the dock while the ledger counts, not at home")
 	town._show_count(0.5)
 	assert_eq(_ledger_text(town, "driftwood"), "3")
 	town._end_count()
@@ -933,3 +937,20 @@ func test_arrivals_walk_at_a_pace_one_after_another() -> void:
 	for villager: String in board._arrive_time:
 		assert_lte(board._arrive_time[villager], TownBoard.ARRIVE_SECONDS, "never longer than the cap")
 	assert_lte(board._walk_seconds, TownBoard.ARRIVE_SECONDS + TownBoard.ARRIVE_STAGGER)
+
+
+## Imogen's #62 audit: the count reads the record, so it ends on what "+N" says.
+func test_the_count_ends_on_the_record_not_the_state() -> void:
+	_came_back()
+	Game.state.add_resource("driftwood", 1)
+	var town: TownScreen = _open()
+	town._show_count(1.0)
+	assert_eq(_ledger_text(town, "driftwood"), "6", "before + 6, as the settlement says")
+
+
+## Imogen's #62 audit: a skip only covers the arrival it skipped.
+func test_a_skip_does_not_outlast_its_arrival() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	town.skip_arrival()
+	assert_false(town._skipped)

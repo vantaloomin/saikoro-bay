@@ -211,7 +211,11 @@ func _ready() -> void:
 	SceneFlow.focus_default()
 	if arrival == "count":
 		_board.wait_at_dock(_rescued())
-		_count_up()
+		# The count starts once the tide has uncovered the town.
+		if SceneFlow.busy:
+			SceneFlow.transition_finished.connect(_count_up.unbind(1), CONNECT_ONE_SHOT)
+		else:
+			_count_up()
 	# A landmark won on the last delve is the first thing on arrival (LM-5).
 	if not staging.is_empty():
 		_focus_first.call_deferred()
@@ -247,6 +251,8 @@ func _start_arrival() -> void:
 
 ## The ledger counts from what the town had to what it has now.
 func _count_up() -> void:
+	if arrival != "count" or not is_inside_tree():
+		return
 	_count_tween = create_tween()
 	_count_tween.tween_method(_show_count, 0.0, 1.0, COUNT_SECONDS)
 	_count_tween.tween_callback(_end_count)
@@ -254,9 +260,12 @@ func _count_up() -> void:
 
 func _show_count(t: float) -> void:
 	var before: Dictionary = _settled.get("before", {}) as Dictionary
+	var after: Dictionary = _settled.get("after", {}) as Dictionary
 	for id: String in _ledger_shown:
+		# From the record, never the state, so it ends on what "+N" says
+		# (Imogen's #62 audit).
 		var from: int = int(before.get(id, Game.state.resource(id)))
-		_ledger_shown[id] = from + roundi((Game.state.resource(id) - from) * t)
+		_ledger_shown[id] = from + roundi((int(after.get(id, Game.state.resource(id))) - from) * t)
 		if _ledger_amounts.has(id) and is_instance_valid(_ledger_amounts[id]):
 			_ledger_amounts[id].text = str(_ledger_shown[id])
 
@@ -331,6 +340,8 @@ func _on_walked_in() -> void:
 	arrival = ""
 	_stage_landmark()
 	refresh()
+	# A landmark placed later fills its shells as usual (Imogen's #62 audit).
+	_skipped = false
 	if not staging.is_empty():
 		_focus_first.call_deferred()
 
