@@ -97,4 +97,4 @@ addons/         Third-party Godot plugins (GUT for tests).
 
 ## License
 
-All rights reserved. The code, art, story and characters are proprietary; see [`LICENSE`](LICENSE). The repository is public to view, not to reuse.
+All rights reserved. The code, art, story and characters are proprietary; see [`LICENSE`](LICENSE). The repository is public to view, not to reuse. Third-party parts keep their own licenses: the fonts in `content/sfw/fonts/` (SIL OFL 1.1) and the plugins in `addons/`.

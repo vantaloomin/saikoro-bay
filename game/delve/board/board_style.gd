@@ -18,8 +18,15 @@ const AMBER: Color = Color(0.95, 0.66, 0.25)
 const DIE_FACE: Color = Color(0.93, 0.9, 0.84)
 const DIE_PIP: Color = Color(0.08, 0.06, 0.12)
 
-const BODY: int = 26
-const SMALL: int = 24
+## Delve type (two-halves section 1): Barlow Condensed with tabular figures
+## for numbers and labels, Shippori Mincho B1 for titles. Barlow is narrow,
+## so body text runs a size up to stay readable at 1080p.
+const LABEL_FONT_PATH: String = "res://content/sfw/fonts/BarlowCondensed-Medium.ttf"
+const STRONG_FONT_PATH: String = "res://content/sfw/fonts/BarlowCondensed-SemiBold.ttf"
+const TITLE_FONT_PATH: String = "res://content/sfw/fonts/ShipporiMinchoB1-Bold-Latin.ttf"
+
+const BODY: int = 30
+const SMALL: int = 26
 const NUMBER: int = 40
 const BIG: int = 56
 
@@ -30,6 +37,42 @@ const SNAP_SECONDS: float = 0.09
 ## Smallest size for dice and pip rulers at 1080p (Mara: 48 px minimum).
 const DIE_SIZE: int = 96
 const RULER_CELL: int = 48
+
+
+static var _theme: Theme
+static var _strong: Font
+static var _title: Font
+
+
+## The delve theme: Barlow Condensed with tabular figures as the default
+## font, so every label and number under the board uses it.
+static func theme() -> Theme:
+	if _theme == null:
+		_theme = Theme.new()
+		_theme.default_font = _tabular(load(LABEL_FONT_PATH) as Font)
+		_theme.default_font_size = BODY
+	return _theme
+
+
+## Buttons and emphasis.
+static func strong_font() -> Font:
+	if _strong == null:
+		_strong = _tabular(load(STRONG_FONT_PATH) as Font)
+	return _strong
+
+
+## Titles such as the enemy's name.
+static func title_font() -> Font:
+	if _title == null:
+		_title = load(TITLE_FONT_PATH) as Font
+	return _title
+
+
+static func _tabular(base: Font) -> FontVariation:
+	var font: FontVariation = FontVariation.new()
+	font.base_font = base
+	font.opentype_features = {TextServerManager.get_primary_interface().name_to_tag("tnum"): 1}
+	return font
 
 
 ## Pip positions for faces 1-6 on a unit square.

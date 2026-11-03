@@ -6,6 +6,9 @@ extends Button
 
 ## Right-click or B on the card: take back its last die.
 signal secondary_pressed
+## A die was dragged onto this slot. Every die drop is taken, so the board
+## can explain a refusal instead of the drop silently doing nothing.
+signal die_dropped(die_id: int)
 
 var slot_id: String = ""
 var order: int = 1
@@ -41,6 +44,14 @@ func _init() -> void:
 	focus_exited.connect(queue_redraw)
 	mouse_entered.connect(queue_redraw)
 	mouse_exited.connect(queue_redraw)
+
+
+func _can_drop_data(_at: Vector2, data: Variant) -> bool:
+	return data is Dictionary and (data as Dictionary).has("die")
+
+
+func _drop_data(_at: Vector2, data: Variant) -> void:
+	die_dropped.emit((data as Dictionary)["die"] as int)
 
 
 func _gui_input(event: InputEvent) -> void:
@@ -92,6 +103,11 @@ func _draw() -> void:
 		var cy: float = ruler_y + cell + 6
 		draw_colored_polygon(PackedVector2Array([Vector2(cx, cy), Vector2(cx - 9, cy + 12), Vector2(cx + 9, cy + 12)]), BoardStyle.INK)
 
+	# A slot the held die can't go in dims its chrome only. Placed dice and
+	# the footer stay bright, so a placed die never reads as locked.
+	if held_fit == -1:
+		draw_rect(r, Color(0, 0, 0, 0.35))
+
 	# Sockets.
 	var socket: float = 88
 	var gap: float = 44 if is_pair else 0
@@ -126,5 +142,3 @@ func _draw() -> void:
 		var top: float = size.y - (20 if one_line else 50)
 		draw_multiline_string(font, Vector2(16, top), text, HORIZONTAL_ALIGNMENT_LEFT, width,
 			BoardStyle.SMALL, 2, tone)
-	if held_fit == -1:
-		draw_rect(r, Color(0, 0, 0, 0.35))

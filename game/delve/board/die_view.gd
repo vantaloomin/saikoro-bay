@@ -5,8 +5,14 @@ extends Button
 ## cross when spent on a reroll, and a "-1" bite marker against Snake eyes.
 ## Every state has a shape, so it reads in greyscale (SA-5).
 
+## How far a held die lifts, and how thick its corners are, so held and
+## focused differ in greyscale too (focus is 3 px corners, no lift).
+const HELD_LIFT: float = 20.0
+
 ## Right-click or the controller's B button on this die.
 signal secondary_pressed
+## The player started dragging this die (mouse or touch).
+signal drag_started
 
 var die_id: int = -1
 var value: int = 1:
@@ -52,6 +58,30 @@ func _init() -> void:
 	mouse_exited.connect(queue_redraw)
 
 
+## Drag a free die onto a slot; it's the same move as click, then click.
+func _get_drag_data(_at: Vector2) -> Variant:
+	var payload: Variant = drag_payload()
+	if payload == null:
+		return null
+	var ghost: DieView = DieView.new()
+	ghost.value = value
+	ghost.modulate.a = 0.85
+	ghost.position = -ghost.custom_minimum_size / 2.0
+	var holder: Control = Control.new()
+	holder.add_child(ghost)
+	set_drag_preview(holder)
+	return payload
+
+
+## What a drag of this die carries, or null when it can't be dragged.
+## Starting one holds the die (drag_started).
+func drag_payload() -> Variant:
+	if placed or discarded or locked or disabled:
+		return null
+	drag_started.emit()
+	return {"die": die_id}
+
+
 func _gui_input(event: InputEvent) -> void:
 	var mouse: InputEventMouseButton = event as InputEventMouseButton
 	if mouse != null and mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
@@ -81,7 +111,7 @@ func _draw() -> void:
 	if selected:
 		# A held die lifts off the felt, so held vs focused isn't color alone.
 		draw_rect(rect, Color(0, 0, 0, 0.55))
-		rect.position.y -= 14
+		rect.position.y -= HELD_LIFT
 	var face: Color = BoardStyle.DIE_FACE
 	if discarded:
 		face = BoardStyle.DIM
@@ -97,6 +127,6 @@ func _draw() -> void:
 		draw_rect(Rect2(rect.end.x - 40, rect.position.y - 6, 46, 30), BoardStyle.DANGER)
 		draw_string(font, Vector2(rect.end.x - 36, rect.position.y + 18), "-1", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, BoardStyle.INK)
 	if selected:
-		BoardStyle.draw_brackets(self, rect, BoardStyle.GOLD, 6.0)
+		BoardStyle.draw_brackets(self, rect, BoardStyle.GOLD, 10.0)
 	elif has_focus() or is_hovered():
 		BoardStyle.draw_brackets(self, rect, BoardStyle.INK, 3.0)
