@@ -73,11 +73,15 @@ func show_town(data: GameData, view: TownView, state: GameState, lifted_uid: int
 		_villagers[villager] = _sprite(PixelArt.villager(villager), spots[villager])
 
 
-## Moves a villager's sprite without rebuilding the town, for a walk.
-func move_villager(villager: String, spot: Vector3) -> void:
+## Moves a villager's sprite without rebuilding the town, for a walk,
+## `opacity` see-through (below 1 only across a hop with no way round).
+func move_villager(villager: String, spot: Vector3, opacity: float = 1.0) -> void:
 	var sprite: Sprite3D = _villagers.get(villager)
 	if sprite != null and is_instance_valid(sprite):
 		sprite.position = spot
+		sprite.modulate.a = opacity
+		# The alpha cut would drop a half-faded sprite all at once.
+		sprite.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD if opacity >= 1.0 else SpriteBase3D.ALPHA_CUT_DISABLED
 
 
 ## Shows `building_id` see-through with its top-left corner at `cell`:

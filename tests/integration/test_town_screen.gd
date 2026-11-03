@@ -624,6 +624,33 @@ func test_the_villager_whose_mood_changes_stands_in_plain_view() -> void:
 	assert_false(board.view._hidden_by(spot, boxes, board.view.camera_transform().origin), "no building hides the keeper or the bubble")
 
 
+func test_nobody_walks_through_a_building_to_see_a_landmark() -> void:
+	Game.state._landmarks.append("hot_spring")
+	for villager: String in ["pearl_diver", "shipwright"]:
+		Game.state._villagers.append(villager)
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 7))
+	Game.state.town.homes["shipwright"] = Game.state.town.place("cottage", Vector2i(2, 5))
+	Game.state.town.place("boat_shed", Vector2i(5, 5))
+	Game.state.town.place("net_shed", Vector2i(9, 2))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.start_carry("hot_spring")
+	board._pick_at(_cell_point(board, Vector2i(10, 0)))
+	assert_true(board.is_gathering())
+	var boxes: Array[AABB] = []
+	for placed: Dictionary in Game.state.town.placed:
+		boxes.append(TownView.block_box(Game.data, placed))
+	var steps: int = 0
+	while board.is_gathering() and steps < 2000:
+		board.advance_gathering(TownBoard.WALK_SECONDS / 60.0)
+		steps += 1
+		for villager: String in board.view.walking:
+			var at: Vector3 = board.view.walking[villager]
+			for box: AABB in boxes:
+				assert_false(box.has_point(Vector3(at.x, 0.05, at.z)), "%s at %s is inside a building" % [villager, at])
+	assert_false(board.is_gathering(), "there and home again")
+
+
 # --- The kit (M4 PR 2, specs/bridge.md section 5) -------------------------------
 
 func _texts_in(node: Node) -> Array:
