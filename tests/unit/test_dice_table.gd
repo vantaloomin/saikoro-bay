@@ -100,13 +100,13 @@ func test_a_copy_shares_nothing_and_cant_roll() -> void:
 
 const ROOM_SLOTS: Array[Dictionary] = [
 	{"id": "lock_sum", "name": "Sum", "text": "t", "accepts": "sum_at_least", "min": 10, "max": 18,
-		"min_dice": 2, "max_dice": 3, "persists": true, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 2, "max_dice": 3, "persists": true, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 	{"id": "lock_pair", "name": "Pair", "text": "t", "accepts": "pair", "min": 1, "max": 6,
-		"min_dice": 2, "max_dice": 2, "persists": true, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 2, "max_dice": 2, "persists": true, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 	{"id": "lock_run", "name": "Run", "text": "t", "accepts": "run", "min": 1, "max": 6,
-		"min_dice": 3, "max_dice": 3, "persists": true, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 3, "max_dice": 3, "persists": true, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 	{"id": "triple", "name": "Triple", "text": "t", "accepts": "three_kind", "min": 1, "max": 6,
-		"min_dice": 3, "max_dice": 3, "persists": false, "effect": "damage", "mult": 0, "add": 0, "icon_shape": "x"},
+		"min_dice": 3, "max_dice": 3, "persists": false, "effect": "damage", "resource": "", "mult": 0, "add": 0, "icon_shape": "x"},
 ]
 
 
@@ -164,48 +164,62 @@ func test_a_sum_takes_any_die_and_checks_the_total() -> void:
 	assert_eq(table.place_refusal(3, "lock_sum"), "This slot is full.")
 
 
-func test_a_complete_persistent_slot_keeps_its_dice_across_turns() -> void:
-	var table: DiceTable = _room_table()
+func _open_the_pair(table: DiceTable) -> void:
 	_set_hand(table, [4, 4, 2, 1, 1, 1])
 	table.place(0, "lock_pair")
 	table.place(1, "lock_pair")
 	table.place(2, "lock_sum")
 	table.reset_turn()
-	var values: Array[int] = table.roll_hand()
+	table.roll_hand()
+
+
+func test_a_complete_persistent_slot_stays_open_and_gives_its_dice_back() -> void:
+	var table: DiceTable = _room_table()
+	_open_the_pair(table)
 	var pair: DiceTable.Slot = table.slot("lock_pair")
 	assert_true(pair.sealed)
-	assert_eq(pair.dice, [0, 1] as Array[int], "its dice stay")
-	assert_eq([values[0], values[1]], [4, 4], "and aren't rolled: they've left the hand")
-	assert_eq(table.hand[0].slot_id, "lock_pair")
-	assert_false(table.take_back(0), "a sealed lock can't be undone")
+	assert_true(pair.is_complete(), "it stays open")
+	assert_eq(pair.opened_with, [4, 4] as Array[int])
+	assert_eq(pair.dice, [] as Array[int], "its dice come back")
+	assert_eq(table.hand[0].slot_id, "")
+	assert_true(table.hand[0].is_free(), "and can go anywhere this turn")
 	assert_eq(table.place_refusal(3, "lock_pair"), "This lock is already open.")
 	assert_true(table.slot("lock_sum").dice.is_empty(), "an unfinished lock empties at the turn's end")
-	assert_eq(table.hand[2].slot_id, "")
-	assert_false(table.unused_dice().has(table.hand[0]), "sealed dice aren't unused dice")
+	assert_false(table.slot("lock_sum").sealed)
+
+
+func test_returned_dice_roll_again() -> void:
+	var table: DiceTable = _room_table()
+	_set_hand(table, [4, 4, 2, 1, 1, 1])
+	table.place(0, "lock_pair")
+	table.place(1, "lock_pair")
+	var again: DiceTable = _room_table()
+	_set_hand(again, [4, 4, 2, 1, 1, 1])
+	table.reset_turn()
+	again.reset_turn()
+	assert_eq(table.roll_hand(), again.roll_hand(), "an open lock rolls the same dice as none")
+	assert_true(table.reroll(2), "they can pay for a reroll too")
+
+
+func test_an_open_lock_stays_open_through_later_turns() -> void:
+	var table: DiceTable = _room_table()
+	_open_the_pair(table)
+	table.reset_turn()
+	table.roll_hand()
+	assert_true(table.slot("lock_pair").sealed)
+	assert_eq(table.slot("lock_pair").opened_with, [4, 4] as Array[int], "sealed once, never re-recorded")
 
 
 func test_sealed_slots_survive_a_copy() -> void:
 	var table: DiceTable = _room_table()
-	_set_hand(table, [4, 4, 2, 1, 1, 1])
-	table.place(0, "lock_pair")
-	table.place(1, "lock_pair")
-	table.reset_turn()
-	table.roll_hand()
+	_open_the_pair(table)
 	var copy: DiceTable = table.copy([] as Array[Dictionary], [] as Array[Dictionary])
 	assert_true(copy.slot("lock_pair").sealed)
 	assert_true(copy.slot("lock_pair").is_complete())
+	assert_eq(copy.slot("lock_pair").opened_with, [4, 4] as Array[int])
+	copy.slot("lock_pair").opened_with.append(9)
+	assert_eq(table.slot("lock_pair").opened_with, [4, 4] as Array[int], "the copy shares nothing")
 	assert_true(is_same(copy.slot("lock_pair").hand, copy.hand), "a copy's slots read the copy's dice")
-
-
-func test_a_reroll_never_touches_sealed_dice() -> void:
-	var table: DiceTable = _room_table()
-	_set_hand(table, [4, 4, 2, 1, 1, 1])
-	table.place(0, "lock_pair")
-	table.place(1, "lock_pair")
-	table.reset_turn()
-	table.roll_hand()
-	assert_true(table.reroll(2))
-	assert_eq([table.hand[0].value, table.hand[1].value], [4, 4])
 
 
 # --- Completeness checks the rule, not just the count (Imogen's #23 audit) ------

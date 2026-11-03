@@ -49,9 +49,12 @@ class Slot:
 	var id: String = ""
 	var row: Dictionary = {}
 	var dice: Array[int] = []
-	## A persistent slot that was complete when a turn ended: it keeps its
-	## dice, which have left the hand, and takes no more.
+	## A persistent slot that was complete when a turn ended: it stays open
+	## (complete) for the rest of the room and takes no more dice. Its dice
+	## go back to the hand and roll again (Vanta, Nov 3).
 	var sealed: bool = false
+	## The values it opened with, for the board.
+	var opened_with: Array[int] = []
 	## The table's hand (the same array), so the slot can read its dice.
 	var hand: Array[Die] = []
 
@@ -76,7 +79,7 @@ class Slot:
 	## sum_at_least total, a run with no gaps, matching dice for pair and
 	## three_kind. place() checks each die as it goes in too.
 	func is_complete() -> bool:
-		return is_complete_with(values())
+		return sealed or is_complete_with(values())
 
 	func is_complete_with(dice_values: Array[int]) -> bool:
 		if dice_values.size() < min_dice():
@@ -169,29 +172,23 @@ func can_roll() -> bool:
 # --- Turn -----------------------------------------------------------------------
 
 ## Empties the slots and resets the per-turn counters. Doesn't roll. A
-## persistent slot that's complete is sealed instead: its dice stay put.
+## persistent slot that's complete is sealed first: it stays open, and its
+## dice come back to the hand with the others.
 func reset_turn() -> void:
 	rerolls_left = rerolls_per_turn
 	nudges_left = nudge_uses_per_turn
 	for s: Slot in slots:
-		if s.persists() and s.is_complete():
+		if s.persists() and not s.sealed and s.is_complete():
+			s.opened_with = s.values()
 			s.sealed = true
-		if not s.sealed:
-			s.dice.clear()
+		s.dice.clear()
 
 
-
-
-
-## Rolls every die in die-id order and returns the values. Dice in a
-## sealed slot are spent: they keep their value and aren't rolled. The
-## owner logs the turn start, then calls apply_lock().
+## Rolls every die in die-id order and returns the values. The owner logs
+## the turn start, then calls apply_lock().
 func roll_hand() -> Array[int]:
 	var values: Array[int] = []
 	for d: Die in hand:
-		if not d.slot_id.is_empty() and slot(d.slot_id).sealed:
-			values.append(d.value)
-			continue
 		d.slot_id = ""
 		d.discarded = false
 		d.locked = false
@@ -276,7 +273,7 @@ func place(die_id: int, slot_id: String) -> bool:
 ## Returns a placed die to the hand. Free, any number of times.
 func take_back(die_id: int) -> bool:
 	var d: Die = die(die_id)
-	if d == null or d.slot_id.is_empty() or slot(d.slot_id).sealed:
+	if d == null or d.slot_id.is_empty():
 		return false
 	slot(d.slot_id).dice.erase(die_id)
 	events.append({"type": "take_back", "die": die_id, "slot": d.slot_id})
@@ -409,6 +406,7 @@ func copy(into_events: Array[Dictionary], into_moves: Array[Dictionary]) -> Dice
 		ss.row = s.row
 		ss.dice = s.dice.duplicate()
 		ss.sealed = s.sealed
+		ss.opened_with = s.opened_with.duplicate()
 		ss.hand = t.hand
 		t.slots.append(ss)
 	return t
