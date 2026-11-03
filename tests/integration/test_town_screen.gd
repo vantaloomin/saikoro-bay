@@ -624,6 +624,21 @@ func test_the_villager_whose_mood_changes_stands_in_plain_view() -> void:
 	assert_false(board.view._hidden_by(spot, boxes, board.view.camera_transform().origin), "no building hides the keeper or the bubble")
 
 
+func test_each_bubble_sits_just_above_its_own_head() -> void:
+	for villager: String in ["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"]:
+		Game.state._villagers.append(villager)
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	var spots: Dictionary[String, Vector3] = board.view.villager_spots(Game.data, Game.state)
+	var bubbles: Dictionary[String, Rect2] = board.bubble_rects(spots)
+	var gaps: Array[float] = []
+	for villager: String in spots:
+		var head: float = board.sprite_rect(spots[villager], TownView.villager_height(villager)).position.y
+		gaps.append(head - bubbles[villager].end.y)
+	assert_gt(gaps.min(), 0.0, "no bubble sits on a head")
+	assert_lt(gaps.max() - gaps.min(), 3.0, "Chiyo's bubble is as close to her head as Genzo's is to his: %s" % [gaps])
+
+
 func test_nobody_walks_through_a_building_to_see_a_landmark() -> void:
 	Game.state._landmarks.append("hot_spring")
 	for villager: String in ["pearl_diver", "shipwright"]:

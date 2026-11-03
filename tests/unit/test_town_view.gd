@@ -118,6 +118,33 @@ func test_villagers_with_no_home_wait_on_the_dock() -> void:
 		{"kind": "villager", "villager": "shipwright"})
 
 
+func test_villagers_stand_on_the_height_ladder() -> void:
+	# Mara's pick from the size mock: 18 × 32, Genzo tallest, Chiyo shortest, 4 px apart.
+	var body: Dictionary[String, int] = {}
+	for villager: String in ["shipwright", "shrine_keeper", "pearl_diver", "onsen_keeper"]:
+		var image: Image = PixelArt.villager(villager)
+		assert_eq(image.get_width(), PixelArt.VILLAGER_PIXELS.x, "%s is 18 wide" % villager)
+		assert_eq(image.get_height(), PixelArt.villager_rows(villager), "%s's sprite is as tall as it says" % villager)
+		body[villager] = image.get_height() - (PixelArt.EAR_ROWS if villager == "shrine_keeper" else 0)
+	assert_eq(body["shipwright"], 32)
+	assert_gt(body["shipwright"], body["shrine_keeper"])
+	assert_gt(body["shrine_keeper"], body["pearl_diver"])
+	assert_gt(body["pearl_diver"], body["onsen_keeper"])
+	assert_eq(body["shipwright"] - body["onsen_keeper"], 4, "a 4 px ladder")
+	assert_lte(PixelArt.villager_rows("shrine_keeper"), PixelArt.villager_rows("shipwright"), "ears never top Genzo")
+	assert_almost_eq(TownView.villager_height("shipwright"), TownView.VILLAGER_SIZE.y, 0.0001, "the tallest sets the default")
+
+
+func test_each_villager_is_picked_and_bubbled_at_their_own_height() -> void:
+	var spot: Vector3 = Vector3(3.5, 0.0, 6.5)
+	var genzo: AABB = TownView.villager_box(spot, TownView.villager_height("shipwright"))
+	var chiyo: AABB = TownView.villager_box(spot, TownView.villager_height("onsen_keeper"))
+	assert_almost_eq(genzo.size.y - chiyo.size.y, 4 * TownView.SPRITE_PIXEL, 0.0001, "Chiyo's click box is 4 px shorter")
+	assert_almost_eq(TownView.bubble_point(spot, TownView.villager_height("shipwright")).y
+		- TownView.bubble_point(spot, TownView.villager_height("onsen_keeper")).y, 4 * TownView.SPRITE_PIXEL, 0.0001,
+		"and her bubble 4 px lower")
+
+
 # --- Walking -----------------------------------------------------------------------------
 
 ## Whether a walk along `route` ever steps into a building, checked every
