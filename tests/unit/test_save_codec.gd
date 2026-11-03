@@ -45,6 +45,13 @@ func test_edited_payload_is_caught() -> void:
 	assert_eq(SaveCodec.decode(edited).status, SaveCodec.Status.BAD_CHECKSUM)
 
 
+func test_edited_sequence_number_is_caught() -> void:
+	var text: String = SaveCodec.encode({"coins": 10}, 3)
+	var edited: String = text.replace('"seq":3', '"seq":9')
+	assert_ne(edited, text, "the edit applied")
+	assert_eq(SaveCodec.decode(edited).status, SaveCodec.Status.BAD_CHECKSUM)
+
+
 func test_newer_version_is_refused() -> void:
 	var body: String = JSON.stringify({}, "", true, true)
 	var header: String = JSON.stringify({
@@ -92,7 +99,7 @@ func test_migration_must_return_a_dictionary() -> void:
 
 func test_payload_must_be_an_object() -> void:
 	var body: String = "[1, 2, 3]"
-	var header: String = JSON.stringify({"format": SaveCodec.FORMAT, "version": 1, "sha256": body.sha256_text()})
+	var header: String = JSON.stringify({"format": SaveCodec.FORMAT, "version": 1, "sha256": SaveCodec.digest(1, 0, body)})
 	assert_eq(SaveCodec.decode(header + "\n" + body + "\n").status, SaveCodec.Status.BAD_PAYLOAD)
 
 

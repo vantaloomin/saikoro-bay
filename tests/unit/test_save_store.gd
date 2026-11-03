@@ -85,26 +85,45 @@ func test_writing_over_a_corrupt_save_keeps_the_good_backup() -> void:
 	assert_eq(_coins_in(store.backup_path()), 1, "garbage never becomes the backup")
 
 
-func test_blocked_write_is_held_until_unblocked() -> void:
+func test_plain_write_while_blocked_is_refused_and_not_held() -> void:
 	store.write({"coins": 1})
 	store.blocked = true
 	assert_eq(store.write({"coins": 2}), ERR_BUSY)
+	assert_false(store.has_pending_write())
+	store.blocked = false
+	assert_eq(_coins_in(store.path), 1)
+
+
+func test_held_write_captures_the_settled_state() -> void:
+	# The audit's probe: a save requested mid-transition must not capture
+	# the half-finished state from the moment it was requested.
+	var world: Dictionary = {"haul": 0}
+	var build: Callable = func() -> Dictionary: return {"haul": world["haul"]}
+	store.blocked = true
+	assert_eq(store.write_when_ready(build), ERR_BUSY)
 	assert_true(store.has_pending_write())
-	assert_eq(_coins_in(store.path), 1, "nothing written while blocked")
+	assert_false(store.exists(), "nothing written while blocked")
+	world["haul"] = 120  # the transition banks the haul
 	watch_signals(store)
 	store.blocked = false
 	assert_signal_emitted_with_parameters(store, "deferred_write_finished", [OK])
 	assert_false(store.has_pending_write())
-	assert_eq(_coins_in(store.path), 2)
+	var saved: SaveStore.ReadResult = store.read()
+	assert_eq(SaveCodec.read_int(saved.payload, "haul"), 120)
 
 
 func test_only_the_latest_held_write_runs() -> void:
 	store.blocked = true
-	store.write({"coins": 1})
-	store.write({"coins": 2})
+	store.write_when_ready(func() -> Dictionary: return {"coins": 1})
+	store.write_when_ready(func() -> Dictionary: return {"coins": 2})
 	store.blocked = false
 	assert_eq(_coins_in(store.path), 2)
 	assert_eq(_seq_in(store.path), 1, "one write, not two")
+
+
+func test_write_when_ready_writes_at_once_when_not_blocked() -> void:
+	assert_eq(store.write_when_ready(func() -> Dictionary: return {"coins": 4}), OK)
+	assert_eq(_coins_in(store.path), 4)
 
 
 func test_seq_goes_up_with_each_write() -> void:

@@ -9,8 +9,9 @@ extends RefCounted
 ## `seq` goes up by one with every write to a slot, so when a slot has
 ## several good copies (save, .tmp, .bak) the newest one is easy to find.
 ##
-## The hash is over the payload line's raw text, so a truncated or edited
-## file is caught before it is trusted. Saves from a newer version of the
+## The hash covers the version, the sequence number and the payload line's
+## raw text, so a truncated or edited file (header included) is caught
+## before it is trusted. Saves from a newer version of the
 ## game are refused, never "upgraded" downwards. Older saves step through
 ## MIGRATIONS one version at a time.
 ##
@@ -59,7 +60,7 @@ static func encode(payload: Dictionary, seq: int = 0) -> String:
 		"format": FORMAT,
 		"version": CURRENT_VERSION,
 		"seq": seq,
-		"sha256": body.sha256_text(),
+		"sha256": digest(CURRENT_VERSION, seq, body),
 	}
 	return JSON.stringify(header, "", true) + "\n" + body + "\n"
 
@@ -96,7 +97,7 @@ static func decode(text: String, target_version: int = CURRENT_VERSION) -> Decod
 		return result
 
 	var body: String = text.substr(split_at + 1).trim_suffix("\n")
-	if body.sha256_text() != str(header.get("sha256", "")):
+	if digest(version, result.seq, body) != str(header.get("sha256", "")):
 		result.status = Status.BAD_CHECKSUM
 		return result
 	var payload_value: Variant = _parse(body)
@@ -117,6 +118,11 @@ static func decode(text: String, target_version: int = CURRENT_VERSION) -> Decod
 	result.version = target_version
 	result.payload = payload
 	return result
+
+
+## The integrity hash for a file's header numbers and payload line.
+static func digest(version: int, seq: int, body: String) -> String:
+	return ("%d\n%d\n%s" % [version, seq, body]).sha256_text()
 
 
 ## Parses JSON quietly: bad text gives null instead of an engine error.

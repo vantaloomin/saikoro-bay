@@ -18,9 +18,10 @@ extends RefCounted
 ## virus scanner or cloud sync can hold a file for a moment. A failed write
 ## never deletes the newest good copy.
 ##
-## Writes requested while `blocked` (scene flow sets it during the tide
-## transition, so a save never captures half of each world) are held and
-## written as soon as it clears. Nothing is ever written to a slot holding a
+## While `blocked` (scene flow sets it during the tide transition, so a save
+## never captures half of each world), write() refuses. write_when_ready()
+## instead holds a payload *builder* and calls it when the block clears, so
+## the save captures the settled state, not the state at request time. Nothing is ever written to a slot holding a
 ## copy from a newer game version, so an old build can't destroy newer
 ## progress.
 ##
@@ -28,7 +29,7 @@ extends RefCounted
 ## after a write can still lose that write, but the verify step plus .bak
 ## mean it can't leave the slot with no readable save.
 
-## Emitted after a held write runs, with its result.
+## Emitted after a held write_when_ready() runs, with its result.
 signal deferred_write_finished(error: Error)
 
 enum Source { NONE, MAIN, TEMP, BACKUP }
@@ -36,23 +37,22 @@ enum Source { NONE, MAIN, TEMP, BACKUP }
 const RENAME_ATTEMPTS: int = 3
 const RENAME_RETRY_MSEC: int = 50
 
-## Set by scene flow while a transition runs. Clearing it writes any held save.
+## Set by scene flow while a transition runs. Clearing it runs any held
+## write_when_ready() builder.
 var blocked: bool = false:
 	set(value):
 		blocked = value
-		if not blocked and _has_pending:
-			var held: Dictionary = _pending
-			_has_pending = false
-			_pending = {}
-			deferred_write_finished.emit(write(held))
+		if not blocked and _pending.is_valid():
+			var build: Callable = _pending
+			_pending = Callable()
+			deferred_write_finished.emit(write(build.call() as Dictionary))
 
 var path: String:
 	get:
 		return _path
 
 var _path: String
-var _pending: Dictionary = {}
-var _has_pending: bool = false
+var _pending: Callable = Callable()
 
 
 class ReadResult:
@@ -83,21 +83,30 @@ func exists() -> bool:
 		or FileAccess.file_exists(backup_path())
 
 
-## True while a write is held for the end of a transition.
+## True while a write_when_ready() builder is waiting for the block to clear.
 func has_pending_write() -> bool:
-	return _has_pending
+	return _pending.is_valid()
 
 
-## Writes `payload`. Returns OK, or:
-## ERR_BUSY (blocked: the write is held and runs when `blocked` clears),
+## Writes the payload `build` returns: now if not blocked, otherwise when
+## `blocked` clears (only the latest request is kept). Returns write()'s
+## result, or ERR_BUSY if it was held; the held result arrives through
+## deferred_write_finished.
+func write_when_ready(build: Callable) -> Error:
+	if blocked:
+		_pending = build
+		return ERR_BUSY
+	return write(build.call() as Dictionary)
+
+
+## Writes `payload` now. Returns OK, or:
+## ERR_BUSY (blocked; nothing is written or held, see write_when_ready()),
 ## ERR_UNAUTHORIZED (the slot holds a newer-version copy),
 ## ERR_FILE_CANT_OPEN / ERR_FILE_CANT_WRITE / ERR_FILE_CORRUPT (verify failed),
 ## or a move error after retries (the new save is then kept in .tmp, and
 ## read() still returns it).
 func write(payload: Dictionary) -> Error:
 	if blocked:
-		_pending = payload.duplicate(true)
-		_has_pending = true
 		return ERR_BUSY
 
 	var copies: Dictionary[Source, SaveCodec.DecodeResult] = _decode_all()
@@ -160,8 +169,7 @@ func read() -> ReadResult:
 
 ## Deletes the slot and its temp and backup files, and drops a held write.
 func erase() -> void:
-	_has_pending = false
-	_pending = {}
+	_pending = Callable()
 	_remove(_path)
 	_remove(temp_path())
 	_remove(backup_path())
