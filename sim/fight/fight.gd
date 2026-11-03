@@ -227,6 +227,11 @@ func has_perk(perk_id: String) -> bool:
 	return _perks.has(perk_id)
 
 
+## Who granted `perk_id` (villager or building id), or "".
+func perk_source(perk_id: String) -> String:
+	return _perks[perk_id].source if _perks.has(perk_id) else ""
+
+
 func die(die_id: int) -> Die:
 	return hand[die_id] if die_id >= 0 and die_id < hand.size() else null
 
