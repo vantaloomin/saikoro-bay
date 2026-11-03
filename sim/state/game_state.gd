@@ -74,16 +74,32 @@ func start_delve(data: GameData) -> bool:
 ## Returns false, changing nothing, if not in a delve or the outcome is
 ## unknown.
 func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
+	return not settle_delve(data, outcome, haul).is_empty()
+
+
+## finish_delve, returning the settlement the return-to-town tally reads
+## (Imogen's bridge review, section 4), or {} if it was refused:
+## {"delve", "outcome", "kept" and "lost" (Haul dicts: what the town
+## banked and what the barrel took), "rescued" (villagers who joined),
+## "landmark" (won, or ""), "before" and "after" ({resource: amount} for
+## every resource, around the bank)}. Taken here, as the bank happens, so
+## the tally never rebuilds it by diffing state.
+func settle_delve(data: GameData, outcome: String, haul: Haul) -> Dictionary:
 	if phase != Phase.DELVE or not Haul.OUTCOMES.has(outcome):
-		return false
+		return {}
+	var before: Dictionary = _resource_totals(data)
 	var kept: Haul = haul.kept(outcome)
+	var rescued: Array[String] = []
+	var won: String = ""
 	for id: String in kept.resources:
 		add_resource(id, kept.resources[id])
 	for villager: String in kept.villagers:
 		if not _villagers.has(villager):
 			_villagers.append(villager)
+			rescued.append(villager)
 	if not kept.landmark.is_empty() and not _landmarks.has(kept.landmark):
 		_landmarks.append(kept.landmark)
+		won = kept.landmark
 	last_delve = {"delve": delve_count, "outcome": outcome, "kept": kept.to_dict()}
 	phase = Phase.TOWN
 	if outcome == Haul.ABANDONED and not town.needs_budget:
@@ -92,7 +108,28 @@ func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
 		_set_budget(data)
 		delve_attempt = 0
 	settle_villagers(data)
-	return true
+	return {"delve": int(last_delve["delve"]), "outcome": outcome, "kept": kept.to_dict(), "lost": _lost(haul, kept).to_dict(),
+		"rescued": rescued, "landmark": won, "before": before, "after": _resource_totals(data)}
+
+
+## What the barrel took: the haul less what was kept.
+static func _lost(haul: Haul, kept: Haul) -> Haul:
+	var lost: Haul = Haul.new()
+	for id: String in haul.resources:
+		lost.add_resource(id, haul.resource(id) - kept.resource(id))
+	for villager: String in haul.villagers:
+		if not kept.villagers.has(villager):
+			lost.villagers.append(villager)
+	if not haul.landmark.is_empty() and kept.landmark.is_empty():
+		lost.landmark = haul.landmark
+	return lost
+
+
+func _resource_totals(data: GameData) -> Dictionary:
+	var totals: Dictionary = {}
+	for id: String in data.ids("resources"):
+		totals[id] = resource(id)
+	return totals
 
 
 ## An abandoned delve counts as never having happened for time (Imogen's

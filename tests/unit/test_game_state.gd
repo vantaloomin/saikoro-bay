@@ -217,3 +217,35 @@ func test_version_1_saves_upgrade_with_an_empty_town() -> void:
 	assert_eq(loaded.villagers(), [] as Array[String])
 	assert_eq(loaded.last_delve, {})
 	assert_eq(loaded.phase, GameState.Phase.DELVE, "still mid-delve: Game turns that into a wash-up")
+
+
+## Imogen's bridge review: the tally reads a settlement taken as the bank
+## happens, never a diff of state afterwards.
+func test_a_settlement_records_what_was_banked_and_what_the_barrel_took() -> void:
+	var state: GameState = _in_delve()
+	var settled: Dictionary = state.settle_delve(game_data, Haul.WASHED_UP, _haul())
+	assert_eq(settled["delve"], 1)
+	assert_eq(settled["outcome"], Haul.WASHED_UP)
+	assert_eq(settled["kept"]["resources"], {"driftwood": 4})
+	assert_eq(settled["lost"]["resources"], {"driftwood": 5, "pearls": 1})
+	assert_eq(settled["lost"]["villagers"], ["pearl_diver"])
+	assert_eq(settled["lost"]["landmark"], "cafe")
+	assert_eq(settled["rescued"], [] as Array[String])
+	assert_eq(settled["landmark"], "")
+	assert_eq(settled["before"]["driftwood"], 2)
+	assert_eq(settled["after"]["driftwood"], 6)
+	assert_eq(settled["after"]["pearls"], 0)
+	assert_eq((settled["before"] as Dictionary).keys(), Array(game_data.ids("resources")), "every resource, for the ledger")
+
+
+func test_a_settlement_names_who_joined_and_what_was_won() -> void:
+	var state: GameState = _in_delve()
+	var settled: Dictionary = state.settle_delve(game_data, Haul.CLEARED, _haul())
+	assert_eq(settled["rescued"], ["pearl_diver"] as Array[String])
+	assert_eq(settled["landmark"], "cafe")
+	assert_eq(settled["lost"], Haul.new().to_dict(), "a clear keeps everything")
+	state.start_delve(game_data)
+	settled = state.settle_delve(game_data, Haul.SURFACED, _haul())
+	assert_eq(settled["rescued"], [] as Array[String], "already in town: nobody new joins")
+	assert_eq(settled["landmark"], "", "already won")
+	assert_eq(state.settle_delve(game_data, Haul.SURFACED, _haul()), {}, "refused out of a delve")

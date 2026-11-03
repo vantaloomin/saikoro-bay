@@ -10,7 +10,8 @@ extends Node
 ##
 ## Stingers are one-shots: the tide both ways (played here, from
 ## SceneFlow), Koban's vault opening and ending (from the vault board), and
-## the barrel when a washed-up delve reaches town. The files are made by
+## the barrel as a wash-up's tally shows what it took (from the tally; the
+## town's uncovering stays a relief, Mara's #58 review). The files are made by
 ## tools/make_ambience.py and tools/make_stingers.py.
 
 const AMBIENCE_DIR: String = "res://content/sfw/ambience/"
@@ -41,9 +42,6 @@ var _bed_player: AudioStreamPlayer
 ## A few players in turn, so a stinger doesn't cut off the one before.
 var _stinger_players: Array[AudioStreamPlayer] = []
 var _next_stinger: int = 0
-## The barrel waits for the town to be uncovered, so it lands as the
-## notice board says "You washed up in a barrel". "" when none is due.
-var _barrel_due: String = ""
 
 
 func _ready() -> void:
@@ -54,8 +52,6 @@ func _ready() -> void:
 		add_child(player)
 		_stinger_players.append(player)
 	SceneFlow.transition_started.connect(_on_transition_started)
-	SceneFlow.transition_finished.connect(_on_transition_finished)
-	Game.returned_to_town.connect(_on_returned_to_town)
 	get_tree().scene_changed.connect(_on_scene_changed)
 
 
@@ -119,14 +115,3 @@ func _on_transition_started(direction: TideTransition.Direction) -> void:
 func _on_scene_changed() -> void:
 	var scene: Node = get_tree().current_scene
 	play_bed(str(BEDS.get(scene.scene_file_path, "")) if scene != null else "")
-
-
-func _on_returned_to_town(number: int) -> void:
-	var outcome: String = str(Game.state.last_delve.get("outcome", "")) if Game.state != null else ""
-	_barrel_due = barrel_for(number) if outcome == Haul.WASHED_UP else ""
-
-
-func _on_transition_finished(direction: TideTransition.Direction) -> void:
-	if direction == TideTransition.Direction.UP and not _barrel_due.is_empty():
-		stinger(_barrel_due)
-	_barrel_due = ""
