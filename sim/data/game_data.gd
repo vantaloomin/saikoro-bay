@@ -14,7 +14,11 @@ extends RefCounted
 ##   "string"    non-empty string
 ##   "string?"   string, may be empty (for things still being written)
 ##   "int"       whole number
+##   "int_list"  non-empty list of whole numbers
+##   "string_list"  list of non-empty strings (may be empty)
+##   "enum:a|b"  one of the listed words
 ##   "ref:T"     the id of a row in table T
+##   "ref_list:T"  list of ids of rows in table T (may repeat)
 
 const DATA_DIR: String = "res://data"
 const SCHEMA: int = 1
@@ -30,6 +34,24 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"rooms": {
 		"id": "id", "name": "string", "icon_shape": "string",
+	},
+	"dice": {
+		"id": "id", "name": "string", "faces": "int_list",
+	},
+	"slots": {
+		"id": "id", "name": "string", "text": "string",
+		"accepts": "enum:any|range|even|odd|exact|pair",
+		"min": "int", "max": "int", "dice_needed": "int",
+		"effect": "enum:damage|block|heal", "mult": "int", "add": "int",
+		"icon_shape": "string",
+	},
+	"enemies": {
+		"id": "id", "name": "string", "hp": "int", "intents": "string_list",
+		"twist": "enum:none|house_lock|snake_eyes", "twist_text": "string?",
+	},
+	"loadouts": {
+		"id": "id", "hp": "int", "dice": "ref_list:dice", "slots": "ref_list:slots",
+		"rerolls_per_turn": "int", "unused_die_block": "int",
 	},
 }
 
@@ -118,6 +140,9 @@ func _load_table(table: String, text: String) -> void:
 		if rows.has(id):
 			errors.append("%s: duplicate id \"%s\"" % [where, id])
 			continue
+		for key: Variant in clean:
+			if clean[key] is Array:
+				(clean[key] as Array).make_read_only()
 		clean.make_read_only()
 		rows[id] = clean
 	_tables[table] = rows
@@ -153,8 +178,28 @@ func _read_row(where: String, item: Dictionary, fields: Dictionary) -> Variant:
 					ok = false
 				else:
 					value = SaveCodec.to_int_or(value, 0)
+			"int_list":
+				var numbers: Variant = _int_list(value)
+				if numbers == null:
+					errors.append("%s: \"%s\" must be a non-empty list of whole numbers" % [where, field])
+					ok = false
+				else:
+					value = numbers
+			"string_list":
+				if not _is_string_list(value):
+					errors.append("%s: \"%s\" must be a list of text" % [where, field])
+					ok = false
 			_:
-				if kind.begins_with("ref:"):
+				if kind.begins_with("enum:"):
+					var allowed: PackedStringArray = kind.substr(5).split("|")
+					if not (value is String and (value as String) in allowed):
+						errors.append("%s: \"%s\" must be one of %s" % [where, field, ", ".join(allowed)])
+						ok = false
+				elif kind.begins_with("ref_list:"):
+					if not _is_string_list(value):
+						errors.append("%s: \"%s\" must be a list of ids" % [where, field])
+						ok = false
+				elif kind.begins_with("ref:"):
 					if not value is String:
 						errors.append("%s: \"%s\" must be an id" % [where, field])
 						ok = false
@@ -172,9 +217,36 @@ func _check_refs() -> void:
 			var row_data: Dictionary = (_tables[table] as Dictionary)[id]
 			for field: String in fields:
 				var kind: String = fields[field]
-				if not kind.begins_with("ref:"):
-					continue
-				var target: String = kind.substr(4)
-				if not has_row(target, row_data[field] as String):
-					errors.append("%s \"%s\": \"%s\" points to missing %s \"%s\"" % [
-						table, id, field, target, row_data[field]])
+				var targets: Array = []
+				var target: String = ""
+				if kind.begins_with("ref:"):
+					target = kind.substr(4)
+					targets = [row_data[field]]
+				elif kind.begins_with("ref_list:"):
+					target = kind.substr(9)
+					targets = row_data[field] as Array
+				for ref: Variant in targets:
+					if not has_row(target, ref as String):
+						errors.append("%s \"%s\": \"%s\" points to missing %s \"%s\"" % [
+							table, id, field, target, ref])
+
+
+## A whole-number list as Array[int], or null if it isn't one.
+static func _int_list(value: Variant) -> Variant:
+	if not value is Array or (value as Array).is_empty():
+		return null
+	var out: Array[int] = []
+	for item: Variant in value as Array:
+		if item is String or not SaveCodec.is_int_like(item):
+			return null
+		out.append(SaveCodec.to_int_or(item, 0))
+	return out
+
+
+static func _is_string_list(value: Variant) -> bool:
+	if not value is Array:
+		return false
+	for item: Variant in value as Array:
+		if not (item is String and not (item as String).is_empty()):
+			return false
+	return true
