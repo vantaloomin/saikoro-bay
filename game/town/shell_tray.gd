@@ -9,6 +9,13 @@ const SHELL: float = 25.0
 const GAP: float = 10.0
 
 var tokens: Array[String] = []
+## How many shells, from the left, are shown in full; the rest wait at a
+## fifth while a landmark arrival is staged (Mara's #46 review). -1 is all.
+var lit: int = -1
+## Drawn at this opacity: 1 normally, WAITING for a shell not lit yet.
+var _alpha: float = 1.0
+
+const WAITING: float = 0.2
 
 
 ## The tokens left to right: "kept", then "fresh", then "spent" (and
@@ -57,7 +64,9 @@ func show_state(data: GameData, state: GameState, spending: int = 0) -> void:
 func _draw() -> void:
 	for i: int in tokens.size():
 		var center: Vector2 = Vector2(SHELL + i * (SHELL * 2.0 + GAP), SHELL + 4.0)
+		_alpha = WAITING if lit >= 0 and i >= lit else 1.0
 		_draw_shell(center, tokens[i])
+	_alpha = 1.0
 
 
 func _draw_shell(center: Vector2, token: String) -> void:
@@ -74,16 +83,20 @@ func _draw_shell(center: Vector2, token: String) -> void:
 			var x: float = step * SHELL * 0.3
 			var line: PackedVector2Array = [center + Vector2(x - SHELL, SHELL), center + Vector2(x + SHELL, -SHELL)]
 			for piece: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(line, points):
-				draw_polyline(piece, TownStyle.INK, 1.5, true)
-		draw_polyline(outline, TownStyle.INK, 2.5)
+				draw_polyline(piece, _c(TownStyle.INK), 1.5, true)
+		draw_polyline(outline, _c(TownStyle.INK), 2.5)
 		return
 	if token != "spent":
-		draw_colored_polygon(points, TownStyle.SHELL if token == "fresh" else TownStyle.WASHI)
+		draw_colored_polygon(points, _c(TownStyle.SHELL) if token == "fresh" else _c(TownStyle.WASHI))
 	for step: int in range(2, 12, 3):
 		var angle: float = PI + PI * step / 12.0
 		draw_line(center + Vector2(0, SHELL * 0.8), center + Vector2(cos(angle), sin(angle)) * SHELL,
-			TownStyle.LOT_LINE if token != "spent" else TownStyle.SPENT, 1.5)
-	draw_polyline(outline, TownStyle.INK if token != "spent" else TownStyle.SPENT, 2.5 if token != "spent" else 2.0)
+			_c(TownStyle.LOT_LINE) if token != "spent" else _c(TownStyle.SPENT), 1.5)
+	draw_polyline(outline, _c(TownStyle.INK) if token != "spent" else _c(TownStyle.SPENT), 2.5 if token != "spent" else 2.0)
 	if token == "kept":
-		draw_circle(center + Vector2(0, -SHELL * 0.25), SHELL * 0.32, Color.WHITE)
-		draw_arc(center + Vector2(0, -SHELL * 0.25), SHELL * 0.32, 0.0, TAU, 24, TownStyle.INK, 2.0)
+		draw_circle(center + Vector2(0, -SHELL * 0.25), SHELL * 0.32, _c(Color.WHITE))
+		draw_arc(center + Vector2(0, -SHELL * 0.25), SHELL * 0.32, 0.0, TAU, 24, _c(TownStyle.INK), 2.0)
+
+
+func _c(color: Color) -> Color:
+	return Color(color, color.a * _alpha)

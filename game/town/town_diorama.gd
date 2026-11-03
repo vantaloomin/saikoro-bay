@@ -34,6 +34,8 @@ var _materials: Dictionary[String, StandardMaterial3D] = {}
 var _ghost: Node3D
 ## Set while drawing the ghost: every material comes out see-through.
 var _ghost_alpha: float = 0.0
+## Each villager's sprite, so a walk can move it.
+var _villagers: Dictionary[String, Sprite3D] = {}
 
 
 ## Builds the fixed parts once: light, sky, ground, sea and scenery.
@@ -66,8 +68,16 @@ func show_town(data: GameData, view: TownView, state: GameState, lifted_uid: int
 		if building["uid"] != lifted_uid:
 			_add_building(data, building, _pieces)
 	var spots: Dictionary[String, Vector3] = view.villager_spots(data, state)
+	_villagers.clear()
 	for villager: String in spots:
-		_sprite(PixelArt.villager(villager), spots[villager])
+		_villagers[villager] = _sprite(PixelArt.villager(villager), spots[villager])
+
+
+## Moves a villager's sprite without rebuilding the town, for a walk.
+func move_villager(villager: String, spot: Vector3) -> void:
+	var sprite: Sprite3D = _villagers.get(villager)
+	if sprite != null and is_instance_valid(sprite):
+		sprite.position = spot
 
 
 ## Shows `building_id` see-through with its top-left corner at `cell`:
