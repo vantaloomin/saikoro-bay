@@ -72,19 +72,32 @@ class Slot:
 			out.append(hand[die_id].value)
 		return out
 
-	## Enough dice to fire. Each die's rule is checked as it goes in; a
-	## sum_at_least slot checks its total here instead.
+	## Enough dice to fire, and the slot's rule holds for them all: a
+	## sum_at_least total, a run with no gaps, matching dice for pair and
+	## three_kind. place() checks each die as it goes in too.
 	func is_complete() -> bool:
 		return is_complete_with(values())
 
 	func is_complete_with(dice_values: Array[int]) -> bool:
 		if dice_values.size() < min_dice():
 			return false
-		if row["accepts"] == "sum_at_least":
-			var total: int = 0
-			for v: int in dice_values:
-				total += v
-			return total >= (row["min"] as int)
+		match row["accepts"] as String:
+			"sum_at_least":
+				var total: int = 0
+				for v: int in dice_values:
+					total += v
+				return total >= (row["min"] as int)
+			"run":
+				# Distinct and consecutive: 1 and 3 keep a run possible but
+				# aren't one.
+				for i: int in dice_values.size():
+					if dice_values.find(dice_values[i]) != i:
+						return false
+				return (dice_values.max() as int) - (dice_values.min() as int) == dice_values.size() - 1
+			"pair", "three_kind":
+				for v: int in dice_values:
+					if v != dice_values[0]:
+						return false
 		return true
 
 

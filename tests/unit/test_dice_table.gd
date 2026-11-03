@@ -206,3 +206,25 @@ func test_a_reroll_never_touches_sealed_dice() -> void:
 	table.roll_hand()
 	assert_true(table.reroll(2))
 	assert_eq([table.hand[0].value, table.hand[1].value], [4, 4])
+
+
+# --- Completeness checks the rule, not just the count (Imogen's #23 audit) ------
+
+func _loose_slot(accepts: String, min_dice: int, max_dice: int) -> DiceTable.Slot:
+	var s: DiceTable.Slot = DiceTable.Slot.new()
+	s.row = {"accepts": accepts, "min": 1, "max": 6, "min_dice": min_dice, "max_dice": max_dice}
+	return s
+
+
+func test_a_run_with_room_to_grow_is_complete_only_without_gaps() -> void:
+	var run: DiceTable.Slot = _loose_slot("run", 2, 4)
+	assert_false(run.is_complete_with([1, 3] as Array[int]), "1 and 3 keep a run possible but aren't one")
+	assert_true(run.is_complete_with([3, 2] as Array[int]))
+	assert_true(run.is_complete_with([2, 4, 3] as Array[int]))
+	assert_false(run.is_complete_with([2, 2, 3] as Array[int]), "no repeats")
+
+
+func test_matching_slots_complete_only_when_every_die_matches() -> void:
+	assert_false(_loose_slot("three_kind", 3, 3).is_complete_with([5, 5, 4] as Array[int]))
+	assert_true(_loose_slot("three_kind", 3, 3).is_complete_with([5, 5, 5] as Array[int]))
+	assert_false(_loose_slot("pair", 2, 2).is_complete_with([2, 3] as Array[int]))

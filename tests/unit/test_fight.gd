@@ -641,3 +641,27 @@ func _play_greedy_turn(fight: Fight) -> void:
 		for s: Fight.Slot in fight.slots:
 			if fight.place(d.id, s.id):
 				break
+
+
+# --- Persistent slots (Imogen's #23 audit, finding 1) -------------------------
+
+func test_a_sealed_slot_fires_once_and_never_again() -> void:
+	var fight: Fight = _fight()
+	var strike: Fight.Slot = fight.slot("strike")
+	var row: Dictionary = strike.row.duplicate()
+	row["persists"] = true
+	strike.row = row
+	_set_hand(fight, [5, 1, 1, 1])
+	assert_true(fight.place(0, "strike"))
+	fight.end_turn()
+	var hits: int = 0
+	for event: Dictionary in fight.events:
+		if event.get("source", "") == "slot:strike":
+			hits += 1
+	assert_eq(hits, 1)
+	assert_true(strike.sealed, "the strike stays filled")
+	assert_eq(fight.slot_amount(strike), 0, "and previews agree it won't fire again")
+	fight.events.clear()
+	fight.end_turn()
+	for event: Dictionary in fight.events:
+		assert_ne(event.get("source", ""), "slot:strike", "a sealed slot doesn't fire on later turns")

@@ -342,8 +342,9 @@ func preview_end_turn() -> Dictionary:
 
 
 ## What a complete slot does at end of turn with the dice in it now, or 0.
+## A sealed slot fired on the turn it completed and never fires again.
 func slot_amount(s: Slot) -> int:
-	if not s.is_complete():
+	if s.sealed or not s.is_complete():
 		return 0
 	return DiceTable.amount(s, table.values_in(s))
 
@@ -356,9 +357,10 @@ func end_turn() -> bool:
 	if not _is_preview:
 		moves.append({"move": "end_turn"})
 
-	# 1. Slots, in card order. All complete slots fire, even past 0 HP.
+	# 1. Slots, in card order. All complete slots fire, even past 0 HP. A
+	# sealed slot already fired on the turn it completed.
 	for s: Slot in slots:
-		if not s.is_complete():
+		if s.sealed or not s.is_complete():
 			continue
 		var amount: int = slot_amount(s)
 		match s.row["effect"] as String:

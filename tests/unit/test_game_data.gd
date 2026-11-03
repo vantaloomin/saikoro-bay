@@ -99,3 +99,17 @@ func test_slots_need_min_dice_at_most_max_dice() -> void:
 	var data: GameData = GameData.new()
 	data.load_texts({"slots": slots})
 	assert_eq(data.errors, PackedStringArray(["slots \"upside_down\": needs 1 <= min_dice <= max_dice, got 3 and 2"]))
+
+
+func test_matching_slots_need_enough_dice_to_match() -> void:
+	var slots: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "short_triple", "name": "S", "text": "t", "accepts": "three_kind", "min": 1, "max": 6,
+			"min_dice": 2, "max_dice": 3, "persists": false, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
+		{"id": "lone_pair", "name": "S", "text": "t", "accepts": "pair", "min": 1, "max": 6,
+			"min_dice": 1, "max_dice": 2, "persists": false, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
+	]})
+	var data: GameData = GameData.new()
+	data.load_texts({"slots": slots})
+	assert_eq(data.errors, PackedStringArray([
+		"slots \"short_triple\": three_kind needs min_dice of at least 3",
+		"slots \"lone_pair\": pair needs min_dice of at least 2"]))

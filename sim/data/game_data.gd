@@ -241,6 +241,10 @@ func _check_rows() -> void:
 		if (slot_row["min_dice"] as int) < 1 or (slot_row["min_dice"] as int) > (slot_row["max_dice"] as int):
 			errors.append("slots \"%s\": needs 1 <= min_dice <= max_dice, got %d and %d" % [
 				id, slot_row["min_dice"], slot_row["max_dice"]])
+		# A pair needs two dice and three of a kind three, or fewer would count.
+		var fewest: int = {"pair": 2, "three_kind": 3}.get(slot_row["accepts"], 1)
+		if (slot_row["min_dice"] as int) < fewest:
+			errors.append("slots \"%s\": %s needs min_dice of at least %d" % [id, slot_row["accepts"], fewest])
 	# Every tier needs an enemy: the map places fight and elite rooms.
 	if _tables.has("enemies"):
 		var tiers: Dictionary[String, int] = {"regular": 0, "elite": 0}
