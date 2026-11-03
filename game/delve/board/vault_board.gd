@@ -8,7 +8,7 @@ extends Control
 ##   - the hand ladder (three of a kind > run > pair > high die), with
 ##     Koban's hand and yours marked on it, yours live as you place dice
 ##   - the raise, which starts at none and is never pre-selected; picking
-##     one previews "Raise 3 pearls: win +6 · lose -3"
+##     one previews "Raise 3 pearls: win +3 · lose -3" (net, Mara #31)
 ##   - the round score as pips, one per round of the best of three
 ## Same dice, moves and inputs as the other boards. It only calls the
 ## vault's moves; previews come from Vault.planning_copy(), which has no RNG
@@ -64,6 +64,8 @@ class PipsView:
 class HouseDice:
 	extends Control
 	var values: Array[int] = []
+	## How many have landed; the rest show as empty outlines.
+	var shown: int = 3
 
 	func _init() -> void:
 		custom_minimum_size = Vector2(3 * 112, 100)
@@ -71,7 +73,11 @@ class HouseDice:
 
 	func _draw() -> void:
 		for i: int in values.size():
-			BoardStyle.draw_die(self, Rect2(Vector2(8 + i * 112, 2), Vector2(96, 96)), values[i])
+			var r: Rect2 = Rect2(Vector2(8 + i * 112, 2), Vector2(96, 96))
+			if i < shown:
+				BoardStyle.draw_die(self, r, values[i])
+			else:
+				draw_rect(r, BoardStyle.DIM, false, 2.0)
 
 
 var vault: Vault
@@ -99,6 +105,9 @@ var _house_text: Label
 var _ladder_rows: Array[PanelContainer] = []
 var _ladder_koban: Array[Label] = []
 var _ladder_you: Array[Label] = []
+var _ladder_dice: Array[Label] = []
+var _ladder_tie: Array[Label] = []
+var _ladder_footer: Label
 var _card: SlotCard
 var _message: Label
 var _stake_label: Label
@@ -135,7 +144,26 @@ func _ready() -> void:
 	_build()
 	_refresh()
 	_verb.grab_focus()
+	_reveal_house()
 	PlaytestLog.log_event("vault_round_start", {"round": vault.round_number, "house": vault.house_hand.duplicate()})
+
+
+## Koban's dice land one at a time, about 250 ms apart, so her roll feels
+## heavier than yours (Mara, #31). Instant with reduce motion.
+func _reveal_house() -> void:
+	if Settings.reduce_motion or not is_inside_tree():
+		_house_dice.shown = 3
+		_house_dice.queue_redraw()
+		return
+	_house_dice.shown = 0
+	_house_dice.queue_redraw()
+	var tween: Tween = create_tween()
+	for i: int in 3:
+		tween.tween_interval(0.25)
+		tween.tween_callback(func() -> void:
+			_house_dice.shown = i + 1
+			_house_dice.queue_redraw()
+			_sounds.play("land"))
 
 
 # --- Words ---------------------------------------------------------------------
@@ -194,6 +222,17 @@ static func _bare(values: Array[int]) -> String:
 	return describe_hand(values).trim_prefix("a ")
 
 
+## Dice as the ladder shows them, high first: "6 6 4".
+static func _dice_text(values: Array[int]) -> String:
+	var sorted: Array[int] = values.duplicate()
+	sorted.sort()
+	sorted.reverse()
+	var out: PackedStringArray = []
+	for v: int in sorted:
+		out.append(str(v))
+	return " ".join(out)
+
+
 static func _total(values: Array[int]) -> int:
 	var total: int = 0
 	for v: int in values:
@@ -219,7 +258,8 @@ func turn_preview() -> Dictionary:
 		if _raise_pick.is_empty() or not copy.raise(_raise_pick):
 			return {"headline": "No raise", "detail": "Stake a quarter of one resource on this round. Win it and the stake comes back doubled."}
 		var amount: int = copy.stake[_raise_pick]
-		return {"headline": "Raise %s: win +%d · lose −%d" % [_amount(amount, _raise_pick), amount * 2, amount],
+		# Net either way, so even money reads as even money (Mara, #31).
+		return {"headline": "Raise %s: win +%d · lose −%d" % [_amount(amount, _raise_pick), amount, amount],
 			"detail": "The %s leave%s your haul when you roll. Win the round and %d come back." % [_amount(amount, _raise_pick), "s" if amount == 1 else "", amount * 2]}
 	var won_before: int = copy.rounds_won
 	copy.end_turn()
@@ -270,6 +310,15 @@ func stake_lines(stake_events: Array) -> PackedStringArray:
 	return out
 
 
+## A haul's resources in the data's order: "41 driftwood, 8 pearls".
+func _haul_text(haul: Haul) -> String:
+	var parts: PackedStringArray = []
+	for id: String in data.ids("resources"):
+		if haul.resource(id) > 0:
+			parts.append(_amount(haul.resource(id), id))
+	return ", ".join(parts)
+
+
 ## The panel at the end of a round (and of the vault).
 func round_text(round_event: Dictionary, stake_events: Array) -> String:
 	var lines: PackedStringArray = []
@@ -282,10 +331,14 @@ func round_text(round_event: Dictionary, stake_events: Array) -> String:
 	lines.append(compare_text(yours, house))
 	for line: String in stake_lines(stake_events):
 		lines.append(line + ".")
+	# The match's end names what it means for the haul (Mara, #31).
 	if vault.state == Vault.State.WON:
-		lines.append("The vault is yours. The %s comes up with you." % prize if not prize.is_empty() else "The vault is yours.")
+		var won_line: String = "You win the %s." % prize if not prize.is_empty() else "You win the vault."
+		var carried: String = _haul_text(vault.haul)
+		lines.append(won_line + (" Your haul: %s." % carried if not carried.is_empty() else ""))
 	elif vault.state == Vault.State.LOST:
-		lines.append("Koban wins the vault. You wash up in the barrel with half your haul.")
+		var kept: String = _haul_text(vault.haul.halved())
+		lines.append("Koban wins. You wash up in the barrel" + (" and keep half: %s." % kept if not kept.is_empty() else "."))
 	return "\n".join(lines)
 
 
@@ -478,6 +531,7 @@ func _on_continue() -> void:
 	_round_stakes = []
 	_refresh()
 	_verb.grab_focus()
+	_reveal_house()
 	PlaytestLog.log_event("vault_round_start", {"round": vault.round_number, "house": vault.house_hand.duplicate()})
 
 
@@ -549,12 +603,28 @@ func _refresh() -> void:
 		var mine: bool = turn and rank == my_rank
 		_ladder_koban[i].text = "KOBAN" if hers else ""
 		_ladder_you[i].text = ("YOU" if yours.size() == 3 else "YOU SO FAR") if mine else ""
+		# A marked row shows the real dice, not the example (Mara, #31).
+		if hers and mine:
+			_ladder_dice[i].text = "her %s · your %s" % [_dice_text(house), _dice_text(yours)]
+		elif hers:
+			_ladder_dice[i].text = _dice_text(house)
+		elif mine:
+			_ladder_dice[i].text = _dice_text(yours)
+		else:
+			_ladder_dice[i].text = LADDER[i][2]
+		_ladder_dice[i].add_theme_color_override("font_color", BoardStyle.INK if hers or mine else BoardStyle.DIM)
+		_ladder_tie[i].visible = hers and mine
 		var border: Color = BoardStyle.JADE if mine else (BoardStyle.AMBER if hers else BoardStyle.DIM)
 		var box: StyleBoxFlat = BoardStyle.panel(border, BoardStyle.FELT if mine or hers else BoardStyle.LACQUER)
 		box.set_border_width_all(4 if mine or hers else 2)
 		box.content_margin_left = 16
 		box.content_margin_right = 16
 		_ladder_rows[i].add_theme_stylebox_override("panel", box)
+
+	var tie_shown: bool = false
+	for tie: Label in _ladder_tie:
+		tie_shown = tie_shown or tie.visible
+	_ladder_footer.visible = not tie_shown
 
 	# Your hand slot.
 	_card.placed_values.clear()
@@ -652,9 +722,16 @@ func _build() -> void:
 	margin.add_child(column)
 
 	# Title, the rules in a line, and the round score.
+	# The map's vault node has a double gold rim; so does the vault's header,
+	# so it reads as the finale (Mara, #31).
+	var rim: PanelContainer = PanelContainer.new()
+	var rim_box: StyleBoxFlat = BoardStyle.panel(BoardStyle.GOLD, BoardStyle.BACKGROUND)
+	rim_box.set_content_margin_all(6)
+	rim.add_theme_stylebox_override("panel", rim_box)
+	column.add_child(rim)
 	var head: PanelContainer = PanelContainer.new()
 	head.add_theme_stylebox_override("panel", BoardStyle.panel())
-	column.add_child(head)
+	rim.add_child(head)
 	var head_inner: HBoxContainer = HBoxContainer.new()
 	head_inner.add_theme_constant_override("separation", 32)
 	head.add_child(head_inner)
@@ -699,17 +776,21 @@ func _build() -> void:
 
 	var ladder: VBoxContainer = VBoxContainer.new()
 	ladder.add_theme_constant_override("separation", 8)
-	ladder.custom_minimum_size = Vector2(620, 0)
+	ladder.custom_minimum_size = Vector2(720, 0)
 	middle.add_child(ladder)
 	ladder.add_child(BoardStyle.label("Best hand wins", BoardStyle.BODY, BoardStyle.GOLD))
 	for entry: Array in LADDER:
 		var row: PanelContainer = PanelContainer.new()
-		row.custom_minimum_size = Vector2(620, 66)
+		row.custom_minimum_size = Vector2(720, 66)
 		ladder.add_child(row)
 		_ladder_rows.append(row)
+		var stack: VBoxContainer = VBoxContainer.new()
+		stack.add_theme_constant_override("separation", 0)
+		stack.alignment = BoxContainer.ALIGNMENT_CENTER
+		row.add_child(stack)
 		var inner: HBoxContainer = HBoxContainer.new()
 		inner.add_theme_constant_override("separation", 12)
-		row.add_child(inner)
+		stack.add_child(inner)
 		var koban_tag: Label = BoardStyle.label("", BoardStyle.SMALL, BoardStyle.AMBER)
 		koban_tag.add_theme_font_override("font", BoardStyle.strong_font())
 		koban_tag.custom_minimum_size = Vector2(80, 0)
@@ -718,14 +799,23 @@ func _build() -> void:
 		var name_label: Label = BoardStyle.label(entry[1], BoardStyle.BODY, BoardStyle.INK)
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		inner.add_child(name_label)
-		inner.add_child(BoardStyle.label(entry[2], BoardStyle.SMALL, BoardStyle.DIM))
+		var dice_label: Label = BoardStyle.label(entry[2], BoardStyle.SMALL, BoardStyle.DIM)
+		inner.add_child(dice_label)
+		_ladder_dice.append(dice_label)
 		var you_tag: Label = BoardStyle.label("", BoardStyle.SMALL, BoardStyle.JADE)
 		you_tag.add_theme_font_override("font", BoardStyle.strong_font())
 		you_tag.custom_minimum_size = Vector2(130, 0)
 		you_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		inner.add_child(you_tag)
 		_ladder_you.append(you_tag)
-	ladder.add_child(BoardStyle.label("Same rank: the higher total wins. A full tie goes to Koban.", BoardStyle.SMALL, BoardStyle.DIM))
+		# On the row itself when both hands share it: her house edge (Mara, #31).
+		var tie: Label = BoardStyle.label("Same rank · higher total wins · ties go to Koban", BoardStyle.SMALL, BoardStyle.AMBER)
+		tie.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tie.visible = false
+		stack.add_child(tie)
+		_ladder_tie.append(tie)
+	_ladder_footer = BoardStyle.label("Same rank: the higher total wins. A full tie goes to Koban.", BoardStyle.SMALL, BoardStyle.DIM)
+	ladder.add_child(_ladder_footer)
 
 	var s: DiceTable.Slot = vault.hand()
 	_card = SlotCard.new()

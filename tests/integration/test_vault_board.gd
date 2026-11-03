@@ -83,7 +83,7 @@ func test_the_raise_starts_at_none_and_previews_both_ways() -> void:
 		assert_false(board._raise_buttons[id].button_pressed, "no raise is pre-selected")
 	assert_eq(board._raise_buttons["pearls"].text, "Raise 3 pearls")
 	board._on_raise_toggled("pearls")
-	assert_eq(board._preview.text, "Raise 3 pearls: win +6 · lose −3")
+	assert_eq(board._preview.text, "Raise 3 pearls: win +3 · lose −3")
 	assert_eq(board.vault.haul.resource("pearls"), 12, "picking a raise stakes nothing yet")
 	board._on_raise_toggled("pearls")
 	assert_eq(board._preview.text, "No raise", "pressing it again takes it back")
@@ -108,6 +108,10 @@ func test_the_ladder_marks_both_hands_live() -> void:
 	_place(board, 2)
 	_place(board, 3)
 	assert_eq(board._ladder_you[_row(Vault.RUN)].text, "YOU")
+	assert_eq(board._ladder_dice[_row(Vault.RUN)].text, "4 3 2", "a marked row shows the real dice")
+	assert_eq(board._ladder_dice[_row(Vault.PAIR)].text, "6 4 4")
+	assert_eq(board._ladder_dice[_row(Vault.HIGH_DIE)].text, "6 4 2", "unmarked rows keep the example")
+	assert_true(board._ladder_footer.visible)
 	assert_eq(board._card.preview_text, "A run of 2-3-4")
 	assert_eq(board._preview.text, "Beats Koban")
 	assert_eq(board._detail.text, "Your run of 2-3-4 beats her pair of 4s and a 6.")
@@ -150,7 +154,7 @@ func test_winning_twice_takes_the_vault() -> void:
 		board._on_verb()
 		_past_guard(board)
 	assert_eq(board.vault.state, Vault.State.WON)
-	assert_string_contains(board._panel_text.text, "The vault is yours. The Café comes up with you.")
+	assert_string_contains(board._panel_text.text, "You win the Café. Your haul: 20 driftwood, 12 pearls.")
 	assert_true(finished[0])
 
 
@@ -180,3 +184,30 @@ func test_the_board_moves_replay_on_a_fresh_vault() -> void:
 	assert_true(again.apply_moves(board.vault.moves))
 	assert_eq(again.events.slice(1), board.vault.events.slice(1), "the same moves make the same round")
 	assert_eq(again.haul.to_dict(), board.vault.haul.to_dict())
+
+
+func test_a_shared_rank_shows_the_tie_rule_on_its_row() -> void:
+	var board: VaultBoard = _board()
+	_roll(board, [5, 5, 3, 1])
+	for i: int in 3:
+		_place(board, i)
+	var pair: int = _row(Vault.PAIR)
+	assert_eq(board._ladder_dice[pair].text, "her 6 4 4 · your 5 5 3")
+	assert_true(board._ladder_tie[pair].visible)
+	assert_eq(board._ladder_tie[pair].text, "Same rank · higher total wins · ties go to Koban")
+	assert_false(board._ladder_footer.visible, "the rule moves onto the row")
+
+
+func test_losing_the_vault_names_the_barrel_and_what_you_keep() -> void:
+	var board: VaultBoard = _board()
+	for r: int in 2:
+		board.vault.house_hand.assign([6, 6, 6] as Array[int])
+		_roll(board, [1, 2, 4, 1])
+		for i: int in 3:
+			_place(board, i)
+		board._on_verb()
+		if r == 0:
+			_past_guard(board)
+	assert_eq(board.vault.state, Vault.State.LOST)
+	assert_string_contains(board._panel_text.text, "Koban wins. You wash up in the barrel and keep half: 10 driftwood, 6 pearls.")
+	assert_eq(board._continue.text, "Continue")
