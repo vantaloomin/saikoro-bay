@@ -622,7 +622,7 @@ func anchor_of(hit: Dictionary) -> Vector3:
 			return Vector3(box.get_center().x, box.end.y, box.get_center().z)
 		"villager":
 			var spot: Vector3 = view.villager_spots(_data, _state).get(str(hit["villager"]), Vector3.ZERO)
-			return spot + Vector3(0.0, TownView.VILLAGER_SIZE.y / 2.0, 0.0)
+			return spot + Vector3(0.0, TownView.villager_height(str(hit["villager"])) / 2.0, 0.0)
 	return Vector3.ZERO
 
 
@@ -641,10 +641,10 @@ func _scale_at(world: Vector3) -> float:
 	return view.to_screen(world).distance_to(view.to_screen(world + Vector3.UP))
 
 
-## Where a villager standing at `spot` is drawn on screen.
-func sprite_rect(spot: Vector3) -> Rect2:
+## Where a villager `height` tall standing at `spot` is drawn on screen.
+func sprite_rect(spot: Vector3, height: float = TownView.VILLAGER_SIZE.y) -> Rect2:
 	var feet: Vector2 = view.to_screen(spot)
-	var head: Vector2 = view.to_screen(spot + Vector3(0.0, TownView.VILLAGER_SIZE.y, 0.0))
+	var head: Vector2 = view.to_screen(spot + Vector3(0.0, height, 0.0))
 	var half: float = (feet.y - head.y) * 0.3
 	return Rect2(Vector2(feet.x - half, head.y), Vector2(half * 2.0, feet.y - head.y))
 
@@ -653,7 +653,7 @@ func sprite_rect(spot: Vector3) -> Rect2:
 func bubble_rects(spots: Dictionary[String, Vector3]) -> Dictionary[String, Rect2]:
 	var out: Dictionary[String, Rect2] = {}
 	for villager: String in spots:
-		var middle: Vector3 = TownView.bubble_point(spots[villager])
+		var middle: Vector3 = TownView.bubble_point(spots[villager], TownView.villager_height(villager))
 		var side: float = TownView.BUBBLE_SIZE * _scale_at(middle)
 		out[villager] = Rect2(view.to_screen(middle) - Vector2(side, side) / 2.0, Vector2(side, side))
 	return out
@@ -916,7 +916,7 @@ func map_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
 	for rect: Rect2 in bubbles.values():
 		taken.append(rect)
 	for villager: String in spots:
-		taken.append(sprite_rect(spots[villager]))
+		taken.append(sprite_rect(spots[villager], TownView.villager_height(villager)))
 	# The swap preview is what the pointer is about to do: names keep off it
 	# (Mara's #42 re-review).
 	var swap: Dictionary = swap_tag()
@@ -1034,7 +1034,7 @@ func _draw_brackets(hit: Dictionary, color: Color, width: float, selected_mark: 
 		"villager":
 			var spot: Vector3 = view.villager_spots(_data, _state).get(str(hit["villager"]), Vector3.ZERO)
 			var feet: Vector2 = view.to_screen(spot)
-			var head: Vector2 = view.to_screen(spot + Vector3(0.0, TownView.VILLAGER_SIZE.y, 0.0))
+			var head: Vector2 = view.to_screen(spot + Vector3(0.0, TownView.villager_height(str(hit["villager"])), 0.0))
 			var half: float = (feet.y - head.y) * 0.4
 			corners = [Vector2(feet.x - half, head.y - 6), Vector2(feet.x + half, head.y - 6),
 				Vector2(feet.x + half, feet.y + 4), Vector2(feet.x - half, feet.y + 4)]

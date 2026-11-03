@@ -23,8 +23,8 @@ const DARK_WOOD: Color = Color(0.42, 0.3, 0.2)
 const PINE: Color = Color(0.22, 0.42, 0.3)
 const HILL: Color = Color(0.42, 0.6, 0.4)
 const LAMP: Color = Color(1.0, 0.75, 0.4)
-## World units per sprite pixel: a 16 × 24 villager stands one cell tall.
-const PIXEL: float = 0.042
+## World units per sprite pixel (TownView owns it, for picking and marks).
+const PIXEL: float = TownView.SPRITE_PIXEL
 
 var camera: Camera3D
 ## Rebuilt when the layout or the villagers change.

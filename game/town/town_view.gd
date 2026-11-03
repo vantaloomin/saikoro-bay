@@ -20,8 +20,13 @@ const BODY_HEIGHT: Dictionary[String, float] = {"home": 0.55, "shop": 0.7, "deco
 const ROOF_HEIGHT: Dictionary[String, float] = {"home": 0.5, "shop": 0.5, "decor": 0.35, "landmark": 0.75}
 ## Gap between a building and its lot lines, per side.
 const INSET: float = 0.09
-## A villager sprite's size in world units, and the mood bubble above it.
-const VILLAGER_SIZE: Vector2 = Vector2(0.5, 1.0)
+## World units per sprite pixel: the 18 × 32 villager sprite (Mara's pick
+## from the size mock, Nov 3) stands about 1.3 cells tall.
+const SPRITE_PIXEL: float = 0.042
+## The tallest villager's footprint and height in world units (the
+## footprint keeps the greybox's share of the sprite's width); use
+## villager_height for anyone in particular. Then the mood bubble above.
+const VILLAGER_SIZE: Vector2 = Vector2(0.5 * PixelArt.VILLAGER_PIXELS.x / 16.0, PixelArt.VILLAGER_PIXELS.y * SPRITE_PIXEL)
 const BUBBLE_SIZE: float = 0.6
 ## How far from the map's middle the camera may wander, in cells past the edge.
 const PAN_SLACK: float = 1.0
@@ -473,16 +478,22 @@ func screen_rect(box: AABB) -> Rect2:
 	return out
 
 
-## Where a villager's mood bubble floats: its middle, above their head.
-static func bubble_point(spot: Vector3) -> Vector3:
-	return spot + Vector3(0.0, VILLAGER_SIZE.y + 0.12 + BUBBLE_SIZE / 2.0, 0.0)
+## How tall a villager stands in world units: Genzo tallest, Chiyo
+## shortest, so each bubble, box and name sits on their own head.
+static func villager_height(villager: String) -> float:
+	return PixelArt.villager_rows(villager) * SPRITE_PIXEL
 
 
-## A villager's box, bubble included.
-static func villager_box(spot: Vector3) -> AABB:
-	var height: float = VILLAGER_SIZE.y + 0.12 + BUBBLE_SIZE
+## Where a villager's mood bubble floats: its middle, above a head
+## `height` up (the tallest villager's when it isn't known).
+static func bubble_point(spot: Vector3, height: float = VILLAGER_SIZE.y) -> Vector3:
+	return spot + Vector3(0.0, height + 0.12 + BUBBLE_SIZE / 2.0, 0.0)
+
+
+## A villager's box, bubble included, for one `height` tall.
+static func villager_box(spot: Vector3, height: float = VILLAGER_SIZE.y) -> AABB:
 	return AABB(spot - Vector3(VILLAGER_SIZE.x / 2.0, 0.0, VILLAGER_SIZE.x / 2.0),
-		Vector3(VILLAGER_SIZE.x, height, VILLAGER_SIZE.x))
+		Vector3(VILLAGER_SIZE.x, height + 0.12 + BUBBLE_SIZE, VILLAGER_SIZE.x))
 
 
 # --- Picking ------------------------------------------------------------------------------
@@ -501,7 +512,7 @@ func pick(point: Vector2, data: GameData, state: GameState, ground_only: bool = 
 		var spots: Dictionary[String, Vector3] = villager_spots(data, state)
 		for villager: String in spots:
 			# Villagers are small, so they win ties with the house behind them.
-			var hit: Variant = villager_box(spots[villager]).grow(0.05).intersects_ray(from, direction)
+			var hit: Variant = villager_box(spots[villager], villager_height(villager)).grow(0.05).intersects_ray(from, direction)
 			if hit != null and from.distance_to(hit as Vector3) - 0.5 < best_distance:
 				best_distance = from.distance_to(hit as Vector3) - 0.5
 				best = {"kind": "villager", "villager": villager}
