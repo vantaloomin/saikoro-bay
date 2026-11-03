@@ -40,12 +40,18 @@ func _init(seed_value: int = 0) -> void:
 
 # --- Delve flow ---------------------------------------------------------------
 
-## Goes below the tide. Returns false if already in a delve.
-func start_delve() -> bool:
+## Goes below the tide ("Go down", TC-7). In the same state change, up to
+## keep_max unused actions are kept for the next visit and the rest are
+## lost (TC-3), and the actions held now are noted for an abandoned delve.
+## Returns false if already in a delve.
+func start_delve(data: GameData) -> bool:
 	if phase != Phase.TOWN:
 		return false
 	delve_count += 1
 	phase = Phase.DELVE
+	town.held_at_go_down = town.actions_left
+	town.kept = mini(_town_row(data)["keep_max"] as int, town.actions_left)
+	town.actions_left = 0
 	return true
 
 
@@ -70,8 +76,62 @@ func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
 		_landmarks.append(kept.landmark)
 	last_delve = {"delve": delve_count, "outcome": outcome, "kept": kept.to_dict()}
 	phase = Phase.TOWN
+	if outcome == Haul.ABANDONED and not town.needs_budget:
+		_undo_go_down()
+	else:
+		_set_budget(data)
 	settle_villagers(data)
 	return true
+
+
+## An abandoned delve counts as never having happened for time (Imogen's
+## town review, option 1, pending Vanta): the actions held at "Go down"
+## come back, and the next delve reuses this delve's number, so its seed
+## and map. The haul is still lost. Quitting and reloading gains nothing.
+func _undo_go_down() -> void:
+	town.actions_left = town.held_at_go_down
+	town.kept = mini(town.kept, town.actions_left)
+	town.held_at_go_down = 0
+	delve_count -= 1
+
+
+## The visit's budget (TC-1): base_actions plus the kept action, if any.
+## `kept` then counts how many of actions_left came from the last visit;
+## spending takes fresh actions first, so it's spent last.
+func _set_budget(data: GameData) -> void:
+	var town_row: Dictionary = _town_row(data)
+	town.kept = mini(town.kept, town_row["keep_max"] as int)
+	town.actions_left = (town_row["base_actions"] as int) + town.kept
+	town.held_at_go_down = 0
+	town.needs_budget = false
+
+
+## Arrival for a town with no budget yet: a new campaign, or a save from
+## before the town existed. Returns true if it set one. Coming up from a
+## delve sets the budget inside finish_delve instead, so a visit gets
+## exactly one.
+func arrive(data: GameData) -> bool:
+	if phase != Phase.TOWN or not town.needs_budget:
+		return false
+	_set_budget(data)
+	settle_villagers(data)
+	return true
+
+
+## The "Go down" button's words, which say what's lost because controller
+## and touch have no hover (spec section 1): "Go down · keep 1, 2 are lost".
+func go_down_label(data: GameData) -> String:
+	var keep: int = mini(_town_row(data)["keep_max"] as int, town.actions_left)
+	var lost: int = town.actions_left - keep
+	if keep == 0:
+		return "Go down"
+	if lost == 0:
+		return "Go down · keep %d" % keep
+	return "Go down · keep %d, %d %s lost" % [keep, lost, "is" if lost == 1 else "are"]
+
+
+static func _town_row(data: GameData) -> Dictionary:
+	return data.row("town", data.ids("town")[0])
 
 
 ## The seed for delve number `n` (1 for the first). Uses SHA-256 so it
@@ -288,6 +348,10 @@ static func _refusal(kind: Town.Refusal, text: String) -> Dictionary:
 ## layout and actions), or nothing. Game.load_or_new locks saving on any.
 func town_problems(data: GameData) -> PackedStringArray:
 	var out: PackedStringArray = town.problems(data, _villagers)
+	if phase == Phase.TOWN and town.kept > town.actions_left:
+		out.append("more actions kept than left")
+	if phase == Phase.DELVE and town.actions_left != 0:
+		out.append("actions left during a delve")
 	for building: Dictionary in town.placed:
 		if data.has_row("landmarks", building["building"]) and not _landmarks.has(building["building"]):
 			out.append("landmark \"%s\" placed but never won" % building["building"])
