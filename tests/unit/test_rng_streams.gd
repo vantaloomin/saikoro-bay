@@ -111,6 +111,40 @@ func test_save_and_restore_through_json_continues_exactly() -> void:
 		assert_eq(_rolls(restored, s, 25), _rolls(original, s, 25), RngStreams.Stream.keys()[stream])
 
 
+func test_each_die_has_its_own_stream() -> void:
+	var rng: RngStreams = RngStreams.new(SEED)
+	var alone: Array[int] = []
+	for _i: int in 10:
+		alone.append(rng.die_index(0, 6))
+	var crowded: RngStreams = RngStreams.new(SEED)
+	var with_others: Array[int] = []
+	for _i: int in 10:
+		crowded.die_index(4, 4)
+		with_others.append(crowded.die_index(0, 6))
+		crowded.die_index(1, 6)
+		crowded.range_int(RngStreams.Stream.ROLLS, 1, 6)
+	assert_eq(with_others, alone, "another die rolling never shifts die 0 (Imogen's bridge review)")
+	assert_ne(RngStreams.stream_seed(SEED, "ROLLS:0"), RngStreams.stream_seed(SEED, "ROLLS:1"))
+
+
+func test_die_streams_save_and_restore() -> void:
+	var original: RngStreams = RngStreams.new(SEED)
+	for _i: int in 7:
+		original.die_index(0, 6)
+		original.die_index(3, 6)
+	var restored: RngStreams = RngStreams.new()
+	assert_true(restored.load_dict(JSON.parse_string(JSON.stringify(original.to_dict()))))
+	for die_id: int in [0, 1, 3, 4]:
+		var a: Array[int] = []
+		var b: Array[int] = []
+		for _i: int in 12:
+			a.append(original.die_index(die_id, 6))
+			b.append(restored.die_index(die_id, 6))
+		assert_eq(b, a, "die %d continues exactly" % die_id)
+	assert_false(RngStreams.new().load_dict({"seed": "1", "states": ["1", "2", "3", "4", "5"], "dice": {"x": "1"}}),
+		"a bad die id")
+
+
 func test_load_rejects_malformed_data() -> void:
 	var rng: RngStreams = RngStreams.new(5)
 	var before: Array[int] = _rolls(RngStreams.new(5), RngStreams.Stream.MAP, 5)

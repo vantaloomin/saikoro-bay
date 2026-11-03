@@ -20,10 +20,14 @@ extends RefCounted
 ## Each stream's seed is SHA-256 of the run seed and the stream's NAME, so
 ## streams can be added or reordered without changing existing ones. Renaming
 ## a stream does change its numbers (the golden test will catch it).
+##
+## The player's dice each have their own stream too, "ROLLS:<die id>"
+## (Imogen's bridge spec review). With one shared stream an added die shifted
+## every later roll, so a seed couldn't be compared with and without a perk.
 
 enum Stream {
 	MAP,       ## Delve layout and room contents.
-	ROLLS,     ## The player's dice rolls and rerolls.
+	ROLLS,     ## Unused by the dice since roller 2 (each die has its own, see die_index).
 	LOOT,      ## Treasure, haul and rewards.
 	ENEMIES,   ## Enemy choice, intents and twists.
 	COSMETIC,  ## Anything that only changes looks or barks. Never affects rules.
@@ -33,11 +37,16 @@ var run_seed: int:
 	get:
 		return _run_seed
 
+## Which way the player's dice are drawn, for replays and the playtest log:
+## 1 was one shared ROLLS stream, 2 is one stream per die.
+const ROLLER: int = 2
 const INT32_MIN: int = -2147483648
 const INT32_MAX: int = 2147483647
 
 var _run_seed: int = 0
 var _streams: Array[RandomNumberGenerator] = []
+## Die id -> its roll stream, made on the die's first roll.
+var _dice: Dictionary[int, RandomNumberGenerator] = {}
 
 
 func _init(seed_value: int = 0) -> void:
@@ -48,6 +57,7 @@ func _init(seed_value: int = 0) -> void:
 func reseed(seed_value: int) -> void:
 	_run_seed = seed_value
 	_streams.clear()
+	_dice.clear()
 	for stream_name: String in Stream.keys():
 		var stream: RandomNumberGenerator = RandomNumberGenerator.new()
 		stream.seed = stream_seed(seed_value, stream_name)
@@ -86,6 +96,23 @@ func index(stream: Stream, size: int) -> int:
 		push_error("RngStreams.index: empty list")
 		return -1
 	return range_int(stream, 0, size - 1)
+
+
+## A face index for die `die_id` with `size` faces, from that die's own
+## stream. An empty die logs an error and returns -1.
+func die_index(die_id: int, size: int) -> int:
+	if size < 1 or size - 1 > INT32_MAX:
+		push_error("RngStreams.die_index: die %d has %d faces" % [die_id, size])
+		return -1
+	return _die_stream(die_id).randi_range(0, size - 1)
+
+
+func _die_stream(die_id: int) -> RandomNumberGenerator:
+	if not _dice.has(die_id):
+		var stream: RandomNumberGenerator = RandomNumberGenerator.new()
+		stream.seed = stream_seed(_run_seed, "ROLLS:%d" % die_id)
+		_dice[die_id] = stream
+	return _dice[die_id]
 
 
 ## True with a chance of `numerator` in `denominator`, using integers only.
@@ -139,9 +166,16 @@ func to_dict() -> Dictionary:
 	var states: Array[String] = []
 	for stream: RandomNumberGenerator in _streams:
 		states.append(str(stream.state))
+	# Only dice that have rolled: a die's untouched stream is its seed.
+	var dice: Dictionary[String, String] = {}
+	var ids: Array[int] = _dice.keys()
+	ids.sort()
+	for die_id: int in ids:
+		dice[str(die_id)] = str(_dice[die_id].state)
 	return {
 		"seed": str(_run_seed),
 		"states": states,
+		"dice": dice,
 	}
 
 
@@ -157,9 +191,18 @@ func load_dict(data: Dictionary) -> bool:
 	for state_text: Variant in states as Array:
 		if not (state_text is String and (state_text as String).is_valid_int()):
 			return false
+	var dice: Variant = data.get("dice", {})
+	if not dice is Dictionary:
+		return false
+	for key: Variant in dice as Dictionary:
+		var value: Variant = (dice as Dictionary)[key]
+		if not (key is String and (key as String).is_valid_int() and value is String and (value as String).is_valid_int()):
+			return false
 	reseed((seed_text as String).to_int())
 	var i: int = 0
 	for state_text: Variant in states as Array:
 		_streams[i].state = (state_text as String).to_int()
 		i += 1
+	for key: Variant in dice as Dictionary:
+		_die_stream((key as String).to_int()).state = ((dice as Dictionary)[key] as String).to_int()
 	return true

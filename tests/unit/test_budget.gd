@@ -123,8 +123,8 @@ func test_a_retry_keeps_the_map_but_rolls_afresh() -> void:
 	var first_rolls: Array[int] = []
 	var retry_rolls: Array[int] = []
 	for i: int in 20:
-		first_rolls.append(first._rng.roll(RngStreams.Stream.ROLLS, 6))
-		retry_rolls.append(retry._rng.roll(RngStreams.Stream.ROLLS, 6))
+		first_rolls.append(first._rng.die_index(i % 4, 6))
+		retry_rolls.append(retry._rng.die_index(i % 4, 6))
 	assert_ne(retry_rolls, first_rolls, "different rolls")
 	assert_ne(DelveRun.run_seed(first.delve_seed, 1), DelveRun.run_seed(first.delve_seed, 2))
 	_come_up(state)

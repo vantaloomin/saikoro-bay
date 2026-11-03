@@ -102,6 +102,8 @@ func _on_delve_started(number: int, seed_value: int) -> void:
 	if Game.run != null:
 		fields["map"] = Game.run.map.inputs()
 		fields["attempt"] = Game.run.attempt
+		# How the dice draw (RngStreams.ROLLER), so old logs still replay.
+		fields["roller"] = RngStreams.ROLLER
 	if _town_since_ms >= 0:
 		fields["time_in_town_ms"] = Time.get_ticks_msec() - _town_since_ms
 	log_event("delve_start", fields)
