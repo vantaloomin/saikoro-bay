@@ -26,6 +26,15 @@ extends Control
 ## until it's placed or put off. Placed, the town walks over to see it,
 ## the changed bubbles pop, and only then does the notice board say
 ## everyone came out, with the shells after it.
+##
+## The kit (M4 PR 2, specs/bridge.md section 5): a third tab, "Kit" (K, or
+## the shoulders), shows the dice the next delve takes, plain ones grouped
+## into one "Standard" row and each changed one a strip of its faces with
+## the changes outlined and a chip saying who and what, then every perk
+## with its gain (a villager's happy bonus folded in) and cost. A read-only
+## strip of blank mini dice above Go down opens it. A shop's Build card and
+## stamp say what it adds to the kit, and while the stamp is up the strip
+## previews it.
 
 ## What the notice board says about the last delve. An abandoned delve is
 ## said plainly, so a player who quit mid-delve knows what it cost.
@@ -57,8 +66,10 @@ const GATHERED: String = "Everyone came out to see the %s."
 const MOVED_IN: String = "The %s moved into the new %s."
 const TAB_NOTICE: String = "Notice board"
 const TAB_BUILD: String = "Build"
-## The build sheet's margins, around its rows.
-const LIST_CHROME: float = 50.0
+## The kit (specs/bridge.md section 5): what the town gives the next delve.
+const TAB_KIT: String = "Kit"
+const TABS: Array[String] = [TAB_NOTICE, TAB_BUILD, TAB_KIT]
+const NO_PERKS: String = "No perks yet. Each villager you rescue and each shop you build adds one."
 ## The room between the notice board and a card under it.
 const COLUMN_GAP: float = 16.0
 ## How far the tabs sit in from the sheet's sides, past its round corners.
@@ -100,6 +111,7 @@ var last_move: Dictionary = {}
 ## Said on the notice board after a landmark is placed.
 var _cheer: String = ""
 var _stamp: HankoButton
+var _kit_strip: KitMarks.Strip
 var _tabs: Dictionary[String, Button] = {}
 ## Between the notice board and a card under it. The tabs sit flush on
 ## whichever sheet is first.
@@ -142,6 +154,11 @@ func _ready() -> void:
 	add_child(sounds)
 	_start_music()
 	_make_tabs()
+	_kit_strip = KitMarks.Strip.new()
+	_kit_strip.name = "KitStrip"
+	_kit_strip.pressed.connect(toggle_kit)
+	_actions.add_child(_kit_strip)
+	_actions.move_child(_kit_strip, 0)
 	_board.setup(Game.data, GameState.town_map(Game.data))
 	_board.picked.connect(_on_picked)
 	_board.spot_chosen.connect(_on_spot_chosen)
@@ -186,6 +203,8 @@ func _show_hud() -> void:
 	_fill(_tray_panel, "Actions", tray)
 	_show_tray()
 	_go_down.text = Game.state.go_down_label(Game.data)
+	var kit: Kit = Kit.build(Game.data, Game.state)
+	_kit_strip.show_kit(Game.data, kit, _kit_after(kit))
 
 
 ## The shell tray: while the arrival is staged round a landmark the panel
@@ -261,7 +280,7 @@ func _make_tabs() -> void:
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	inset.add_child(row)
-	for tab: String in [TAB_NOTICE, TAB_BUILD]:
+	for tab: String in TABS:
 		var button: Button = Button.new()
 		button.text = tab
 		button.name = tab.replace(" ", "")
@@ -280,6 +299,8 @@ func _make_tabs() -> void:
 
 
 func current_tab() -> String:
+	if sheet.get("kind", "") == "kit":
+		return TAB_KIT
 	return TAB_BUILD if sheet.get("kind", "") in ["list", "building", "carry", "confirm"] else TAB_NOTICE
 
 
@@ -289,6 +310,9 @@ func show_tab(tab: String) -> void:
 	if tab == TAB_BUILD:
 		if current_tab() != TAB_BUILD or sheet.get("kind", "") != "list":
 			open_build_list()
+	elif tab == TAB_KIT:
+		if current_tab() != TAB_KIT:
+			open_kit()
 	else:
 		close_sheet()
 	_show_tabs()
@@ -324,7 +348,9 @@ func _input(event: InputEvent) -> void:
 		_pause_menu.open()
 		get_viewport().set_input_as_handled()
 	elif button.button_index in [JOY_BUTTON_LEFT_SHOULDER, JOY_BUTTON_RIGHT_SHOULDER] and button.pressed:
-		show_tab(TAB_NOTICE if button.button_index == JOY_BUTTON_LEFT_SHOULDER else TAB_BUILD)
+		# The shoulders step through the tabs, stopping at the ends.
+		var step: int = -1 if button.button_index == JOY_BUTTON_LEFT_SHOULDER else 1
+		show_tab(TABS[clampi(TABS.find(current_tab()) + step, 0, TABS.size() - 1)])
 		get_viewport().set_input_as_handled()
 	elif button.button_index == JOY_BUTTON_X and button.pressed:
 		# X is context (two-halves section 3): the selection's card buttons,
@@ -346,6 +372,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key: InputEventKey = event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_B:
 		toggle_build_list()
+		get_viewport().set_input_as_handled()
+	elif key != null and key.pressed and not key.echo and key.keycode == KEY_K:
+		toggle_kit()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed(&"ui_cancel"):
 		var focused: Control = get_viewport().gui_get_focus_owner()
@@ -407,6 +436,25 @@ func toggle_build_list() -> void:
 		close_sheet()
 	elif sheet.get("kind", "") not in ["carry", "confirm"]:
 		open_build_list()
+
+
+## The Kit tab, from its tab, K or the kit strip. It never opens while a
+## building is being carried or stamped.
+func toggle_kit() -> void:
+	if sheet.get("kind", "") == "kit":
+		close_sheet()
+	elif sheet.get("kind", "") not in ["carry", "confirm"] and staging.is_empty():
+		open_kit()
+
+
+func open_kit() -> void:
+	if sheet.get("kind", "") in ["carry", "confirm"]:
+		return
+	_board.stop_mode()
+	_board.select({})
+	sounds.play("paper")
+	sheet = {"kind": "kit"}
+	_show_right_column()
 
 
 ## A row of the list (or the board's Cottage shortcut): picks up what you
@@ -819,6 +867,8 @@ func _show_right_column() -> void:
 			_show_confirm()
 		"home":
 			_show_home_pick()
+		"kit":
+			_show_kit()
 		_:
 			_show_card(_board.selected)
 	_column_gap.visible = _notice.visible and _card.visible
@@ -853,8 +903,11 @@ func _show_list() -> void:
 func _fit_list(scroll: ScrollContainer, rows: VBoxContainer) -> void:
 	if not is_instance_valid(scroll):
 		return
+	# Measured, not guessed: the tabs and whatever sits over the card, and
+	# the card's own margins, come off the room down to the kit strip.
 	var actions_top: float = _scaled_rect(_actions).position.y
-	var room: float = (actions_top - 16.0 - _right_column.position.y) / hud_scale - LIST_CHROME
+	var chrome: float = _card.get_combined_minimum_size().y - scroll.get_combined_minimum_size().y
+	var room: float = (actions_top - 16.0 - _right_column.position.y) / hud_scale - _card.position.y - chrome
 	scroll.custom_minimum_size.y = minf(rows.get_combined_minimum_size().y, maxf(room, 160.0))
 	scroll.scroll_vertical = 0
 	_focus_first()
@@ -868,9 +921,7 @@ func _list_entry(entry: Dictionary) -> Button:
 	var second: String = str(entry["cost"]) if entry["status"] == "" else str(entry["status"])
 	if str(entry["status"]) == BuildList.WAITING:
 		second = "%s · %s" % [entry["cost"], entry["status"]]
-	# An amount never wraps away from what it counts ("1 / pearl").
-	var amounts: RegEx = RegEx.create_from_string("(\\d) ")
-	second = amounts.sub(second, "$1\u00a0", true)
+	second = _keep_amounts(second)
 	var row: Button = _button("%s\n%s" % [entry["name"], second], choose_building.bind(str(entry["id"])))
 	row.name = str(entry["id"])
 	# Rows are read more than pressed, so they take the body weight.
@@ -896,11 +947,121 @@ func _list_entry(entry: Dictionary) -> Button:
 	return row
 
 
+## The kit a pending stamp would make, for the strip's preview, or null.
+func _kit_after(kit: Kit) -> Kit:
+	if kit == null or sheet.get("kind", "") != "confirm":
+		return null
+	var building: String = str(sheet["id"])
+	var perk_id: String = str(Game.data.row("buildings", building).get("perk", ""))
+	if perk_id.is_empty() or kit.has_perk(perk_id):
+		return null
+	var after: Kit = kit.copy()
+	after.add_perk(Game.data, perk_id, building)
+	return after
+
+
+## An amount never wraps away from what it counts ("1 / pearl").
+static func _keep_amounts(text: String) -> String:
+	return RegEx.create_from_string("(\\d) ").sub(text, "$1\u00a0", true)
+
+
+## The Kit tab: the dice, plain ones grouped and each changed one a strip
+## of its faces with what changed outlined and who changed it, then the
+## perks with their gains and costs.
+func _show_kit() -> void:
+	var kit: Kit = Kit.build(Game.data, Game.state)
+	var rows: VBoxContainer = VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 8)
+	rows.add_child(_kit_heading("Dice"))
+	if kit != null:
+		for die: Dictionary in KitSheet.dice_groups(Game.data, kit):
+			# The chip sits over its faces, so the sheet keeps its width.
+			var row: VBoxContainer = VBoxContainer.new()
+			row.add_theme_constant_override("separation", 4)
+			var chip: PanelContainer = _chip(str(die["chip"]))
+			chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+			row.add_child(chip)
+			row.add_child(KitMarks.FaceStrip.new(die["faces"], die["changed"]))
+			rows.add_child(row)
+	rows.add_child(_kit_heading("Perks"))
+	var lines: Array[Dictionary] = KitSheet.perk_lines(Game.data, kit) if kit != null else []
+	if lines.is_empty():
+		rows.add_child(TownStyle.label(NO_PERKS, TownStyle.SMALL, TownStyle.DIM))
+	for line: Dictionary in lines:
+		var title: Label = TownStyle.label("%s · %s" % [line["source"], line["perk"]])
+		title.add_theme_font_override("font", TownStyle.strong_font())
+		rows.add_child(title)
+		rows.add_child(_mark_line(KitSheet.gain_text(line), false))
+		if not str(line["cost"]).is_empty():
+			rows.add_child(_mark_line(str(line["cost"]), true))
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.name = "Rows"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.add_child(rows)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# The fade sits over the scroll's bottom edge while there's more below.
+	var holder: MarginContainer = MarginContainer.new()
+	holder.add_child(scroll)
+	var fade: KitMarks.Fade = KitMarks.Fade.new(scroll)
+	fade.name = "Fade"
+	holder.add_child(fade)
+	_fill(_card, "", [holder])
+	_card.visible = true
+	_fit_list.call_deferred(scroll, rows)
+
+
+func _kit_heading(text: String) -> Label:
+	var heading: Label = TownStyle.label(text, TownStyle.SMALL, TownStyle.DIM)
+	heading.add_theme_font_override("font", TownStyle.strong_font())
+	return heading
+
+
+## A gain (▲) or cost (▼) line: the shape first, then the words.
+func _mark_line(text: String, cost: bool) -> HBoxContainer:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	row.add_child(KitMarks.Mark.new(cost))
+	var words: Label = TownStyle.label(text, TownStyle.SMALL)
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(words)
+	return row
+
+
+## A shop's kit lines for its Build card and the stamp, or none.
+func _shop_lines(building_id: String) -> Array[Control]:
+	var perk: Dictionary = KitSheet.shop_perk(Game.data, building_id)
+	if perk.is_empty():
+		return []
+	var kit_line: Label = TownStyle.label(str(perk["kit"]))
+	kit_line.add_theme_font_override("font", TownStyle.strong_font())
+	return [kit_line, _mark_line(str(perk["gain"]), false), _mark_line(str(perk["cost"]), true)]
+
+
+## A rounded sand chip, as the villager card's wish uses.
+func _chip(text: String) -> PanelContainer:
+	var chip: PanelContainer = PanelContainer.new()
+	var chip_style: StyleBoxFlat = StyleBoxFlat.new()
+	chip_style.bg_color = TownStyle.SAND
+	chip_style.border_color = TownStyle.LOT_LINE
+	chip_style.set_border_width_all(2)
+	chip_style.set_corner_radius_all(18)
+	chip_style.set_content_margin_all(8)
+	chip.add_theme_stylebox_override("panel", chip_style)
+	chip.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var words: Label = TownStyle.label(text, TownStyle.SMALL)
+	words.autowrap_mode = TextServer.AUTOWRAP_OFF
+	chip.add_child(words)
+	return chip
+
+
 func _show_building(building_id: String) -> void:
 	var card: Dictionary = BuildList.card_for(Game.data, Game.state, building_id)
 	var children: Array[Control] = []
 	for line: String in card["lines"]:
 		children.append(TownStyle.label(line))
+	# Costs first, as on any card; what the shop adds to the kit is the new
+	# part, last, above Pick a spot (Mara's #51 review).
+	children.append_array(_shop_lines(building_id))
 	if Game.data.row("buildings", building_id)["kind"] == "landmark":
 		var place: Button = _button("Place now", start_carry.bind(building_id, 0))
 		place.disabled = not card["can_place"]
@@ -936,7 +1097,8 @@ func _show_carry() -> void:
 func _show_confirm() -> void:
 	var building: String = sheet["id"]
 	var name: String = str(BuildList.card_for(Game.data, Game.state, building)["title"])
-	var children: Array[Control] = [TownStyle.label(BuildList.cost_text(Game.data, building))]
+	var children: Array[Control] = [TownStyle.label(_keep_amounts(BuildList.cost_text(Game.data, building)))]
+	children.append_array(_shop_lines(building))
 	for refusal: Dictionary in sheet.get("refusals", []) as Array:
 		children.append(TownStyle.label(str(refusal["text"])))
 	_stamp = HankoButton.new()

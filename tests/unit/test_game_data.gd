@@ -34,13 +34,13 @@ func test_missing_row_is_empty() -> void:
 
 func test_bad_rows_are_reported() -> void:
 	var perks: String = JSON.stringify({"schema": 1, "items": [
-		{"id": "ok", "name": "Ok", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
-		{"id": "ok", "name": "Dup", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
-		{"id": "Bad Id", "name": "N", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
-		{"id": "frac", "name": "N", "kind": "map", "text": "t", "amount": 1.5, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
-		{"id": "typo", "name": "N", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "amout": 2},
+		{"id": "ok", "name": "Ok", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": ""},
+		{"id": "ok", "name": "Dup", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": ""},
+		{"id": "Bad Id", "name": "N", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": ""},
+		{"id": "frac", "name": "N", "kind": "map", "text": "t", "amount": 1.5, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": ""},
+		{"id": "typo", "name": "N", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": "", "amout": 2},
 		{"id": "missing", "name": "N", "kind": "map", "text": "t", "amount": 1},
-		{"id": "blank", "name": "", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": ""},
+		{"id": "blank", "name": "", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": ""},
 	]})
 	var villagers: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",
@@ -226,7 +226,28 @@ func test_shop_perks_are_checked() -> void:
 		"buildings \"cottage\": every shop gives a perk, and nothing else does",
 		"buildings \"cottage\": a shop with a perk needs max_count 1",
 		"buildings \"net_shed\": every shop gives a perk, and nothing else does",
+		"buildings \"tea_stall\": perk \"brace\" needs a cost line",
 		"buildings \"tea_stall\": perk \"brace\" is already shipwright's",
 		"buildings \"bait_shop\": perk \"chum\" is already cottage's",
 		"buildings \"boat_shed\": \"perk\" points to missing perks \"ghost\"",
+	]))
+
+
+func test_a_happy_bonus_has_words_and_only_a_bonus_does() -> void:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	var perks: Dictionary = JSON.parse_string(texts["perks"])
+	for item: Dictionary in perks["items"] as Array:
+		match str(item["id"]):
+			"brace":
+				item["happy_gain"] = ""
+			"chum":
+				item["happy_gain"] = "More fish"
+	texts["perks"] = JSON.stringify(perks)
+	var data: GameData = GameData.new()
+	data.load_texts(texts)
+	assert_eq(data.errors, PackedStringArray([
+		"perks \"brace\": happy_gain says the happy bonus, and only a perk with one has it",
+		"perks \"chum\": happy_gain says the happy bonus, and only a perk with one has it",
 	]))

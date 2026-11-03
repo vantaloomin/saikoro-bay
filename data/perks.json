@@ -1,6 +1,6 @@
 {
 	"schema": 1,
-	"note": "Placeholder numbers. Tuned with the bot from M1 onward. happy_amount and happy_uses_per_turn are what a happy villager adds (specs/bridge.md section 4). cost_amount is what the perk costs (Chum: +1 enemy attack), and die is the dice row a die_faces perk puts in place of die 0 or an add_die perk adds last (specs/bridge.md section 3). Villagers give the first four, shops the rest.",
+	"note": "Placeholder numbers. Tuned with the bot from M1 onward. happy_amount and happy_uses_per_turn are what a happy villager adds (specs/bridge.md section 4). cost_amount is what the perk costs (Chum: +1 enemy attack), and die is the dice row a die_faces perk puts in place of die 0 or an add_die perk adds last (specs/bridge.md section 3). Villagers give the first four, shops the rest. gain, cost and happy_gain are the Kit tab's lines (Mara: every perk shows its cost as well as its gain; a villager's perk costs nothing, and happy_gain is what a happy villager adds).",
 	"items": [
 		{
 			"id": "nudge",
@@ -12,7 +12,10 @@
 			"happy_amount": 0,
 			"happy_uses_per_turn": 1,
 			"cost_amount": 0,
-			"die": ""
+			"die": "",
+			"gain": "Raise one die by 1, once a turn",
+			"cost": "",
+			"happy_gain": "Twice a turn"
 		},
 		{
 			"id": "brace",
@@ -24,7 +27,10 @@
 			"happy_amount": 1,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 0,
-			"die": ""
+			"die": "",
+			"gain": "Start every turn with 2 block",
+			"cost": "",
+			"happy_gain": "+1 block, so 3 a turn"
 		},
 		{
 			"id": "mend",
@@ -36,7 +42,10 @@
 			"happy_amount": 1,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 0,
-			"die": ""
+			"die": "",
+			"gain": "Heal 5 after winning a fight",
+			"cost": "",
+			"happy_gain": "+1 healing, so 6 a fight"
 		},
 		{
 			"id": "foresight",
@@ -48,7 +57,10 @@
 			"happy_amount": 1,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 0,
-			"die": ""
+			"die": "",
+			"gain": "See one more row of rooms ahead",
+			"cost": "",
+			"happy_gain": "One more row, so two in all"
 				},
 		{
 			"id": "weighted_die",
@@ -60,7 +72,10 @@
 			"happy_amount": 0,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 0,
-			"die": "weighted_d6"
+			"die": "weighted_d6",
+			"gain": "Your first die never rolls a 1",
+			"cost": "It never rolls a 6 either",
+			"happy_gain": ""
 		},
 		{
 			"id": "slow_pour",
@@ -72,7 +87,10 @@
 			"happy_amount": 0,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 0,
-			"die": ""
+			"die": "",
+			"gain": "In fights, reroll without spending a die",
+			"cost": "Only twice a fight, and no usual reroll",
+			"happy_gain": ""
 		},
 		{
 			"id": "chum",
@@ -84,7 +102,10 @@
 			"happy_amount": 0,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 1,
-			"die": ""
+			"die": "",
+			"gain": "+1 of each resource from treasure rooms",
+			"cost": "Every enemy hits 1 harder",
+			"happy_gain": ""
 		},
 		{
 			"id": "spare_die",
@@ -96,7 +117,10 @@
 			"happy_amount": 0,
 			"happy_uses_per_turn": 0,
 			"cost_amount": 0,
-			"die": "d4"
+			"die": "d4",
+			"gain": "A fifth die, a d4",
+			"cost": "Small faces, and it sits out of Koban's vault",
+			"happy_gain": ""
 		}
 	]
 }

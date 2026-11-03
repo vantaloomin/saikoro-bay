@@ -28,7 +28,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 	"perks": {
 		"id": "id", "name": "string", "kind": "enum:die_change|defend|sustain|map|die_faces|pour|haul|add_die",
 		"text": "string", "amount": "int", "uses_per_turn": "int", "happy_amount": "int", "happy_uses_per_turn": "int",
-		"cost_amount": "int", "die": "string?",
+		"cost_amount": "int", "die": "string?", "gain": "string", "cost": "string?", "happy_gain": "string?",
 	},
 	"villagers": {
 		"id": "id", "role": "string", "personality": "string?", "bet_lost": "string?",
@@ -343,6 +343,10 @@ func _check_perks() -> void:
 		for field: String in ["amount", "uses_per_turn", "happy_amount", "happy_uses_per_turn", "cost_amount"]:
 			if (perk_row[field] as int) < 0:
 				errors.append("perks \"%s\": %s can't be negative" % [id, field])
+		# The Kit tab says what a happy villager adds, so a bonus has words.
+		var has_bonus: bool = (perk_row["happy_amount"] as int) > 0 or (perk_row["happy_uses_per_turn"] as int) > 0
+		if has_bonus == str(perk_row["happy_gain"]).is_empty():
+			errors.append("perks \"%s\": happy_gain says the happy bonus, and only a perk with one has it" % id)
 	# Every die_faces perk swaps die 0, so two would fight over it.
 	var face_perks: Array = ids("perks") as Array
 	face_perks = face_perks.filter(func(id: Variant) -> bool: return row("perks", str(id))["kind"] == "die_faces")
@@ -364,6 +368,9 @@ func _check_perks() -> void:
 					errors.append("buildings \"%s\": \"perk\" points to missing perks \"%s\"" % [id, perk_id])
 				if (building["max_count"] as int) != 1:
 					errors.append("buildings \"%s\": a shop with a perk needs max_count 1" % id)
+				# A shop's perk is a trade-off, and its line says the cost (Mara).
+				if has_row("perks", perk_id) and str(row("perks", perk_id)["cost"]).is_empty():
+					errors.append("buildings \"%s\": perk \"%s\" needs a cost line" % [id, perk_id])
 			if perk_owner.has(perk_id):
 				errors.append("%s \"%s\": perk \"%s\" is already %s's" % [table, id, perk_id, perk_owner[perk_id]])
 			perk_owner[perk_id] = id

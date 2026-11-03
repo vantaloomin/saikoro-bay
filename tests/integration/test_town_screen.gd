@@ -621,3 +621,99 @@ func test_the_villager_whose_mood_changes_stands_in_plain_view() -> void:
 	for placed: Dictionary in Game.state.town.placed:
 		boxes.append(TownView.block_box(Game.data, placed))
 	assert_false(board.view._hidden_by(spot, boxes, board.view.camera_transform().origin), "no building hides the keeper or the bubble")
+
+
+# --- The kit (M4 PR 2, specs/bridge.md section 5) -------------------------------
+
+func _texts_in(node: Node) -> Array:
+	return node.find_children("*", "Label", true, false).map(func(label: Node) -> String: return (label as Label).text)
+
+
+func test_the_kit_tab_shows_the_dice_and_every_perk_with_its_gain_and_cost() -> void:
+	Game.state._villagers.append("shipwright")
+	Game.state.town.place("bait_shop", Vector2i(5, 0))
+	var town: TownScreen = _open()
+	town.show_tab(TownScreen.TAB_KIT)
+	assert_eq(town.sheet, {"kind": "kit"})
+	assert_eq(town.current_tab(), TownScreen.TAB_KIT)
+	var card: Control = town.get_node("%Card") as Control
+	assert_true(card.visible)
+	var strips: Array = card.find_children("*", "Control", true, false).filter(
+		func(node: Node) -> bool: return node is KitMarks.FaceStrip)
+	assert_eq(strips.size(), 1, "four plain dice are one Standard row")
+	var texts: Array = _texts_in(card)
+	for line: String in ["Dice", "Standard × 4", "Perks", "Shipwright · Brace",
+			"Start every turn with 2 block · if happy: +1 block, so 3 a turn", "Bait shop · Chum",
+			"+1 of each resource from treasure rooms", "Every enemy hits 1 harder"]:
+		assert_true(texts.has(line), "the Kit tab says \"%s\"" % line)
+	town.show_tab(TownScreen.TAB_NOTICE)
+	assert_eq(town.sheet, {})
+
+
+func test_an_empty_kit_says_where_perks_come_from() -> void:
+	var town: TownScreen = _open()
+	town.show_tab(TownScreen.TAB_KIT)
+	assert_true(_texts_in(town.get_node("%Card")).has(TownScreen.NO_PERKS))
+
+
+func test_k_and_the_kit_strip_open_the_kit_and_the_shoulders_step_through_tabs() -> void:
+	var town: TownScreen = _open()
+	var key: InputEventKey = InputEventKey.new()
+	key.keycode = KEY_K
+	key.pressed = true
+	town._unhandled_input(key)
+	assert_eq(town.current_tab(), TownScreen.TAB_KIT, "K opens the kit")
+	town._unhandled_input(key)
+	assert_eq(town.current_tab(), TownScreen.TAB_NOTICE, "and K again closes it")
+	var strip: Button = town.find_child("KitStrip", true, false) as Button
+	assert_not_null(strip, "the kit strip sits above Go down")
+	assert_eq(strip.tooltip_text, "Your kit: 4 dice · 0 perks")
+	assert_eq((strip as KitMarks.Strip).perks_text, "0 perks")
+	strip.pressed.emit()
+	assert_eq(town.current_tab(), TownScreen.TAB_KIT, "the strip opens the kit")
+	var shoulder: InputEventJoypadButton = InputEventJoypadButton.new()
+	shoulder.pressed = true
+	shoulder.button_index = JOY_BUTTON_LEFT_SHOULDER
+	town._input(shoulder)
+	assert_eq(town.current_tab(), TownScreen.TAB_BUILD)
+	town._input(shoulder)
+	assert_eq(town.current_tab(), TownScreen.TAB_NOTICE)
+	town._input(shoulder)
+	assert_eq(town.current_tab(), TownScreen.TAB_NOTICE, "the left shoulder stops at the first tab")
+	shoulder.button_index = JOY_BUTTON_RIGHT_SHOULDER
+	town._input(shoulder)
+	town._input(shoulder)
+	town._input(shoulder)
+	assert_eq(town.current_tab(), TownScreen.TAB_KIT, "and the right one at the last")
+
+
+func test_the_kit_never_opens_over_a_carried_building() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	town.start_carry("cottage")
+	town.toggle_kit()
+	assert_eq(town.sheet["kind"], "carry")
+
+
+func test_a_shop_card_and_its_stamp_say_what_it_adds_to_the_kit() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.open_building("cottage")
+	assert_false(_texts_in(town.get_node("%Card")).any(func(text: String) -> bool: return text.begins_with("Kit:")),
+		"a home adds nothing to the kit")
+	town.open_building("net_shed")
+	var texts: Array = _texts_in(town.get_node("%Card"))
+	assert_true(texts.has("Kit: + Weighted die (2 3 3 4 4 5)"))
+	assert_true(texts.has("Your first die never rolls a 1"))
+	assert_true(texts.has("It never rolls a 6 either"), "the cost is on the card, not hidden")
+	town.start_carry("net_shed")
+	board._pick_at(_cell_point(board, Vector2i(5, 0)))
+	assert_eq(town.sheet["kind"], "confirm")
+	texts = _texts_in(town.get_node("%Card"))
+	assert_true(texts.has("Kit: + Weighted die (2 3 3 4 4 5)"), "the stamp says it too")
+	assert_true(texts.has("It never rolls a 6 either"))
+	assert_true(texts.has("1\u00a0shell + 6\u00a0driftwood"), "an amount never wraps from its noun")
+	var strip: KitMarks.Strip = town.find_child("KitStrip", true, false) as KitMarks.Strip
+	assert_eq(strip.perks_text, "0 → 1 perks", "the strip previews the stamp, as the ledger does")
+	assert_true(strip.dice[0]["new"], "the weighted die is the new one")
