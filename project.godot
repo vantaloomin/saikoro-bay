@@ -22,6 +22,7 @@ config/icon="res://icon.svg"
 SceneFlow="*res://game/autoload/scene_flow.gd"
 Settings="*res://game/autoload/settings.gd"
 Game="*res://game/autoload/game.gd"
+PlaytestLog="*res://game/playtest/playtest_log.gd"
 
 [debug]
 

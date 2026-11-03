@@ -58,6 +58,9 @@ jobs:
       - name: Run tests
         run: godot --headless --path . -s res://addons/gut/gut_cmdln.gd
 
+      - name: Bot smoke run
+        run: godot --headless --path . -s res://tools/run_bot.gd -- --seeds=2000
+
   build:
     name: Export Windows builds (full and SFW)
     needs: test
