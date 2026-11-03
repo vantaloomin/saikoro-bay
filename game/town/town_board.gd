@@ -811,9 +811,9 @@ func move_tag() -> Dictionary:
 	return _move_tag.duplicate()
 
 
-## "Shipwright happy · Brace 2 → 3", or without the perk if it has no bonus.
+## "Genzo happy · Brace 2 → 3", or without the perk if it has no bonus.
 func _mood_words(villager: String, happy: bool) -> String:
-	var words: String = "%s %s" % [_data.row("villagers", villager).get("role", villager), "happy" if happy else "unhappy"]
+	var words: String = "%s %s" % [_data.villager_name(villager), "happy" if happy else "unhappy"]
 	var change: String = KitSheet.happy_change(_data, villager, happy)
 	return words if change.is_empty() else "%s · %s" % [words, change]
 
@@ -830,7 +830,7 @@ func swap_tag() -> Dictionary:
 	var words: PackedStringArray = []
 	var any_unhappy: bool = false
 	for villager: String in moods:
-		var role: String = str(_data.row("villagers", villager).get("role", villager))
+		var role: String = _data.villager_name(villager)
 		var now_happy: bool = _state.mood(_data, villager) == Town.Mood.HAPPY
 		var after_happy: bool = moods[villager] == Town.Mood.HAPPY
 		var change: String = KitSheet.happy_change(_data, villager, after_happy) if now_happy != after_happy else ""
@@ -928,11 +928,11 @@ func map_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
 		taken.append(carried["rect"])
 	var villagers: Array[Dictionary] = []
 	for villager: String in spots:
-		var role: String = str(_data.row("villagers", villager).get("role", villager))
+		var who: String = _data.villager_name(villager)
 		var feet: Vector2 = view.to_screen(spots[villager])
 		var head: Vector2 = Vector2(feet.x, bubbles[villager].position.y - 2.0)
-		villagers.append({"text": role, "anchor": feet, "kind": "villager", "villager": villager, "above": head,
-			"rect": _tag_rect(role, feet + Vector2(0, 6), false)})
+		villagers.append({"text": who, "anchor": feet, "kind": "villager", "villager": villager, "above": head,
+			"rect": _tag_rect(who, feet + Vector2(0, 6), false)})
 	var buildings: Array[Dictionary] = []
 	for uid: int in building_names():
 		var building: Dictionary = _state.town.entry(uid)

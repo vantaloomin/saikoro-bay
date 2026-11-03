@@ -90,12 +90,24 @@ func test_the_card_shows_affection_and_a_date_button() -> void:
 	assert_eq(Array(TownScreen.affection_lines(Game.data, 0)), ["Getting to know you", "Next: Fond"])
 	assert_eq(Array(TownScreen.affection_lines(Game.data, 2)),
 		["Fond", "Next: Close · a private moment"])
-	assert_eq(Array(TownScreen.affection_lines(Game.data, 3)), ["Close"])
+	assert_eq(Array(TownScreen.affection_lines(Game.data, 3)), ["Close", TownScreen.TOP_MILESTONE],
+		"the last milestone says so, so full beads don't read as stuck")
 	var date: Button = _card_button(town, "Date")
 	assert_not_null(date)
 	assert_eq(date.text, "Date · 1 action")
 	assert_false(date.disabled)
 	assert_eq(town.get_node("%Card").find_children("Affection", "AffectionMeter", true, false).size(), 1)
+
+
+func test_the_notice_board_folds_to_one_row_under_a_villager_card() -> void:
+	var town: TownScreen = _open_card("pearl_diver")
+	var notes: Array[Node] = town.get_node("%Notice").find_children("*", "Label", true, false)
+	notes = notes.filter(func(node: Node) -> bool: return (node as Label).is_visible_in_tree() and not (node as Label).text.is_empty())
+	assert_eq(notes.size(), 1, "one note")
+	var note: Label = notes[0]
+	assert_eq(note.autowrap_mode, TextServer.AUTOWRAP_OFF, "on one row")
+	assert_eq(note.text_overrun_behavior, TextServer.OVERRUN_TRIM_ELLIPSIS, "trailing off")
+	assert_eq(note.tooltip_text, note.text, "the whole note on hover")
 
 
 func test_no_actions_or_no_spot_says_why() -> void:
@@ -150,6 +162,7 @@ func test_reaching_close_plays_the_invitation() -> void:
 	var lines: PackedStringArray = DateScreen.result_lines(Game.data, Game.state, screen.session, [], true)
 	assert_has(lines, "A private moment is unlocked")
 	assert_has(lines, "Fond → Close", "the milestone as a change")
+	assert_has(lines, TownScreen.TOP_MILESTONE, "and that it's the last one")
 
 
 func test_leaving_midway_spends_and_keeps_nothing() -> void:

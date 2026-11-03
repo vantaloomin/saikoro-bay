@@ -59,7 +59,7 @@ func test_every_perk_line_has_its_gain_and_a_shop_its_cost() -> void:
 		{"perk": "chum", "source": "bait_shop"},
 	] as Array[Dictionary])
 	var lines: Array[Dictionary] = KitSheet.perk_lines(data, kit)
-	assert_eq(lines[0], {"source": "Shipwright", "source_id": "shipwright", "perk": "Brace",
+	assert_eq(lines[0], {"source": "Genzo", "source_id": "shipwright", "perk": "Brace",
 		"gain": "Start every turn with 2 block", "cost": "", "bonus": "+1 block, so 3 a turn", "happy": false})
 	assert_eq(KitSheet.gain_text(lines[0]), "Start every turn with 2 block · if happy: +1 block, so 3 a turn",
 		"a bonus not yet earned folds into the gain line")

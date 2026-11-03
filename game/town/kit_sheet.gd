@@ -158,10 +158,10 @@ static func summary(data: GameData, kit: Kit) -> String:
 	return "Your kit: %s · %d perk%s" % [dice, kit.perks.size(), "" if kit.perks.size() == 1 else "s"]
 
 
-## A villager's role or a building's name, for a source chip.
+## A villager's name or a building's name, for a source chip.
 static func source_name(data: GameData, source: String) -> String:
 	if data.has_row("villagers", source):
-		return str(data.row("villagers", source)["role"])
+		return data.villager_name(source)
 	if data.has_row("buildings", source):
 		return str(data.row("buildings", source)["name"])
 	return source.capitalize()

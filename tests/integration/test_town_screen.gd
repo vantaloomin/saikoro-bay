@@ -69,7 +69,7 @@ func test_cards_for_buildings_and_villagers() -> void:
 	var empty: int = state.town.place("cottage", Vector2i(2, 2))
 	var home: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "building", "uid": cottage})
 	assert_eq(home["title"], "Cottage")
-	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver", TownScreen.MOOD_WORDS[Town.Mood.HAPPY]],
+	assert_eq(Array(home["lines"]), ["A home for one villager.", "Isoko's home", TownScreen.MOOD_WORDS[Town.Mood.HAPPY]],
 		"the mood on its own line, so it never wraps mid-phrase")
 	assert_eq(Array(TownScreen.card_for(Game.data, state, {"kind": "building", "uid": empty})["lines"])[1],
 		"Nobody lives here yet.")
@@ -478,7 +478,7 @@ func test_a_new_home_says_who_moved_in() -> void:
 	await wait_seconds(HankoButton.PUNCH_SECONDS)
 	var said: bool = false
 	for label: Node in (town.get_node("%Notice") as Control).find_children("*", "Label", true, false):
-		said = said or (label as Label).text == TownScreen.MOVED_IN % ["Kitsune shrine keeper", "Cottage"]
+		said = said or (label as Label).text == TownScreen.MOVED_IN % ["Akane", "Cottage"]
 	assert_true(said)
 
 
@@ -578,7 +578,7 @@ func test_names_keep_off_the_swap_preview() -> void:
 	var loses: bool = Game.state.swap_moods(Game.data, "pearl_diver", sea).values().any(
 		func(mood: Town.Mood) -> bool: return mood != Town.Mood.HAPPY)
 	assert_eq(swap["mood"], Town.Mood.UNHAPPY if loses else Town.Mood.HAPPY, "the icon says gain or loss")
-	assert_string_contains(swap["text"], "Pearl diver happy · Nudge 1 → 2 a turn", "a swap says what the perk gains")
+	assert_string_contains(swap["text"], "Isoko happy · Nudge 1 → 2 a turn", "a swap says what the perk gains")
 	for tag: Dictionary in board.map_tags(board.view.villager_spots(Game.data, Game.state)):
 		assert_false((tag["rect"] as Rect2).intersects(swap["rect"]), "%s keeps off the swap preview" % tag["text"])
 
@@ -685,7 +685,7 @@ func test_the_kit_tab_shows_the_dice_and_every_perk_with_its_gain_and_cost() -> 
 		func(node: Node) -> bool: return node is KitMarks.FaceStrip)
 	assert_eq(strips.size(), 1, "four plain dice are one Standard row")
 	var texts: Array = _texts_in(card)
-	for line: String in ["Dice", "Standard × 4", "Perks", "Shipwright · Brace",
+	for line: String in ["Dice", "Standard × 4", "Perks", "Genzo · Brace",
 			"Start every turn with 2 block · if happy: +1 block, so 3 a turn", "Bait shop · Chum",
 			"+1 of each resource from treasure rooms", "Every enemy hits 1 harder"]:
 		assert_true(texts.has(line), "the Kit tab says \"%s\"" % line)
@@ -770,7 +770,7 @@ func test_a_move_tag_says_what_a_perk_gains_or_loses() -> void:
 	var board: TownBoard = town.get_node("%Board") as TownBoard
 	town.start_carry("net_shed", shed)
 	board.carry_cell = Vector2i(2, 6)
-	assert_eq(board.move_tag()["text"], "Free · Shipwright happy · Brace 2 → 3")
+	assert_eq(board.move_tag()["text"], "Free · Genzo happy · Brace 2 → 3")
 	assert_true(board.move_tag()["icon"])
 	var carried: Rect2 = board.carry_tag()["rect"]
 	for tag: Dictionary in board.map_tags(board.view.villager_spots(Game.data, Game.state)):

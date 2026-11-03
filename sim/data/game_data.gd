@@ -141,6 +141,16 @@ func has_row(table: String, id: String) -> bool:
 	return _tables.has(table) and (_tables[table] as Dictionary).has(id)
 
 
+## What the player calls a villager: their name, or their role if they
+## have none yet, or the id for an unknown one.
+func villager_name(id: String) -> String:
+	if not has_row("villagers", id):
+		return id.capitalize()
+	var villager: Dictionary = row("villagers", id)
+	var name: String = str(villager.get("name", ""))
+	return name if not name.is_empty() else str(villager.get("role", id))
+
+
 ## The row, or an empty Dictionary if it doesn't exist.
 func row(table: String, id: String) -> Dictionary:
 	if not has_row(table, id):
