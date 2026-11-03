@@ -776,7 +776,7 @@ func carry_tag() -> Dictionary:
 ## 3 → 2"). {"text", "mood", "icon"}; the bubble shows when a mood changes.
 ## Tried on copies of the town, so it's kept until the ghost moves.
 func move_tag() -> Dictionary:
-	var key: Array = [carry_building, carry_cell, carry_lifted, _state.town.to_dict().hash(), _state.villagers().size()]
+	var key: Array = [carry_building, carry_cell, carry_lifted, _state.town.to_dict(), _state.villagers().size()]
 	if _move_tag_key == key:
 		return _move_tag.duplicate()
 	var losses: Array[String] = _state.wish_losses(_data, carry_building, carry_cell, carry_lifted)

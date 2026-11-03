@@ -285,5 +285,35 @@ func test_chum_names_itself_on_the_attack_and_kit_dice_are_marked() -> void:
 	assert_eq(chum_board._intent.chum_source, "Bait shop", "the extra damage has a cause")
 	assert_eq(chum_board._intent.current.get("chum", 0), 1)
 	assert_true(chum_board._dice[0].kit_mark, "the weighted die is marked on the table")
-	assert_eq(chum_board._dice[0].tooltip_text, "Weighted die")
+	assert_eq(chum_board._dice[0].tooltip_text, "Weighted die · Net shed · no 1s or 6s")
 	assert_false(chum_board._dice[1].kit_mark, "a plain die isn't")
+
+
+func test_stacked_raises_fold_into_one_arrow() -> void:
+	var view: FightBoard.IntentView = FightBoard.IntentView.new()
+	view.chum_source = "Bait shop"
+	assert_eq(view.raise_label({"attack": 9, "chum": 1}), "+1 · Bait shop", "one source stays inline")
+	assert_eq(view.breakdown({"attack": 9, "chum": 1}), "")
+	assert_eq(view.raise_label({"attack": 8, "raised": 2}), "+2")
+	assert_eq(view.raise_label({"attack": 11, "raised": 2, "chum": 1}), "+3", "two fold into one")
+	assert_eq(view.breakdown({"attack": 11, "raised": 2, "chum": 1}), "Rising stakes +2 · Bait shop +1")
+	assert_eq(view.raise_label({"attack": 6}), "")
+	view.free()
+
+
+func test_a_kit_die_shows_its_range_and_names_itself_when_focused() -> void:
+	var kit: Kit = Kit.fresh(data, [{"perk": "weighted_die", "source": "net_shed"}] as Array[Dictionary])
+	var weighted: Fight = Fight.create(data, "fresh", "snake_eyes_eel", RngStreams.new(11), kit.perks, -1, kit.die_specs())
+	var kit_board: FightBoard = BOARD.instantiate() as FightBoard
+	kit_board.setup(weighted, data)
+	add_child_autofree(kit_board)
+	var die: DieView = kit_board._dice[0]
+	assert_eq(die.kit_range, "2–5")
+	assert_eq(die.kit_note, "Weighted die · Net shed · no 1s or 6s")
+	assert_eq(kit_board._dice[1].kit_range, "", "a standard die gets no label")
+	die.grab_focus()
+	assert_eq(kit_board._end_detail.text, "Weighted die · Net shed · no 1s or 6s", "a pad sees the note too")
+	assert_eq(kit_board._end_detail.modulate.a, 1.0)
+	kit_board._dice[1].grab_focus()
+	assert_ne(kit_board._end_detail.text, die.kit_note, "back to the turn's detail")
+	assert_eq(DieView.note_for(data, "d4"), "Four-sided die · Boat shed · added")

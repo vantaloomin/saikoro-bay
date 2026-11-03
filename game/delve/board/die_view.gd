@@ -8,6 +8,8 @@ extends Button
 ## How far a held die lifts, and how thick its corners are, so held and
 ## focused differ in greyscale too (focus is 3 px corners, no lift).
 const HELD_LIFT: float = 20.0
+## The face range's size, under a kit die (outside its own rect).
+const RANGE_FONT: int = 22
 
 ## Right-click or the controller's B button on this die.
 signal secondary_pressed
@@ -53,11 +55,61 @@ var bite_marker: bool = false:
 		queue_redraw()
 
 
+## Under a kit die, always: its face range, "2–5" (Mara's #52 review: the
+## notch says "different", the range says how). "" on a standard die.
+var kit_range: String = ""
+## What the board's result area says while a kit die is focused or held,
+## since a pad has no hover: "Weighted die · Net shed · no 1s or 6s".
+var kit_note: String = ""
+
+
 ## Marks a die whose type isn't one of the loadout's, and names it.
 func show_type(data: GameData, type_id: String) -> void:
 	var loadout: Array = data.row("loadouts", Kit.LOADOUT).get("dice", []) as Array
 	kit_mark = not loadout.has(type_id)
-	tooltip_text = str(data.row("dice", type_id).get("name", type_id)) if kit_mark else ""
+	kit_range = ""
+	kit_note = ""
+	tooltip_text = ""
+	if not kit_mark or not data.has_row("dice", type_id):
+		return
+	var faces: Array = data.row("dice", type_id)["faces"] as Array
+	kit_range = "%d–%d" % [int(faces.min()), int(faces.max())]
+	kit_note = note_for(data, type_id)
+	tooltip_text = kit_note
+
+
+## The note of the held kit die, else the focused one, else "": what a
+## board's second line says in place of its usual detail.
+static func held_note(views: Array[DieView]) -> String:
+	for view: DieView in views:
+		if view.selected and not view.kit_note.is_empty():
+			return view.kit_note
+	for view: DieView in views:
+		if view.has_focus() and not view.kit_note.is_empty():
+			return view.kit_note
+	return ""
+
+
+## "Weighted die · Net shed · no 1s or 6s", or "Four-sided die · Boat
+## shed · added": the die, who gives it, and what changed.
+static func note_for(data: GameData, type_id: String) -> String:
+	var parts: PackedStringArray = [str(data.row("dice", type_id).get("name", type_id))]
+	for perk_id: String in data.ids("perks"):
+		var perk: Dictionary = data.row("perks", perk_id)
+		if str(perk.get("die", "")) != type_id:
+			continue
+		for table: String in ["buildings", "villagers"]:
+			for id: String in data.ids(table):
+				if str(data.row(table, id).get("perk", "")) == perk_id:
+					parts.append(KitSheet.source_name(data, id))
+		if perk["kind"] == "add_die":
+			parts.append("added")
+		else:
+			var plain: Array = data.row("dice", str((data.row("loadouts", Kit.LOADOUT)["dice"] as Array)[0]))["faces"] as Array
+			var faces: Array[int] = []
+			faces.assign(data.row("dice", type_id)["faces"] as Array)
+			parts.append(KitSheet.change_text(plain, faces))
+	return " · ".join(parts)
 
 
 func _init() -> void:
@@ -153,6 +205,11 @@ func _draw() -> void:
 		var font: Font = get_theme_default_font()
 		draw_rect(Rect2(rect.end.x - 40, rect.position.y - 6, 46, 30), BoardStyle.DANGER)
 		draw_string(font, Vector2(rect.end.x - 36, rect.position.y + 18), "-1", HORIZONTAL_ALIGNMENT_LEFT, -1, 22, BoardStyle.LACQUER)
+	if not kit_range.is_empty() and not placed:
+		var font: Font = get_theme_default_font()
+		var width: float = font.get_string_size(kit_range, HORIZONTAL_ALIGNMENT_LEFT, -1, RANGE_FONT).x
+		draw_string(font, Vector2((size.x - width) / 2.0, size.y + RANGE_FONT + 2), kit_range,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, RANGE_FONT, BoardStyle.INK)
 	if selected:
 		BoardStyle.draw_brackets(self, rect, BoardStyle.GOLD, 10.0)
 	elif has_focus() or is_hovered():
