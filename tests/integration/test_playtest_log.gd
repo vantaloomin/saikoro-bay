@@ -50,7 +50,7 @@ func test_delves_record_prompt_and_town_time() -> void:
 
 	var all_events: Array[Dictionary] = _read_events()
 	var fights: Array[Dictionary] = all_events.filter(func(e: Dictionary) -> bool: return e["event"] == "fight_start")
-	assert_eq(fights.size(), 2, "each delve opens on a fight")
+	assert_eq(fights.size(), 0, "each delve opens on the map: no fight until a room is picked")
 	var events: Array[Dictionary] = all_events.filter(func(e: Dictionary) -> bool: return e["event"] != "fight_start")
 	var names: Array = events.map(func(e: Dictionary) -> String: return e["event"])
 	assert_eq(names, ["session_start", "observer_prompt", "delve_start", "delve_end", "delve_start", "session_end"])
