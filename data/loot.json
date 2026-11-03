@@ -1,6 +1,6 @@
 {
 	"schema": 1,
-	"note": "What each room pays when it's cleared (DM-8). Each row rolls on the LOOT stream: a chance in 100, then an amount from min to max. Rows pay in file order. Placeholder numbers, tuned with the delve bot.",
+	"note": "What each fight or elite room pays when it is won (DM-8). Treasure pays through its locks (slots.json), so loot rows are only for fights. Each row rolls on the LOOT stream: a chance in 100, then an amount from min to max. Rows pay in file order. Placeholder numbers, tuned with the delve bot.",
 	"items": [
 		{ "id": "fight_driftwood", "room": "fight", "resource": "driftwood", "chance_percent": 100, "min": 3, "max": 6 },
 		{ "id": "fight_pearls", "room": "fight", "resource": "pearls", "chance_percent": 25, "min": 1, "max": 1 },

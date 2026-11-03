@@ -59,7 +59,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"fallback_resource_b": "ref:resources", "fallback_amount_b": "int",
 	},
 	"loot": {
-		"id": "id", "room": "ref:rooms", "resource": "ref:resources",
+		"id": "id", "room": "enum:fight|elite", "resource": "ref:resources",
 		"chance_percent": "int", "min": "int", "max": "int",
 	},
 	"resources": {
