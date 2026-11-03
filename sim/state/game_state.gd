@@ -290,6 +290,21 @@ func wish_losses(data: GameData, building_id: String, cell: Vector2i, lifted_uid
 	return town.happy(data, map, _villagers).filter(func(villager: String) -> bool: return not after.has(villager))
 
 
+## Who'd become happy if `building_id` went to `cell` (or `lifted_uid`
+## moved there), the other side of wish_losses: a move's tag says what it
+## gives as well as what it costs (specs/bridge.md section 5). Tried on a
+## copy; changes nothing.
+func wish_gains(data: GameData, building_id: String, cell: Vector2i, lifted_uid: int = 0) -> Array[String]:
+	var map: TownMap = town_map(data)
+	if not town.spot_problem(data, map, building_id, cell, lifted_uid).is_empty():
+		return []
+	var trial: Town = _trial_placing(data, map, building_id, cell, lifted_uid)
+	if trial == null:
+		return []
+	var before: Array[String] = town.happy(data, map, _villagers)
+	return trial.happy(data, map, _villagers).filter(func(villager: String) -> bool: return not before.has(villager))
+
+
 ## How the two villagers a swap touches would feel after it: {villager:
 ## Town.Mood} for `villager` and whoever lives in `uid` now, or {} if the
 ## swap can't happen. Tried on a copy; changes nothing.

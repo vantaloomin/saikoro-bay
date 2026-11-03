@@ -220,6 +220,19 @@ func test_a_move_names_who_it_would_leave_unhappy() -> void:
 	assert_eq(state.wish_losses(data, "net_shed", Vector2i(4, 4), shed), [] as Array[String], "no spot, no warning")
 
 
+func test_a_move_names_who_it_would_make_happy() -> void:
+	var state: GameState = _state(["shipwright", "pearl_diver"] as Array[String])
+	state.town.homes["shipwright"] = state.town.place("cottage", Vector2i(2, 5))
+	state.town.homes["pearl_diver"] = state.town.place("cottage", Vector2i(0, 7))
+	assert_eq(state.mood(data, "pearl_diver"), Town.Mood.HAPPY)
+	var shed: int = state.town.place("net_shed", Vector2i(5, 5))
+	assert_eq(state.wish_gains(data, "net_shed", Vector2i(2, 6), shed), ["shipwright"] as Array[String],
+		"someone already happy who stays happy isn't promised anything (Imogen's #52 audit)")
+	assert_eq(state.wish_gains(data, "net_shed", Vector2i(6, 5), shed), [] as Array[String], "still far off")
+	assert_eq(state.wish_gains(data, "net_shed", Vector2i(4, 4), shed), [] as Array[String], "no spot, no promise")
+	assert_eq(state.wish_losses(data, "net_shed", Vector2i(2, 6), shed), [] as Array[String])
+
+
 func test_a_swap_preview_says_how_both_would_feel() -> void:
 	var state: GameState = _state(["pearl_diver", "shipwright"] as Array[String])
 	var sea: int = state.town.place("cottage", Vector2i(0, 7))
