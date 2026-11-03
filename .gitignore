@@ -65,3 +65,11 @@ exports/
 
 # Python bytecode from the tools/ scripts
 __pycache__/
+
+# Adult art never enters git (the repo is public). It lives only on the
+# maintainer's PC, with backups; full builds are made there. CI and every
+# clone see SFW content only. Source art lives outside the repo entirely.
+content/adult/*
+!content/adult/README.md
+!content/adult/ci_canary/
+art-src/
