@@ -35,6 +35,12 @@ extends Control
 ## strip of blank mini dice above Go down opens it. A shop's Build card and
 ## stamp say what it adds to the kit, and while the stamp is up the strip
 ## previews it.
+##
+## Dates (M5, RD-1, RD-2, RD-5): a villager's card shows their affection and
+## the next milestone, and "Date · 1 action". That opens a pick of date
+## spots (each placed landmark that is one, the rest saying why not yet),
+## then the hanko stamp, then the date screen over the town. The action is
+## spent only when the date ends, so leaving midway costs nothing.
 
 ## What the notice board says about the last delve. An abandoned delve is
 ## said plainly, so a player who quit mid-delve knows what it cost.
@@ -103,8 +109,9 @@ var hud_scale: float = 1.0
 ## What the right column shows instead of the selection's card, if
 ## anything: {"kind": "list"}, {"kind": "building", "id"} (a card from the
 ## list), {"kind": "carry", "id", "uid"} (uid 0 for a new building),
-## {"kind": "confirm", "id", "cell"} (the stamp), or {"kind": "home",
-## "villager"}.
+## {"kind": "confirm", "id", "cell"} (the stamp), {"kind": "home",
+## "villager"}, {"kind": "date", "villager"} (the spot pick) or
+## {"kind": "date_confirm", "villager", "spot"} (the date's stamp).
 var sheet: Dictionary = {}
 ## The last free move, for its undo: {"uid", "cell"} where it came from.
 var last_move: Dictionary = {}
@@ -126,6 +133,8 @@ var _gathering: Dictionary = {}
 ## Shells lit from the left while they fill in after the staging; -1 is all.
 var _shells_lit: int = -1
 var _shells_waited: bool = false
+## The date on screen, or null.
+var date_screen: DateScreen
 
 
 func _ready() -> void:
@@ -195,6 +204,8 @@ func _show_hud() -> void:
 	_fill(_ledger, "Ledger", _ledger_rows(spending))
 	_shells = ShellTray.new()
 	var shells: int = int(Game.data.row("buildings", spending)["actions"]) if not spending.is_empty() else 0
+	if sheet.get("kind", "") == "date_confirm":
+		shells = int(GameState.date_row(Game.data, str(sheet["villager"])).get("actions", 0))
 	_shells.show_state(Game.data, Game.state, shells)
 	var tray: Array[Control] = [_shells]
 	if Game.state.town.actions_left == 0:
@@ -337,6 +348,12 @@ func _input(event: InputEvent) -> void:
 	var button: InputEventJoypadButton = event as InputEventJoypadButton
 	if button == null or _pause_menu.visible:
 		return
+	if date_screen != null:
+		# The date has the screen: only Start (the pause menu) reaches the town.
+		if button.button_index == JOY_BUTTON_START and button.pressed:
+			_pause_menu.open()
+			get_viewport().set_input_as_handled()
+		return
 	# Holding Y anywhere holds "Go down" (two-halves section 3).
 	if button.button_index == JOY_BUTTON_Y:
 		if button.pressed:
@@ -368,6 +385,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed(&"ui_cancel"):
 			_pause_menu.cancel()
 			get_viewport().set_input_as_handled()
+		return
+	if date_screen != null:
 		return
 	var key: InputEventKey = event as InputEventKey
 	if key != null and key.pressed and not key.echo and key.keycode == KEY_B:
@@ -526,13 +545,15 @@ func back() -> void:
 				open_building(building)
 		"building":
 			open_build_list()
-		"home":
+		"home", "date":
 			var villager: String = sheet["villager"]
 			_board.stop_mode()
 			sheet = {}
 			_board.select({"kind": "villager", "villager": villager})
 			_show_right_column()
 			SceneFlow.focus_default()
+		"date_confirm":
+			open_date(str(sheet["villager"]))
 		_:
 			close_sheet()
 
@@ -626,6 +647,131 @@ func pick_home_for(villager: String) -> void:
 	sheet = {"kind": "home", "villager": villager}
 	_show_right_column()
 	_board.grab_focus()
+
+
+# --- Dates (M5) ------------------------------------------------------------------------------
+
+## The spot pick for a date with `villager`.
+func open_date(villager: String) -> void:
+	_board.stop_mode()
+	sounds.play("paper")
+	sheet = {"kind": "date", "villager": villager}
+	_show_right_column()
+	_focus_first.call_deferred()
+
+
+## A spot was picked: the stamp, with the shell it spends previewed.
+func choose_date_spot(spot: String) -> void:
+	if sheet.get("kind", "") != "date":
+		return
+	sheet = {"kind": "date_confirm", "villager": sheet["villager"], "spot": spot}
+	_show_right_column()
+
+
+func _on_date_stamped() -> void:
+	if sheet.get("kind", "") != "date_confirm" or date_screen != null:
+		return
+	var villager: String = sheet["villager"]
+	var session: DateSession = Game.begin_date(villager, str(sheet["spot"]))
+	if session == null:
+		sounds.play("refuse")
+		sheet["refusals"] = Game.state.date_refusals(Game.data, villager, str(sheet["spot"]))
+		_show_right_column()
+		return
+	sounds.play("stamp")
+	if music != null:
+		create_tween().tween_property(music, "volume_db", MUSIC_DB - 10.0, MUSIC_FADE_SECONDS / 2.0)
+	date_screen = DateScreen.new()
+	date_screen.name = "DateScreen"
+	date_screen.closed.connect(_on_date_closed.bind(villager))
+	# Over the HUD (the tabs draw at z 1), under the pause menu.
+	date_screen.z_index = 2
+	_pause_menu.z_index = maxi(_pause_menu.z_index, 3)
+	add_child(date_screen)
+	move_child(date_screen, _pause_menu.get_index())
+	date_screen.open(session)
+
+
+func _on_date_closed(kept: bool, villager: String) -> void:
+	date_screen = null
+	if music != null:
+		create_tween().tween_property(music, "volume_db", MUSIC_DB, MUSIC_FADE_SECONDS)
+	if kept:
+		_finish_change({"kind": "villager", "villager": villager}, "")
+	else:
+		sheet = {}
+		refresh()
+		_board.select({"kind": "villager", "villager": villager})
+		_show_right_column()
+		SceneFlow.focus_default()
+
+
+func _show_date_pick() -> void:
+	var villager: String = sheet["villager"]
+	var who: String = DateScreen.speaker_name(Game.data, villager)
+	var children: Array[Control] = []
+	for spot: String in Game.data.ids("date_spots"):
+		var name: String = str(Game.data.row("landmarks", spot).get("name", spot))
+		var refusals: Array[Dictionary] = Game.state.date_refusals(Game.data, villager, spot)
+		var button: Button = _button(name, choose_date_spot.bind(spot))
+		button.name = "Spot_" + spot
+		button.disabled = not refusals.is_empty()
+		children.append(button)
+		var why: String = str(Game.data.row("date_spots", spot).get("text", ""))
+		if not refusals.is_empty():
+			why = str(refusals[0]["text"])
+		elif GameState.wished_spot(Game.data, villager, spot):
+			# The tie between building and dating (Mara): a wished-for spot
+			# says so, and a date there adds the date's wish bonus.
+			why = date_wish_line(Game.data, villager)
+		if not why.is_empty():
+			children.append(TownStyle.label(why, TownStyle.SMALL, TownStyle.HAPPY if why == date_wish_line(Game.data, villager) else TownStyle.DIM))
+	children.append(_button("Not now", back))
+	_fill(_card, "Where to, with %s?" % who, children)
+	_card.visible = true
+
+
+func _show_date_confirm() -> void:
+	var villager: String = sheet["villager"]
+	var spot: String = sheet["spot"]
+	var who: String = DateScreen.speaker_name(Game.data, villager)
+	var name: String = str(Game.data.row("landmarks", spot).get("name", spot))
+	var actions: int = int(GameState.date_row(Game.data, villager).get("actions", 0))
+	var children: Array[Control] = [
+		TownStyle.label("%d %s, spent when the date ends" % [actions, "action" if actions == 1 else "actions"]),
+		TownStyle.label("Leaving midway spends nothing.", TownStyle.SMALL, TownStyle.DIM),
+	]
+	for refusal: Dictionary in sheet.get("refusals", []) as Array:
+		children.append(TownStyle.label(str(refusal["text"])))
+	_stamp = HankoButton.new()
+	_stamp.text = "Stamp"
+	_stamp.name = "Stamp"
+	_stamp.mark = "date"
+	_stamp.stamped.connect(_on_date_stamped)
+	_stamp.disabled = sheet.has("refusals")
+	children.append(_stamp)
+	children.append(_button("Not now", back))
+	_fill(_card, "Take %s to the %s?" % [who, name], children)
+	_card.visible = true
+	_focus_first.call_deferred()
+
+
+## The spot pick's line under a spot the villager wishes to live by, with
+## what it adds.
+static func date_wish_line(data: GameData, villager: String) -> String:
+	var bonus: int = int(GameState.date_row(data, villager).get("wish_bonus", 0))
+	var line: String = "%s would love this" % DateScreen.speaker_name(data, villager)
+	return line + (" · +%d" % bonus if bonus > 0 else "")
+
+
+## The Date button's words: what it costs, or why not (the spot aside,
+## which the pick shows).
+static func date_button(data: GameData, state: GameState, villager: String) -> Dictionary:
+	var date: Dictionary = GameState.date_row(data, villager)
+	var actions: int = int(date.get("actions", 0))
+	var refusals: Array[Dictionary] = state.date_refusals(data, villager)
+	var text: String = "Date · %d %s" % [actions, "action" if actions == 1 else "actions"] if actions > 0 else "Date"
+	return {"text": text, "why": "" if refusals.is_empty() else str(refusals[0]["text"]), "can": refusals.is_empty()}
 
 
 func _on_home_chosen(uid: int) -> void:
@@ -786,13 +932,33 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 			if not data.has_row("villagers", villager):
 				return {}
 			var row: Dictionary = data.row("villagers", villager)
+			# The name heads the card and the role is its subline (Mara's
+			# date-flow review: names on plates and headers).
+			var title: String = DateScreen.speaker_name(data, villager)
+			var lines: PackedStringArray = [MOOD_WORDS[state.mood(data, villager)]]
+			if title != str(row.get("role", villager)):
+				lines.insert(0, str(row.get("role", villager)))
 			return {
-				"title": str(row.get("role", villager)),
-				"lines": PackedStringArray([MOOD_WORDS[state.mood(data, villager)]]),
+				"title": title,
+				"lines": lines,
 				"chip": "Wish: " + str(row.get("wish_text", "")),
 				"quote": "“%s”" % row.get("wish_line", ""),
+				"affection": affection_lines(data, state.affection(villager)),
 			}
 	return {}
+
+
+## The villager card's affection lines (RD-5): where you are, then the next
+## milestone and what it unlocks.
+static func affection_lines(data: GameData, points: int) -> PackedStringArray:
+	var reached: Dictionary = Affection.reached(data, points)
+	var out: PackedStringArray = [str(reached["name"]) if not reached.is_empty() else "Getting to know you"]
+	var next: Dictionary = Affection.next(data, points)
+	if not next.is_empty():
+		# No points: the beads show how far (Mara's date-flow review).
+		var unlocks: String = " · " + str(next["text"]) if not str(next["text"]).is_empty() else ""
+		out.append("Next: %s%s" % [next["name"], unlocks])
+	return out
 
 
 # --- Panels ---------------------------------------------------------------------------------
@@ -855,7 +1021,9 @@ func _show_right_column() -> void:
 	_show_tabs()
 	_notice.visible = current_tab() == TAB_NOTICE
 	if _notice.visible:
-		_show_notice(kind == "home")
+		# A villager's card is tall (affection, Date), so the board folds to
+		# its newest line, as it does while picking a home.
+		_show_notice(kind == "home" or (kind.is_empty() and str(_board.selected.get("kind", "")) == "villager"))
 	match kind:
 		"list":
 			_show_list()
@@ -867,6 +1035,10 @@ func _show_right_column() -> void:
 			_show_confirm()
 		"home":
 			_show_home_pick()
+		"date":
+			_show_date_pick()
+		"date_confirm":
+			_show_date_confirm()
 		"kit":
 			_show_kit()
 		_:
@@ -1158,8 +1330,38 @@ func _show_card(hit: Dictionary) -> void:
 			if last_move.get("uid", 0) == uid:
 				children.append(_button("Undo move", undo_move))
 		"villager":
-			if _has_other_home(str(hit["villager"])):
-				children.append(_button("Move to another home", pick_home_for.bind(str(hit["villager"]))))
+			var villager: String = hit["villager"]
+			var affection: PackedStringArray = card.get("affection", PackedStringArray())
+			if not affection.is_empty():
+				# The meter and where you are share a row, to keep the card short.
+				var row: HBoxContainer = HBoxContainer.new()
+				row.add_theme_constant_override("separation", 12)
+				var meter: AffectionMeter = AffectionMeter.new()
+				meter.name = "Affection"
+				meter.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				meter.show_points(Game.data, Game.state.affection(villager))
+				row.add_child(meter)
+				var where: Label = TownStyle.label(affection[0], TownStyle.SMALL)
+				where.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				row.add_child(where)
+				children.append(row)
+				for line: String in affection.slice(1):
+					children.append(TownStyle.label(line, TownStyle.SMALL, TownStyle.DIM))
+			var date: Dictionary = date_button(Game.data, Game.state, villager)
+			var date_press: Button = _button(str(date["text"]), open_date.bind(villager))
+			date_press.name = "Date"
+			date_press.disabled = not date["can"]
+			var buttons: HBoxContainer = HBoxContainer.new()
+			buttons.add_theme_constant_override("separation", 8)
+			date_press.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			buttons.add_child(date_press)
+			if _has_other_home(villager):
+				var move: Button = _button("Move home", pick_home_for.bind(villager))
+				move.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				buttons.add_child(move)
+			children.append(buttons)
+			if not str(date["why"]).is_empty():
+				children.append(TownStyle.label(str(date["why"]), TownStyle.SMALL, TownStyle.DIM))
 	_fill(_card, str(card["title"]), children)
 
 

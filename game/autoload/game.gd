@@ -182,6 +182,24 @@ func swap_home(villager: String, uid: int) -> String:
 	return problem
 
 
+## Starts a date (M5): a session for the date screen's script, or null if
+## the sim refuses. Nothing is spent or saved until finish_date.
+func begin_date(villager: String, spot: String) -> DateSession:
+	if SceneFlow.busy:
+		return null
+	return state.begin_date(data, villager, spot, Settings.effective_content_level())
+
+
+## Ends a date through the one sim call (it spends the action and keeps the
+## affection together) and saves at once, as after every costed action.
+## Returns [] when kept, or the sim's reasons it wasn't.
+func finish_date(session: DateSession) -> Array[Dictionary]:
+	var refusals: Array[Dictionary] = state.finish_date(data, session)
+	if refusals.is_empty():
+		save()
+	return refusals
+
+
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
 func go_down() -> bool:
 	if SceneFlow.busy:

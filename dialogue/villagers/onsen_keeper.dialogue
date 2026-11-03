@@ -1,4 +1,6 @@
-# Onsen keeper: Chiyo, 36. Teasing, nurturing, bossy about hot water.
+# Onsen keeper: Chiyo, 36. A cat-folk woman (neko): cat ears, a tail, faint whisker marks
+# on her cheeks (Vanta, 2026-11-03). Teasing, nurturing, bossy about hot water. A cat who
+# loves hot water and hates cold. Not a spirit, so she reads apart from Koban.
 # Has kept the spring at the top of the town since she was sixteen.
 # Bet lost: the hot spring itself. Koban slipped into the bath after closing
 # for twelve years and never paid. Chiyo bet the spring against the whole tab,
@@ -9,8 +11,8 @@
 
 ~ rescue_start
 
-A cage of black iron stands in a pool of icy water. Inside, a woman sits wrapped in every towel in the palace, glaring at a teapot that refuses to boil. [#face=tease]
-onsen_keeper: Finally. Do you know how long I've been cold? I run a hot spring. I don't do cold. [#face=tease]
+A cage of black iron stands in a pool of icy water. Inside, a woman with cat ears sits wrapped in every towel in the palace, her ears flat and her tail puffed to twice its size, glaring at a teapot that refuses to boil. [#face=tease]
+onsen_keeper: Finally. Do you know how long I've been cold? I'm a cat in a cold bath. Do you understand how wrong that is? [#face=tease]
 onsen_keeper: And look at you. Scraped knees, wet hair. Did you even eat before you came down? [#face=tease]
 - I had a rice ball.
 	onsen_keeper: One rice ball. For a whole palace. I'm going to feed you so much when we get out. [#face=happy]
@@ -31,11 +33,12 @@ onsen_keeper: Ten, a pair and a run. The cold water comes in every time you dith
 The locks fall away. She's out of the cage and has a towel round your shoulders before you've stood up. [#face=happy]
 onsen_keeper: There. Now we're both warm. Well, warmer. [#face=happy]
 onsen_keeper: Chiyo. I kept the spring at the top of the town, the one your grandmother built her inn beside. [#face=happy]
+onsen_keeper: And yes, the ears are real. Cat-folk have lived on this bay longer than the boats have. Your grandmother said it kept the mice out of the inn. [#face=tease]
 - How did you end up down here?
 	onsen_keeper: The cat. How else does anyone end up down here? [#face=sad]
 - Did she cheat you too?
 	onsen_keeper: I've wondered. Never caught her. [#face=sad]
-onsen_keeper: Every night for twelve years, she slipped into my bath after closing. Never paid. Not once. [#face=sad]
+onsen_keeper: Every night for twelve years, she slipped into my bath after closing. Never paid. Not once. Cat to cat, you'd think she'd have some manners. [#face=sad]
 onsen_keeper: So I bet her. The spring against her whole tab, double or nothing. She said fine, on one roll. [#face=neutral]
 onsen_keeper: She rolled two sixes. I rolled a three and a one. Now my spring sits in her palace, and it's the only warm thing down here. [#face=sad]
 She lifts the bathhouse key on its cord round her neck. A gold coin mark has been pressed right into the metal.
@@ -75,7 +78,7 @@ onsen_keeper: Come by the bath sometime. Bring a towel. [#face=happy]
 
 % onsen_keeper: It's a fine house. It's just so far from anything that steams. [#face=sad]
 % onsen_keeper: Put a tea stall near me and I'll stop mentioning it. Probably. [#face=tease]
-% onsen_keeper: I wake up cold. Do you know how insulting that is, for me? [#face=sad]
+% onsen_keeper: I wake up cold. Do you know how insulting that is, for a cat? [#face=sad]
 => END
 
 ~ no_home
@@ -93,14 +96,14 @@ onsen_keeper: I'll leave the gate open, and only for you. Bring a towel. You kno
 ~ date
 
 if spot == "hot_spring"
-	Chiyo stands at the edge of the Hot Spring with her sleeves tied back, inspecting you as you come in. [#face=tease]
+	Chiyo stands at the edge of the Hot Spring with her sleeves tied back and her tail swishing, inspecting you as you come in. [#face=tease]
 	if dates_done > 0
 		onsen_keeper: Back again. Rinse first. I won't remind you a third time. I will, but I won't want to. [#face=tease]
 	else
 		onsen_keeper: You rinse first. At the tap. Were you raised by crabs? [#face=tease]
 		onsen_keeper: There. Now you may get in. Slowly. The water's hot because I love it. Respect that. [#face=happy]
 else
-	Chiyo sits in the Café with her hands folded on the table, looking around like she's waiting to be asked to work. [#face=surprised]
+	Chiyo sits in the Café with her hands folded on the table and her tail twitching under it, looking around like she's waiting to be asked to work. [#face=surprised]
 	if dates_done > 0
 		onsen_keeper: I've decided I like being waited on. Don't spread it around. [#face=tease]
 	else

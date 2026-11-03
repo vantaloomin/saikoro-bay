@@ -43,11 +43,11 @@ func test_bad_rows_are_reported() -> void:
 		{"id": "blank", "name": "", "kind": "map", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "cost_amount": 0, "die": "", "gain": "g", "cost": "", "happy_gain": ""},
 	]})
 	var villagers: String = JSON.stringify({"schema": 1, "items": [
-		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",
+		{"id": "v", "name": "", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",
 			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
-		{"id": "w", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
+		{"id": "w", "name": "", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
 			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
-		{"id": "x", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
+		{"id": "x", "name": "", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
 			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
 	]})
 	var data: GameData = GameData.new()

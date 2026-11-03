@@ -1,9 +1,10 @@
 {
 	"schema": 1,
-	"note": "Working names and roles from the PRD. The shrine keeper's personality and bet are still open. Each villager wishes for one thing about their home (specs/town.md section 5): next to the sea, or next to one of wish_buildings (sharing an edge).",
+	"note": "Working names (the writing draft) and roles from the PRD. name is what dialogue name plates and date cards say; role is the subline. The shrine keeper's personality and bet are still open. Each villager wishes for one thing about their home (specs/town.md section 5): next to the sea, or next to one of wish_buildings (sharing an edge).",
 	"items": [
 		{
 			"id": "pearl_diver",
+			"name": "Isoko",
 			"role": "Pearl diver",
 			"personality": "Bold, outdoorsy",
 			"bet_lost": "Their breath: they can no longer dive",
@@ -15,6 +16,7 @@
 		},
 		{
 			"id": "shipwright",
+			"name": "Genzo",
 			"role": "Shipwright",
 			"personality": "Gruff, dependable",
 			"bet_lost": "Their hands",
@@ -29,6 +31,7 @@
 		},
 		{
 			"id": "onsen_keeper",
+			"name": "Chiyo",
 			"role": "Onsen keeper",
 			"personality": "Teasing, nurturing",
 			"bet_lost": "The hot spring itself",
@@ -43,6 +46,7 @@
 		},
 		{
 			"id": "shrine_keeper",
+			"name": "Akane",
 			"role": "Kitsune shrine keeper",
 			"personality": "",
 			"bet_lost": "",

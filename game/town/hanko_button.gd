@@ -15,6 +15,10 @@ signal stamped
 const SEAL_RADIUS: float = 34.0
 const PUNCH_SECONDS: float = 0.18
 
+## The mark carved in the seal: "build" (a roof over a square) or "date"
+## (two cups).
+var mark: String = "build"
+
 
 func _ready() -> void:
 	TownStyle.style_button(self, TownStyle.TITLE)
@@ -51,8 +55,16 @@ func _draw() -> void:
 	var ink: Color = TownStyle.STONE.darkened(0.2) if disabled else TownStyle.VERMILION
 	draw_circle(center, SEAL_RADIUS, ink)
 	draw_arc(center, SEAL_RADIUS - 5.0, 0.0, TAU, 40, TownStyle.WASHI, 2.5, true)
-	# A carved mark in the seal: a little roof over a square, "build".
 	var half: float = SEAL_RADIUS * 0.38
+	if mark == "date":
+		# Two teacups side by side, a date.
+		for side: float in [-1.0, 1.0]:
+			var cup: Vector2 = center + Vector2(side * half * 0.75, half * 0.15)
+			draw_polyline([cup + Vector2(-half * 0.55, -half * 0.5), cup + Vector2(-half * 0.4, half * 0.5),
+				cup + Vector2(half * 0.4, half * 0.5), cup + Vector2(half * 0.55, -half * 0.5)], TownStyle.WASHI, 3.0, true)
+		draw_line(center + Vector2(-half * 1.4, half * 0.85), center + Vector2(half * 1.4, half * 0.85), TownStyle.WASHI, 3.0, true)
+		return
+	# A carved mark in the seal: a little roof over a square, "build".
 	draw_rect(Rect2(center + Vector2(-half, -half * 0.2), Vector2(half * 2.0, half * 1.4)), TownStyle.WASHI, false, 3.0)
 	draw_polyline([center + Vector2(-half * 1.3, -half * 0.1), center + Vector2(0, -half * 1.3),
 		center + Vector2(half * 1.3, -half * 0.1)], TownStyle.WASHI, 3.0, true)
