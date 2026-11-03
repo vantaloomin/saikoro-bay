@@ -932,10 +932,12 @@ func _build() -> void:
 	_preview = BoardStyle.label("", BoardStyle.NUMBER, BoardStyle.INK)
 	_preview.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_preview.custom_minimum_size = Vector2(560, 0)
+	BoardStyle.reserve_lines(_preview, 2)
 	verbs.add_child(_preview)
 	_detail = BoardStyle.label("", BoardStyle.SMALL, BoardStyle.DIM)
 	_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_detail.custom_minimum_size = Vector2(560, 0)
+	BoardStyle.reserve_lines(_detail, 2)
 	verbs.add_child(_detail)
 	var verb_row: HBoxContainer = HBoxContainer.new()
 	verb_row.add_theme_constant_override("separation", 12)

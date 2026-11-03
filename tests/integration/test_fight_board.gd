@@ -233,3 +233,23 @@ func test_rising_stakes_mark_the_raise_on_the_intent() -> void:
 	add_child_autofree(other)
 	assert_eq(other._intent.current["raised"], 2)
 	assert_eq(other._intent.next["raised"], 3)
+
+
+func test_the_buttons_stay_put_as_the_preview_comes_and_goes() -> void:
+	await wait_process_frames(2)
+	var reroll_y: float = board._reroll.global_position.y
+	var end_y: float = board._end_turn.global_position.y
+	board._set_detail(true)
+	board._on_die_pressed(1)
+	board._on_slot_pressed("high_roller")
+	await wait_process_frames(2)
+	assert_eq(board._reroll.global_position.y, reroll_y, "showing the breakdown leaves Reroll where it was")
+	assert_eq(board._end_turn.global_position.y, end_y, "and End turn")
+	board._end_preview.text = ""
+	board._end_detail.text = "a much longer breakdown line that wraps onto a second line and then a third one, " \
+		+ "on and on past what the column can hold"
+	await wait_process_frames(2)
+	assert_eq(board._end_turn.global_position.y, end_y, "empty or long text never moves the buttons")
+	board._set_detail(false)
+	await wait_process_frames(2)
+	assert_eq(board._end_turn.global_position.y, end_y, "hiding it doesn't either")
