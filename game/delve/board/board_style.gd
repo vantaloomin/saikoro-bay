@@ -104,6 +104,26 @@ static func label(text: String, size: int = BODY, color: Color = INK) -> Label:
 	return l
 
 
+## Holds room for `lines` lines of `l`'s text whatever it says, so the
+## buttons under a preview never move when its text comes, goes or wraps
+## (Vanta's playtest: Reroll and End turn bounced as the preview changed).
+## Text past the last line is cut with an ellipsis.
+## The font comes from the board's theme, so the room is measured again
+## whenever the label's theme changes (it does once it joins the board).
+static func reserve_lines(l: Label, lines: int) -> void:
+	l.max_lines_visible = lines
+	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_measure_lines(l, lines)
+	l.theme_changed.connect(_measure_lines.bind(l, lines))
+
+
+static func _measure_lines(l: Label, lines: int) -> void:
+	var font: Font = l.get_theme_font("font")
+	var font_size: int = l.get_theme_font_size("font_size")
+	var spacing: int = l.get_theme_constant("line_spacing")
+	l.custom_minimum_size.y = ceilf(font.get_height(font_size) * lines + spacing * (lines - 1))
+
+
 ## Draws a die face (value 1-6) into `rect` on `canvas`.
 static func draw_die(canvas: CanvasItem, rect: Rect2, value: int, face: Color = DIE_FACE, pip: Color = DIE_PIP) -> void:
 	canvas.draw_rect(rect, face)

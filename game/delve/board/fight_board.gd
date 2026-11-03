@@ -765,11 +765,13 @@ func _build() -> void:
 	verbs.add_theme_constant_override("separation", 12)
 	bottom.add_child(verbs)
 	_end_preview = BoardStyle.label("", BoardStyle.NUMBER, BoardStyle.INK)
+	BoardStyle.reserve_lines(_end_preview, 1)
 	verbs.add_child(_end_preview)
 	_end_detail = BoardStyle.label("", BoardStyle.SMALL, BoardStyle.DIM)
 	_end_detail.autowrap_mode = TextServer.AUTOWRAP_WORD
-	_end_detail.visible = false
+	BoardStyle.reserve_lines(_end_detail, 2)
 	verbs.add_child(_end_detail)
+	_set_detail(false)
 	var verb_row: HBoxContainer = HBoxContainer.new()
 	verb_row.add_theme_constant_override("separation", 12)
 	verbs.add_child(verb_row)
@@ -832,8 +834,10 @@ static func _accepts_face(row: Dictionary, face: int) -> bool:
 	return true
 
 
+## The breakdown fades in and out in place: its lines stay reserved, so
+## the buttons under it never move.
 func _set_detail(shown: bool) -> void:
-	_end_detail.visible = shown
+	_end_detail.modulate.a = 1.0 if shown else 0.0
 
 
 func _button(text: String, height: int, primary: bool = false) -> Button:
