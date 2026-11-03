@@ -15,6 +15,7 @@ func before_each() -> void:
 	Game.state = GameState.new(1234)
 	Game.run = null
 	Game.saving_locked = false
+	Game.save_problem = ""
 	SceneFlow.reduce_motion = true
 
 
@@ -56,6 +57,8 @@ func test_go_down_saves_then_transitions_once() -> void:
 func test_come_up_returns_to_town_and_saves() -> void:
 	Game.go_down()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+	assert_false(Game.come_up(), "not mid-run: only from a landing, the vault or a wash-up")
+	Game.run.step = DelveRun.Step.SURFACED
 	assert_true(Game.come_up())
 	assert_false(Game.come_up())
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
@@ -95,7 +98,8 @@ func test_going_down_builds_the_run_from_the_town() -> void:
 	assert_eq(Game.run.hp, Game.run.max_hp)
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	Game.run.haul.add_resource("driftwood", 5)
-	assert_true(Game.come_up(Haul.WASHED_UP))
+	Game.run.step = DelveRun.Step.WASHED_UP
+	assert_true(Game.come_up(), "the outcome comes from the run")
 	assert_null(Game.run)
 	assert_eq(Game.state.resource("driftwood"), 2)
 	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
@@ -109,8 +113,32 @@ func test_closing_the_window_writes_a_held_save() -> void:
 	assert_eq(Game.save(), ERR_BUSY, "held while the tide moves")
 	Game._notification(NOTIFICATION_WM_CLOSE_REQUEST)
 	assert_false(Game.store.has_pending_write())
+	assert_true(Game.store.blocked, "flushing leaves the transition's block alone")
 	assert_eq(SaveStore.new(TEST_SAVE).read().seq, seq_before + 1, "written before the window closes")
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+
+
+func test_a_save_that_decodes_but_wont_load_is_kept_not_replaced() -> void:
+	var bad: Dictionary = GameState.new(55).to_dict()
+	bad["resources"] = {"pearls": 99}
+	bad["last_delve"] = {"delve": 1, "outcome": "vanished"}
+	assert_eq(Game.store.write({GameState.PAYLOAD_KEY: bad}), OK)
+	assert_eq(Game.store.write({GameState.PAYLOAD_KEY: bad}), OK, "a second write fills the backup too")
+	var before: PackedByteArray = FileAccess.get_file_as_bytes(TEST_SAVE)
+	Game.load_or_new()
+	assert_push_error("decodes but doesn't load")
+	assert_true(Game.saving_locked)
+	assert_string_contains(Game.save_problem, "can't read your save")
+	assert_eq(Game.save(), ERR_UNAUTHORIZED)
+	Game.save()
+	assert_eq(FileAccess.get_file_as_bytes(TEST_SAVE), before, "the campaign's bytes survive")
+	var kept: PackedStringArray = DirAccess.get_files_at(TEST_SAVE.get_base_dir())
+	var copies: int = 0
+	for file_name: String in kept:
+		if file_name.contains(".unloadable-"):
+			copies += 1
+			DirAccess.remove_absolute(TEST_SAVE.get_base_dir().path_join(file_name))
+	assert_gt(copies, 0, "and are copied aside")
 
 
 func test_empty_slot_starts_a_new_campaign_in_town() -> void:

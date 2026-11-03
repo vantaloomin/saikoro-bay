@@ -83,6 +83,21 @@ func exists() -> bool:
 		or FileAccess.file_exists(backup_path())
 
 
+## Runs a held write_when_ready() builder now, leaving `blocked` as it is
+## (for the window closing mid-transition). Returns its write's result, or
+## OK if nothing was held.
+func flush() -> Error:
+	if not _pending.is_valid():
+		return OK
+	var build: Callable = _pending
+	_pending = Callable()
+	var was_blocked: bool = blocked
+	blocked = false
+	var error: Error = write(build.call() as Dictionary)
+	blocked = was_blocked
+	return error
+
+
 ## True while a write_when_ready() builder is waiting for the block to clear.
 func has_pending_write() -> bool:
 	return _pending.is_valid()

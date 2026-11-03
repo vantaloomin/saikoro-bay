@@ -40,8 +40,8 @@ func _status_text() -> String:
 		if not parts.is_empty():
 			lines.append("Brought back: " + ", ".join(parts))
 	lines.append("Delves so far: %d" % Game.state.delve_count)
-	if Game.saving_locked:
-		lines.append("Saving is off: your save is from a newer version of the game.")
+	if not Game.save_problem.is_empty():
+		lines.append(Game.save_problem)
 	return "\n".join(lines)
 
 

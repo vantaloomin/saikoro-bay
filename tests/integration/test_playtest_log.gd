@@ -40,6 +40,7 @@ func test_delves_record_prompt_and_town_time() -> void:
 	PlaytestLog.mark_prompt()
 	Game.go_down()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+	Game.run.step = DelveRun.Step.SURFACED
 	Game.come_up()
 	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 	# Second delve: no nudge.

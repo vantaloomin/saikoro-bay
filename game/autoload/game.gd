@@ -29,9 +29,12 @@ var store: SaveStore:
 		store = value
 		if store != null:
 			store.deferred_write_finished.connect(_on_deferred_write_finished)
-## True when the slot holds a save from a newer version. Nothing is saved
-## then, so an old build can't overwrite newer progress.
+## True when the slot holds a save this build can't load: one from a newer
+## version, or one that decodes but doesn't load. Nothing is saved then,
+## so this build can't overwrite progress it can't read.
 var saving_locked: bool = false
+## Why saving is off or the last save failed, for the town to show, or "".
+var save_problem: String = ""
 
 
 func _init() -> void:
@@ -55,9 +58,18 @@ func _ready() -> void:
 func load_or_new() -> String:
 	var result: SaveStore.ReadResult = store.read()
 	saving_locked = result.status == SaveCodec.Status.TOO_NEW
+	save_problem = "Saving is off: your save is from a newer version of the game." if saving_locked else ""
 	var loaded: GameState = null
 	if result.is_ok():
 		loaded = GameState.from_dict(result.payload.get(GameState.PAYLOAD_KEY, {}) as Dictionary)
+		if loaded == null:
+			# It passed its checksum but doesn't load: a bug, not a damaged
+			# file. Keep every copy and save nothing, so the campaign survives
+			# for a build that can read it.
+			push_error("Save slot decodes but doesn't load; saving is off and the files are kept.")
+			_keep_unloadable_copies()
+			saving_locked = true
+			save_problem = "Saving is off: this build can't read your save. It's kept safe for a fixed build."
 	if loaded == null:
 		if result.status != SaveCodec.Status.EMPTY:
 			push_warning("Save slot unreadable (%s); starting a new campaign." % SaveCodec.Status.keys()[result.status])
@@ -74,6 +86,15 @@ func scene_for_phase() -> String:
 	return DELVE_SCENE if state.phase == GameState.Phase.DELVE else TOWN_SCENE
 
 
+## Copies every file of the slot aside as <name>.unloadable-<time>, so even
+## a later save can't rotate them away.
+func _keep_unloadable_copies() -> void:
+	var stamp: String = str(int(Time.get_unix_time_from_system()))
+	for file_path: String in [store.path, store.temp_path(), store.backup_path()]:
+		if FileAccess.file_exists(file_path):
+			DirAccess.copy_absolute(file_path, "%s.unloadable-%s" % [file_path, stamp])
+
+
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
 func go_down() -> bool:
 	if SceneFlow.busy or not state.start_delve():
@@ -86,15 +107,20 @@ func go_down() -> bool:
 	return true
 
 
-## Leaves the delve for town, banking the run's haul by `outcome` (a Haul
-## outcome). The save is written before the tide starts moving, so quitting
-## during the animation can't reload as an abandoned delve. Returns false
-## if it's not allowed right now.
-func come_up(outcome: String = Haul.SURFACED) -> bool:
-	if SceneFlow.busy or not state.finish_delve(outcome, run.haul if run != null else Haul.new()):
+## Leaves the delve for town once the run is over, banking its haul by how
+## it ended (surfaced at a landing, cleared the vault, or washed up): the
+## outcome comes from the run, never the caller. The save is written before
+## the tide starts moving, so quitting during the animation can't reload as
+## an abandoned delve. Returns false if it's not allowed right now.
+func come_up() -> bool:
+	if SceneFlow.busy or run == null or not run.is_over():
+		return false
+	if not state.finish_delve(run.outcome(), run.haul):
 		return false
 	run = null
-	save()
+	var error: Error = save()
+	if error != OK and error != ERR_BUSY and not saving_locked:
+		save_problem = "Your delve was banked, but saving failed. Keep the game open and try again."
 	returned_to_town.emit(state.delve_count)
 	SceneFlow.change_half(TOWN_SCENE, TideTransition.Direction.UP)
 	return true
@@ -120,7 +146,7 @@ func _build_payload() -> Dictionary:
 ## A save held during a transition is written before the window closes.
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and store != null and store.has_pending_write():
-		store.blocked = false
+		store.flush()
 
 
 func _on_transition_started(_direction: TideTransition.Direction) -> void:
