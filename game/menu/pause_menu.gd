@@ -2,27 +2,24 @@ class_name PauseMenu
 extends Control
 ## The pause menu (Start or Esc). It uses the neutral third skin from the
 ## two-halves spec, plain ink on off-white, so it belongs to neither half.
-## It holds Resume, the three volumes (Music, Sounds, Menus) and Quit;
-## more settings join it later. Quit lives here,
-## away from the town's only hold-to-commit button (Mara's #41 review).
+## It holds Resume, the three volumes (Music, Sounds, Menus), the content
+## level (AC-2: change it at any time) and Quit; more settings join it
+## later. Quit lives here, away from the town's only hold-to-commit button
+## (Mara's #41 review).
 
 signal closed
 
-const PAPER: Color = Color(0.97, 0.97, 0.95)
-const INK: Color = Color(0.12, 0.12, 0.12)
+const PAPER: Color = NeutralSkin.PAPER
+const INK: Color = NeutralSkin.INK
 const VOLUME_NAMES: Dictionary[String, String] = {"Music": "Music", "SFX": "Sounds", "UI": "Menus"}
 
 var _resume: Button
-static var _neutral: Theme
+var _content: ContentPicker
 
 
-## The neutral skin's theme: the engine's plain font, so the menu never
-## takes on the type of the half it opens over.
+## The neutral skin's theme (NeutralSkin.theme).
 static func neutral_theme() -> Theme:
-	if _neutral == null:
-		_neutral = Theme.new()
-		_neutral.default_font = ThemeDB.fallback_font
-	return _neutral
+	return NeutralSkin.theme()
 
 
 func _ready() -> void:
@@ -30,38 +27,23 @@ func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
-	var shade: ColorRect = ColorRect.new()
-	shade.color = Color(0, 0, 0, 0.35)
-	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(shade)
+	add_child(NeutralSkin.shade())
 	var center: CenterContainer = CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(center)
-	var panel: PanelContainer = PanelContainer.new()
-	var box: StyleBoxFlat = StyleBoxFlat.new()
-	box.bg_color = PAPER
-	box.border_color = INK
-	box.set_border_width_all(2)
-	box.set_corner_radius_all(4)
-	box.set_content_margin_all(32)
-	panel.add_theme_stylebox_override("panel", box)
-	panel.custom_minimum_size = Vector2(420, 0)
+	var panel: PanelContainer = NeutralSkin.panel(640)
 	center.add_child(panel)
 	var stack: VBoxContainer = VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 16)
 	panel.add_child(stack)
-	var title: Label = Label.new()
-	title.text = "Paused"
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", INK)
-	stack.add_child(title)
+	stack.add_child(NeutralSkin.label("Paused", 36))
 	_resume = _button("Resume")
 	_resume.pressed.connect(close)
 	stack.add_child(_resume)
 	for bus: String in Settings.BUSES:
 		stack.add_child(_volume_row(bus))
+	stack.add_child(_content_section())
 	var quit: Button = _button("Quit to desktop")
 	quit.name = "Quit"
 	quit.pressed.connect(func() -> void: get_tree().quit())
@@ -69,6 +51,7 @@ func _ready() -> void:
 
 
 func open() -> void:
+	_content.show_settings()
 	visible = true
 	_resume.grab_focus()
 
@@ -124,6 +107,22 @@ func _volume_row(bus: String) -> Control:
 	return row
 
 
+## "Adult content" over the three levels, saved as soon as one is picked.
+func _content_section() -> Control:
+	var section: VBoxContainer = VBoxContainer.new()
+	section.name = "Content"
+	section.add_theme_constant_override("separation", 8)
+	section.add_child(NeutralSkin.label("Adult content", 24))
+	_content = ContentPicker.new()
+	_content.name = "Picker"
+	_content.picked.connect(func(level: ContentLevel.Level) -> void:
+		if not Settings.set_content_level(level):
+			_content.show_settings())
+	Settings.changed.connect(_content.show_settings)
+	section.add_child(_content)
+	return section
+
+
 ## A volume as the menu reads it: "75%".
 static func percent(value: float) -> String:
 	return "%d%%" % roundi(value * 100.0)
@@ -161,19 +160,4 @@ func _style_slider(slider: HSlider) -> void:
 
 
 func _button(text: String) -> Button:
-	var button: Button = Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(0, 60)
-	button.add_theme_font_size_override("font_size", 26)
-	for state: String in ["normal", "hover", "pressed", "focus"]:
-		var box: StyleBoxFlat = StyleBoxFlat.new()
-		box.bg_color = Color(0.9, 0.9, 0.88) if state == "hover" else PAPER
-		box.border_color = INK
-		box.set_border_width_all(4 if state == "focus" else 1)
-		box.set_corner_radius_all(4)
-		box.set_content_margin_all(12)
-		box.draw_center = state != "focus"
-		button.add_theme_stylebox_override(state, box)
-	for color_name: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		button.add_theme_color_override(color_name, INK)
-	return button
+	return NeutralSkin.button(text)

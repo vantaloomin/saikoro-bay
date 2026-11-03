@@ -1,14 +1,16 @@
 extends Node
-## Player settings that aren't part of a campaign save: content level, age
-## confirmation, reduce motion and the three volumes. Stored in
+## Player settings that aren't part of a campaign save: content level, the
+## age gate's answer, reduce motion and the three volumes. Stored in
 ## user://settings.cfg.
 ##
-## Autoload "Settings". Adult content stays off until the player confirms
-## their age (AC-1, in M5) and picks a level. A build exported with the
-## "sfw" feature tag (the SFW export presets) caps the level at SFW no matter
-## what the file says.
+## Autoload "Settings". Adult content stays off until the player says
+## they're 18 or older at the age gate (AC-1) and picks a level (AC-2). A
+## player who says they're under 18 stays at SFW and can't pick a level. A
+## build exported with the "sfw" feature tag (the SFW export presets) caps
+## the level at SFW no matter what the file says, and has no age gate.
 
 signal changed
+
 
 const PATH: String = "user://settings.cfg"
 const SFW_FEATURE: String = "sfw"
@@ -17,7 +19,12 @@ const SFW_FEATURE: String = "sfw"
 const BUSES: Array[String] = ["Music", "SFX", "UI"]
 const DEFAULT_VOLUMES: Dictionary[String, float] = {"Music": 0.8, "SFX": 1.0, "UI": 1.0}
 
-var age_confirmed: bool = false
+## True in a build exported with the "sfw" feature tag. A var so tests can
+## play a SFW build; turning it off can't add assets the build doesn't have.
+## Where settings are kept; tests point it at a scratch file.
+var file_path: String = PATH
+var sfw_build: bool = OS.has_feature(SFW_FEATURE)
+var age_answer: ContentLevel.AgeAnswer = ContentLevel.AgeAnswer.UNANSWERED
 var content_level: ContentLevel.Level = ContentLevel.Level.SFW
 var reduce_motion: bool = false
 ## The town's "Go down" hint fades for good after the first real hold.
@@ -31,26 +38,56 @@ func _ready() -> void:
 
 ## The highest level this build may show.
 func build_cap() -> ContentLevel.Level:
-	if OS.has_feature(SFW_FEATURE):
+	if sfw_build:
 		return ContentLevel.Level.SFW
 	return ContentLevel.Level.FULL
 
 
 ## The level scenes should use right now.
 func effective_content_level() -> ContentLevel.Level:
-	if not age_confirmed:
+	if age_answer != ContentLevel.AgeAnswer.ADULT:
 		return ContentLevel.Level.SFW
 	return ContentLevel.effective(content_level, build_cap())
 
 
-func set_content_level(level: ContentLevel.Level) -> void:
+## True until the player answers the age gate, in a build that has adult
+## content. Boot shows the gate before anything else while it's true.
+func needs_age_gate() -> bool:
+	return build_cap() > ContentLevel.Level.SFW and age_answer == ContentLevel.AgeAnswer.UNANSWERED
+
+
+## Whether the player may pick a level above SFW.
+func can_choose_level() -> bool:
+	return build_cap() > ContentLevel.Level.SFW and age_answer == ContentLevel.AgeAnswer.ADULT
+
+
+## Why the level is fixed at SFW, for the pickers to say, or "" if it isn't.
+func level_locked_reason() -> String:
+	if build_cap() == ContentLevel.Level.SFW:
+		return "This edition has no adult content."
+	if age_answer == ContentLevel.AgeAnswer.UNDER_18:
+		return "Adult content is off because you said you're under 18."
+	if age_answer == ContentLevel.AgeAnswer.UNANSWERED:
+		return "Adult content is off until you confirm your age."
+	return ""
+
+
+## Saves the age gate's answer and, for an adult, the level they picked.
+## Under 18 always means SFW.
+func answer_age_gate(answer: ContentLevel.AgeAnswer, level: ContentLevel.Level = ContentLevel.Level.SFW) -> void:
+	age_answer = answer
+	content_level = level if answer == ContentLevel.AgeAnswer.ADULT else ContentLevel.Level.SFW
+	save_settings()
+
+
+## Picks the content level (AC-2). Returns false, changing nothing, if the
+## player can't pick levels above SFW and asked for one.
+func set_content_level(level: ContentLevel.Level) -> bool:
+	if level > ContentLevel.Level.SFW and not can_choose_level():
+		return false
 	content_level = level
 	save_settings()
-
-
-func set_age_confirmed(confirmed: bool) -> void:
-	age_confirmed = confirmed
-	save_settings()
+	return true
 
 
 func set_reduce_motion(enabled: bool) -> void:
@@ -86,10 +123,10 @@ func set_go_down_learned() -> void:
 	save_settings()
 
 
-func load_settings(path: String = PATH) -> void:
+func load_settings(path: String = "") -> void:
 	var config: ConfigFile = ConfigFile.new()
-	if config.load(path) == OK:
-		age_confirmed = config.get_value("content", "age_confirmed", false) == true
+	if config.load(path if not path.is_empty() else file_path) == OK:
+		age_answer = _age_answer_from(config)
 		content_level = ContentLevel.from_value(config.get_value("content", "level", 0))
 		reduce_motion = config.get_value("accessibility", "reduce_motion", false) == true
 		go_down_learned = config.get_value("tutorial", "go_down_learned", false) == true
@@ -101,14 +138,25 @@ func load_settings(path: String = PATH) -> void:
 	changed.emit()
 
 
-func save_settings(path: String = PATH) -> Error:
+func save_settings(path: String = "") -> Error:
 	var config: ConfigFile = ConfigFile.new()
-	config.set_value("content", "age_confirmed", age_confirmed)
+	config.set_value("content", "age", int(age_answer))
 	config.set_value("content", "level", int(content_level))
 	config.set_value("accessibility", "reduce_motion", reduce_motion)
 	config.set_value("tutorial", "go_down_learned", go_down_learned)
 	for bus: String in BUSES:
 		config.set_value("audio", bus.to_lower(), volumes[bus])
-	var error: Error = config.save(path)
+	var error: Error = config.save(path if not path.is_empty() else file_path)
 	changed.emit()
 	return error
+
+
+## The saved answer; an unknown value asks again. Files from before the
+## gate only had "age_confirmed", which nothing could set to true.
+static func _age_answer_from(config: ConfigFile) -> ContentLevel.AgeAnswer:
+	if not config.has_section_key("content", "age"):
+		return ContentLevel.AgeAnswer.ADULT if config.get_value("content", "age_confirmed", false) == true else ContentLevel.AgeAnswer.UNANSWERED
+	var number: int = SaveCodec.to_int_or(config.get_value("content", "age"), ContentLevel.AgeAnswer.UNANSWERED)
+	if number < ContentLevel.AgeAnswer.UNANSWERED or number > ContentLevel.AgeAnswer.UNDER_18:
+		return ContentLevel.AgeAnswer.UNANSWERED
+	return number as ContentLevel.AgeAnswer

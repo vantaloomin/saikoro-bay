@@ -30,6 +30,9 @@ jobs:
       - name: Lint adult content references
         run: python3 tools/lint_content.py
 
+      - name: Export presets come in full and SFW pairs
+        run: python3 tools/check_presets.py
+
       - name: Cache Godot
         id: cache-godot
         uses: actions/cache@v4
@@ -138,18 +141,48 @@ jobs:
       - name: Import project
         run: godot --headless --path . --import
 
-      - name: Export
+      - name: Export the full build
         run: |
-          mkdir -p build/full/windows build/sfw/windows
+          mkdir -p build/full/windows
           godot --headless --path . --export-release "Windows" build/full/windows/SaikoroBay.exe
-          godot --headless --path . --export-release "Windows SFW" build/sfw/windows/SaikoroBay.exe
           test -s build/full/windows/SaikoroBay.exe
+
+      # content/adult/ci_canary/ is a stand-in adult asset. Finding it in the
+      # full pack proves the SFW check below can see adult files at all.
+      - name: The full build carries the adult canary
+        run: |
+          godot --headless --path . --export-pack "Windows" build/full/check.pck
+          python3 tools/check_pck.py --expect-adult build/full/check.pck
+
+      # The SFW presets exclude content/adult/, but Godot's UID and script
+      # class caches still list every file the project has, which would leak
+      # the adult file names into the SFW pack. So SFW builds are exported
+      # from a tree without the folder.
+      - name: Remove adult content before the SFW exports
+        run: |
+          rm -rf content/adult
+          godot --headless --path . --import
+
+      - name: Export the SFW build
+        run: |
+          mkdir -p build/sfw/windows
+          godot --headless --path . --export-release "Windows SFW" build/sfw/windows/SaikoroBay.exe
           test -s build/sfw/windows/SaikoroBay.exe
 
-      - name: Check the SFW build has no adult content
+      # Packs need no export templates, so every SFW preset is checked, not
+      # only the Windows one that ships from here.
+      - name: Every SFW preset has no adult content
         run: |
-          godot --headless --path . --export-pack "Windows SFW" build/sfw/check.pck
-          python3 tools/check_pck.py build/sfw/check.pck
+          mkdir -p build/sfw/check
+          grep -oP '^name="\K[^"]+ SFW(?="$)' export_presets.cfg > build/sfw/check/presets.txt
+          test -s build/sfw/check/presets.txt
+          packs=()
+          while IFS= read -r preset; do
+            pack="build/sfw/check/${preset// /_}.pck"
+            godot --headless --path . --export-pack "$preset" "$pack"
+            packs+=("$pack")
+          done < build/sfw/check/presets.txt
+          python3 tools/check_pck.py "${packs[@]}"
 
       - uses: actions/upload-artifact@v4
         with:
