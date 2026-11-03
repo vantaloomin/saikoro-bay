@@ -27,6 +27,9 @@ jobs:
       - name: Lint sim rules
         run: python3 tools/lint_sim.py
 
+      - name: Lint adult content references
+        run: python3 tools/lint_content.py
+
       - name: Cache Godot
         id: cache-godot
         uses: actions/cache@v4

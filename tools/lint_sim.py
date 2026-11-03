@@ -20,6 +20,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SIM = ROOT / "sim"
 
 # A bare call, not a method on an object (rng.randi() is fine).
+# Third item True: match against the line with string contents blanked out.
 BANNED = [
     (re.compile(r"(?<![\w.])(randi|randf|randi_range|randf_range|randfn|randomize|rand_from_seed|seed)\s*\("),
      "global random call; use an RngStreams stream"),
@@ -27,7 +28,7 @@ BANNED = [
      "sim classes must not be nodes; extend RefCounted or Resource"),
     (re.compile(r"\b(get_tree|get_node|get_parent|add_child)\s*\("),
      "scene tree access in sim/"),
-    (re.compile(r"\$[A-Za-z_\"]"), "node path access in sim/"),
+    (re.compile(r"\$[A-Za-z_\"]"), "node path access in sim/", True),
     (re.compile(r"\b(Time|OS)\s*\."), "wall-clock or OS access in sim/"),
     (re.compile(r"(pre)?load\s*\(\s*\"[^\"]+\.(tscn|scn)\""), "scene loading in sim/"),
 ]
@@ -49,13 +50,17 @@ def strip_comment(line: str) -> str:
     return "".join(out)
 
 
+STRING = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
+
+
 def main() -> int:
     problems: list[str] = []
     for path in sorted(SIM.rglob("*.gd")):
         for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
             line = strip_comment(raw)
-            for pattern, why in BANNED:
-                if pattern.search(line):
+            no_strings = STRING.sub('""', line)
+            for pattern, why, *flags in BANNED:
+                if pattern.search(no_strings if flags else line):
                     rel = path.relative_to(ROOT).as_posix()
                     problems.append(f"{rel}:{number}: {why}\n    {raw.strip()}")
     for problem in problems:

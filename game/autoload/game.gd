@@ -13,6 +13,8 @@ const TOWN_SCENE: String = "res://game/town/town.tscn"
 const DELVE_SCENE: String = "res://game/delve/delve.tscn"
 const DEFAULT_SAVE_PATH: String = "user://saves/slot_1.save"
 
+## Villagers, perks, rooms... from data/*.json.
+var data: GameData = GameData.load_dir()
 var state: GameState = GameState.new()
 var store: SaveStore:
 	set(value):
@@ -31,6 +33,8 @@ func _init() -> void:
 
 
 func _ready() -> void:
+	for error: String in data.errors:
+		push_error("Game data: " + error)
 	SceneFlow.transition_started.connect(_on_transition_started)
 	SceneFlow.transition_finished.connect(_on_transition_finished)
 

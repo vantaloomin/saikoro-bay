@@ -37,6 +37,7 @@ CI runs these on every pull request. To run them locally:
 
 ```
 python3 tools/lint_sim.py                                   # sim/ stays seeded and headless
+python3 tools/lint_content.py                               # adult assets only via the content system
 godot --headless --path . --import                          # first run only
 godot --headless --path . -s res://tools/check_scripts.gd   # every script compiles
 godot --headless --path . -s res://addons/gut/gut_cmdln.gd  # tests (GUT)
@@ -52,6 +53,7 @@ sim/            Game rules as plain classes with no scene or node references.
 game/           Scenes, nodes and UI that present the sim to the player.
 content/sfw/    Game data and assets that are safe for every build.
 content/adult/  Adult-only assets. Excluded from SFW builds.
+data/           Game data as JSON (villagers, perks, rooms...). Balancing is an edit here.
 dialogue/       Dialogue and scene scripts.
 tests/          Automated tests.
 tools/          Scripts for CI, linting and the balance bot.

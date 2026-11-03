@@ -20,6 +20,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 SceneFlow="*res://game/autoload/scene_flow.gd"
+Settings="*res://game/autoload/settings.gd"
 Game="*res://game/autoload/game.gd"
 
 [debug]
