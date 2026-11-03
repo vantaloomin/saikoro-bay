@@ -61,9 +61,20 @@ func test_hp_carries_in_and_is_capped() -> void:
 	assert_eq(Fight.create(data, "fresh", "card_shark", rng, [], 99).player_hp, 30)
 
 
-func test_unknown_perks_are_ignored() -> void:
+func test_unknown_perks_are_reported_and_skipped() -> void:
 	var fight: Fight = _fight("card_shark", [{"perk": "ghost", "source": "x"}])
 	assert_false(fight.has_perk("ghost"))
+	assert_push_error("unknown perk \"ghost\"")
+
+
+func test_no_fight_for_a_defeated_player() -> void:
+	assert_null(Fight.create(data, "fresh", "card_shark", RngStreams.new(1), [], 0))
+
+
+func test_intents_and_faces_are_frozen() -> void:
+	var fight: Fight = _fight()
+	assert_true(fight.current_intent().is_read_only())
+	assert_true(fight.hand[0].faces.is_read_only())
 
 
 # --- Placing ------------------------------------------------------------------
@@ -388,13 +399,15 @@ func test_mend_heals_on_win_up_to_max() -> void:
 func test_slot_preview_matches_what_happens() -> void:
 	var fight: Fight = _fight()
 	_set_hand(fight, [3, 5, 2, 2])
-	assert_eq(fight.preview(0, "strike"), {"ok": true, "reason": "", "effect": "damage", "amount": 3, "complete": true})
+	assert_eq(fight.preview(0, "strike"), {"ok": true, "reason": "", "effect": "damage", "amount": 3,
+		"landed": 3, "blocked": 0, "complete": true, "can_complete": true})
 	assert_eq(fight.preview(1, "high_roller")["amount"], 8)
 	assert_eq(fight.preview(0, "guard")["amount"], 4)
 	assert_eq(fight.preview(1, "guard")["reason"], "Needs 1 to 4.")
 	var half: Dictionary = fight.preview(2, "pair_bet")
 	assert_false(half["complete"])
 	assert_eq(half["amount"], 8, "assumes the match arrives")
+	assert_true(half["can_complete"])
 	fight.place(2, "pair_bet")
 	assert_eq(fight.preview(3, "pair_bet")["amount"], 8)
 	assert_true(fight.preview(3, "pair_bet")["complete"])
@@ -423,6 +436,93 @@ func test_end_turn_preview_is_exact_and_moves_nothing() -> void:
 		assert_eq(preview["state"], fight.state)
 
 
+func test_slot_preview_counts_enemy_guard() -> void:
+	var fight: Fight = _fight()
+	fight.end_turn()
+	assert_eq(fight.enemy_block, 4)
+	_set_hand(fight, [6, 5, 1, 1])
+	var strike: Dictionary = fight.preview(0, "strike")
+	assert_eq(strike["amount"], 6)
+	assert_eq(strike["landed"], 2)
+	assert_eq(strike["blocked"], 4)
+	var high: Dictionary = fight.preview(1, "high_roller")
+	assert_eq([high["landed"], high["blocked"]], [4, 4])
+	fight.place(0, "strike")
+	high = fight.preview(1, "high_roller")
+	assert_eq([high["landed"], high["blocked"]], [8, 0], "Strike resolves first and uses up the guard")
+	var hp: int = fight.enemy_hp
+	fight.place(1, "high_roller")
+	fight.end_turn()
+	assert_eq(fight.enemy_hp, hp - 2 - 8)
+
+
+func test_pair_preview_says_when_no_match_is_left() -> void:
+	var fight: Fight = _fight()
+	_set_hand(fight, [6, 1, 2, 3])
+	var pair: Dictionary = fight.preview(0, "pair_bet")
+	assert_eq(pair["amount"], 24)
+	assert_false(pair["complete"])
+	assert_false(pair["can_complete"])
+	_set_hand(fight, [6, 1, 6, 3])
+	assert_true(fight.preview(0, "pair_bet")["can_complete"])
+
+
+func test_pair_match_must_be_free_and_unlocked() -> void:
+	var fight: Fight = _fight("hermit_croupier")
+	_set_hand(fight, [6, 6, 2, 3])
+	# Die 0 is locked (lowest id of the two 6s), so die 1 has no match.
+	assert_true(fight.hand[0].locked)
+	assert_false(fight.preview(1, "pair_bet")["can_complete"])
+
+
+func test_snake_eyes_kill_ends_before_the_enemy_attacks() -> void:
+	var fight: Fight = _fight("snake_eyes_eel")
+	fight.player_hp = 1
+	_set_hand(fight, [1, 1, 4, 3])
+	fight.end_turn()
+	assert_eq(fight.state, Fight.State.LOST)
+	assert_eq(fight.player_hp, 0)
+	for event: Dictionary in _events_of(fight, "damage"):
+		assert_ne(event["source"], "enemy", "a defeated player isn't hit again")
+
+
+func test_planning_copy_matches_the_fight_and_cant_roll() -> void:
+	var fight: Fight = _fight("hermit_croupier", [{"perk": "nudge", "source": "pearl_diver"}, {"perk": "brace", "source": "shipwright"}])
+	_set_hand(fight, [4, 6, 2, 2])
+	fight.place(2, "pair_bet")
+	fight.nudge(0)
+	var copy: Fight = fight.planning_copy()
+	var skip: Array[String] = ["events", "moves", "_rng", "_is_preview"]
+	assert_eq(_vars(copy, skip), _vars(fight, skip), "every field is copied")
+	assert_eq(copy.reroll_refusal(3), "Planning copies can't reroll.")
+	assert_true(copy.end_turn())
+	assert_eq(copy.turn, fight.turn, "a planning copy stops before the next roll")
+	copy._perks["brace"].amount = 99
+	assert_eq(fight._perks["brace"].amount, 2, "perks aren't shared")
+
+
+## Script variables of `value`, recursing into objects, arrays and dictionaries.
+func _vars(value: Variant, skip: Array[String] = []) -> Variant:
+	if value is Object:
+		var out: Dictionary = {}
+		for prop: Dictionary in (value as Object).get_property_list():
+			var prop_name: String = prop["name"]
+			if (prop["usage"] as int) & PROPERTY_USAGE_SCRIPT_VARIABLE and not prop_name in skip:
+				out[prop_name] = _vars((value as Object).get(prop_name))
+		return out
+	if value is Array:
+		var items: Array = []
+		for item: Variant in value as Array:
+			items.append(_vars(item))
+		return items
+	if value is Dictionary:
+		var entries: Dictionary = {}
+		for key: Variant in value as Dictionary:
+			entries[key] = _vars((value as Dictionary)[key])
+		return entries
+	return value
+
+
 # --- Replay and data ----------------------------------------------------------
 
 func test_seed_and_moves_replay_a_whole_fight() -> void:
@@ -441,6 +541,26 @@ func test_seed_and_moves_replay_a_whole_fight() -> void:
 			assert_eq(replay.events, fight.events, "%s seed %d" % [enemy, seed_value])
 			assert_eq(replay.state, fight.state)
 			assert_eq(replay.player_hp, fight.player_hp)
+
+
+func test_later_fights_of_a_delve_replay_from_their_start() -> void:
+	var perks: Array[Dictionary] = [{"perk": "nudge", "source": "pearl_diver"}]
+	for seed_value: int in 10:
+		var rng: RngStreams = RngStreams.new(seed_value)
+		var first: Fight = Fight.create(data, "fresh", "card_shark", rng, perks, 999)
+		first.player_hp = 999
+		while first.state == Fight.State.PLAYER_TURN:
+			_play_greedy_turn(first)
+			first.end_turn()
+		var second: Fight = Fight.create(data, "fresh", "snake_eyes_eel", rng, perks, 20)
+		while second.state == Fight.State.PLAYER_TURN:
+			_play_greedy_turn(second)
+			second.end_turn()
+		var rebuilt: RngStreams = RngStreams.new()
+		assert_true(rebuilt.load_dict(second.start_rng))
+		var replay: Fight = Fight.create(data, "fresh", "snake_eyes_eel", rebuilt, perks, second.start_hp)
+		assert_true(replay.apply_moves(second.moves))
+		assert_eq(replay.events, second.events, "seed %d" % seed_value)
 
 
 func test_replay_stops_at_a_bad_move() -> void:

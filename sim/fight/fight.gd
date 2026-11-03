@@ -13,7 +13,8 @@ extends RefCounted
 ##      a half-filled Pair Bet doesn't fire and its die counts as unused
 ##   2. each unused, unlocked die gives unused-die block
 ##   3. win check: enemy at 0 HP wins; the enemy doesn't act, Mend fires
-##   4. twist damage (Snake eyes: each unused 1 bites for 1, ignoring block)
+##   4. twist damage (Snake eyes: each unused 1 bites for 1, ignoring block;
+##      a bite to 0 HP loses on the spot)
 ##   5. the enemy attacks (through block)
 ##   6. lose check
 ##   7. next turn: block resets, Brace, intent advances (its guard applies
@@ -21,12 +22,14 @@ extends RefCounted
 ##      order, House lock on the highest die (lowest id on ties)
 ##
 ## Randomness: rolls use the ROLLS stream and nothing else draws during a
-## fight. Previews run the same pipeline on a copy, so they can't drift from
-## what really happens.
+## fight. Previews and planning copies run the same pipeline on a copy with
+## no dice streams, so they can't drift from what really happens, can't
+## peek at a future roll, and never move the real streams.
 ##
 ## Everything that happens is appended to `events` as a Dictionary, so the
 ## board animates only from events and flashes perk source badges (KP-2).
-## `moves` records every accepted move, so seed + moves replays a fight.
+## `moves` records every accepted move, so start_rng + start_hp + moves
+## replays any fight, including later fights of a delve.
 
 enum State { PLAYER_TURN, WON, LOST }
 
@@ -97,6 +100,11 @@ var slots: Array[Slot] = []
 var rerolls_left: int = 0
 var nudges_left: int = 0
 
+## The RNG state and HP the fight started with, before the first roll.
+## With the move log, this replays any fight of a delve, not just the first.
+var start_rng: Dictionary = {}
+var start_hp: int = 0
+
 var events: Array[Dictionary] = []
 ## Every accepted move, in order: {"move": "place", "die": 0, "slot": "strike"}...
 var moves: Array[Dictionary] = []
@@ -110,12 +118,15 @@ var _intents: Array[Dictionary] = []
 var _perks: Dictionary[String, Perk] = {}
 
 
-## Builds a fight, or returns null if an id doesn't exist in `data`.
-## `perks` is a list of {"perk": id, "source": villager_or_building_id}.
+## Builds a fight, or returns null if an id doesn't exist in `data` or the
+## player comes in at 0 HP. `perks` is a list of
+## {"perk": id, "source": villager_or_building_id}.
 ## `hp` carries the player's HP in from earlier fights (-1 = full).
 static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: RngStreams,
 		perks: Array[Dictionary] = [], hp: int = -1) -> Fight:
 	if not data.has_row("loadouts", loadout_id) or not data.has_row("enemies", enemy_ref):
+		return null
+	if hp == 0:
 		return null
 	var fight: Fight = Fight.new()
 	fight._rng = rng
@@ -131,6 +142,7 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 		die.id = index
 		die.type_id = type_id as String
 		die.faces.assign(data.row("dice", type_id as String)["faces"] as Array)
+		die.faces.make_read_only()
 		fight.hand.append(die)
 		index += 1
 	for slot_ref: Variant in loadout["slots"] as Array:
@@ -146,11 +158,15 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 	fight.enemy_hp = fight.enemy_max_hp
 	fight.twist = enemy["twist"]
 	for text: Variant in enemy["intents"] as Array:
-		fight._intents.append(parse_intent(text as String))
+		var intent: Dictionary = parse_intent(text as String)
+		intent.make_read_only()
+		fight._intents.append(intent)
+	fight._intents.make_read_only()
 
 	for entry: Dictionary in perks:
 		var perk_id: String = str(entry.get("perk", ""))
 		if not data.has_row("perks", perk_id):
+			push_error("Fight.create: unknown perk \"%s\" from \"%s\"" % [perk_id, entry.get("source", "")])
 			continue
 		var perk_row: Dictionary = data.row("perks", perk_id)
 		var perk: Perk = Perk.new()
@@ -160,6 +176,8 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 		perk.uses_per_turn = perk_row["uses_per_turn"] as int
 		fight._perks[perk_id] = perk
 
+	fight.start_hp = fight.player_hp
+	fight.start_rng = rng.to_dict()
 	fight._start_turn()
 	return fight
 
@@ -290,6 +308,8 @@ func reroll_refusal(discard_id: int) -> String:
 		return "Pick an unplaced die to discard."
 	if d.locked:
 		return "A locked die can't pay for a reroll."
+	if _rng == null:
+		return "Planning copies can't reroll."
 	if _rerollable_count() < 2:
 		return "Nothing left to reroll."
 	return ""
@@ -328,12 +348,23 @@ func nudge(die_id: int) -> bool:
 	return true
 
 
-## What a slot would do with `die_id` added (DR-3). Keys: ok, reason,
-## effect, amount, complete (false while a two-die slot waits for its pair).
-## For an incomplete pair, amount assumes matching dice fill the rest.
+## What a slot would do with `die_id` added (DR-3), as it would really land
+## at end of turn: the real pipeline runs on a planning copy, so enemy guard
+## used up by earlier slots is counted. Keys:
+##   ok, reason   whether it can go there, and why not
+##   effect       damage, block or heal
+##   amount       what the slot produces
+##   landed       what reaches its target (damage after guard, healing after
+##                the HP cap, block as is)
+##   blocked      damage the enemy's guard soaks
+##   complete     false while a multi-die slot waits for more dice; amount
+##                then assumes matching dice arrive
+##   can_complete false when the hand has no free dice left to fill it, so
+##                the board says "Needs another 6" instead of promising
 func preview(die_id: int, slot_id: String) -> Dictionary:
 	var reason: String = place_refusal(die_id, slot_id)
-	var result: Dictionary = {"ok": reason.is_empty(), "reason": reason, "effect": "", "amount": 0, "complete": false}
+	var result: Dictionary = {"ok": reason.is_empty(), "reason": reason, "effect": "", "amount": 0,
+		"landed": 0, "blocked": 0, "complete": false, "can_complete": false}
 	if not reason.is_empty():
 		return result
 	var s: Slot = slot(slot_id)
@@ -341,11 +372,30 @@ func preview(die_id: int, slot_id: String) -> Dictionary:
 	for placed: int in s.dice:
 		values.append(hand[placed].value)
 	values.append(hand[die_id].value)
-	result["complete"] = values.size() == s.needed()
+	var missing: int = s.needed() - values.size()
+	result["complete"] = missing == 0
+	result["can_complete"] = missing <= _matching_free_dice(die_id, hand[die_id].value)
 	while values.size() < s.needed():
 		values.append(hand[die_id].value)
 	result["effect"] = s.row["effect"]
 	result["amount"] = _amount(s, values)
+
+	var copy: Fight = planning_copy()
+	copy.place(die_id, slot_id)
+	if missing > 0:
+		# Pretend the rest arrived: the slot fires now with the full amount.
+		var copy_slot: Slot = copy.slot(slot_id)
+		var row: Dictionary = copy_slot.row.duplicate()
+		row["dice_needed"] = copy_slot.dice.size()
+		row["mult"] = 0
+		row["add"] = result["amount"]
+		copy_slot.row = row
+	copy.events.clear()
+	copy.end_turn()
+	for event: Dictionary in copy.events:
+		if event.get("source", "") == "slot:" + slot_id:
+			result["landed"] = event["amount"]
+			result["blocked"] = event.get("blocked", 0)
 	return result
 
 
@@ -421,6 +471,10 @@ func end_turn() -> bool:
 				player_hp -= bite
 				events.append({"type": "damage", "target": "player", "amount": bite, "blocked": 0,
 					"source": "twist:snake_eyes", "die": d.id})
+		if player_hp <= 0:
+			state = State.LOST
+			events.append({"type": "lost"})
+			return true
 
 	# 5. The enemy attacks.
 	var intent: Dictionary = current_intent()
@@ -518,6 +572,15 @@ func _unused_dice() -> Array[Die]:
 	return unused
 
 
+## Free, unlocked dice other than `except_id` showing `value`.
+func _matching_free_dice(except_id: int, value: int) -> int:
+	var count: int = 0
+	for d: Die in hand:
+		if d.id != except_id and d.is_free() and not d.locked and d.value == value:
+			count += 1
+	return count
+
+
 func _rerollable_count() -> int:
 	var count: int = 0
 	for d: Die in hand:
@@ -526,8 +589,17 @@ func _rerollable_count() -> int:
 	return count
 
 
-## A deep copy for previews. The copy's RNG is separate, so previews never
-## move the real streams.
+## A copy to plan on: place, take back, nudge and preview freely. It has no
+## dice streams, so it can't reroll, and a planner (or the bot) can never
+## peek at a roll before it happens or move the real streams. end_turn() on
+## it resolves the turn and stops there, like preview_end_turn().
+func planning_copy() -> Fight:
+	var copy: Fight = _copy()
+	copy._is_preview = true
+	return copy
+
+
+## A deep copy for previews, without the RNG (previews never roll).
 func _copy() -> Fight:
 	var copy: Fight = Fight.new()
 	copy.state = state
@@ -547,9 +619,15 @@ func _copy() -> Fight:
 	copy._rerolls_per_turn = _rerolls_per_turn
 	copy._unused_die_block = _unused_die_block
 	copy._intents = _intents
-	copy._perks = _perks
-	copy._rng = RngStreams.new()
-	copy._rng.load_dict(_rng.to_dict())
+	copy.start_rng = start_rng
+	copy.start_hp = start_hp
+	for perk_id: String in _perks:
+		var perk: Perk = Perk.new()
+		perk.id = _perks[perk_id].id
+		perk.source = _perks[perk_id].source
+		perk.amount = _perks[perk_id].amount
+		perk.uses_per_turn = _perks[perk_id].uses_per_turn
+		copy._perks[perk_id] = perk
 	for d: Die in hand:
 		var dd: Die = Die.new()
 		dd.id = d.id
