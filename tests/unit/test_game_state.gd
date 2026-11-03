@@ -94,6 +94,7 @@ func test_from_dict_rejects_bad_data() -> void:
 		"numeric seed": {"campaign_seed": 5},
 		"fraction count": {"delve_count": 1.5},
 		"negative count": {"delve_count": -1},
+		"negative attempt": {"delve_attempt": -1},
 		"in a delve before any delve": {"phase": "DELVE", "delve_count": 0},
 		"fraction resource": {"resources": {"pearls": 2.5}},
 		"negative resource": {"resources": {"pearls": -2}},
@@ -112,7 +113,7 @@ func test_from_dict_rejects_bad_data() -> void:
 		var data: Dictionary = good.duplicate(true)
 		data.merge(cases[label] as Dictionary, true)
 		assert_null(GameState.from_dict(data), label)
-	for field: String in ["villagers", "landmarks", "last_delve", "town"]:
+	for field: String in ["villagers", "landmarks", "last_delve", "town", "delve_attempt"]:
 		var missing: Dictionary = good.duplicate(true)
 		missing.erase(field)
 		assert_null(GameState.from_dict(missing), "a version 3 save needs %s" % field)
@@ -199,7 +200,7 @@ func test_banked_state_round_trips_through_a_save() -> void:
 
 func test_version_1_saves_upgrade_with_an_empty_town() -> void:
 	var v1: Dictionary = GameState.new(9).to_dict()
-	for field: String in ["villagers", "landmarks", "last_delve", "town"]:
+	for field: String in ["villagers", "landmarks", "last_delve", "town", "delve_attempt"]:
 		v1.erase(field)
 	v1["phase"] = "DELVE"
 	v1["delve_count"] = 2

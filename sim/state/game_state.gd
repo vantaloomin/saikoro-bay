@@ -19,6 +19,10 @@ var phase: Phase = Phase.TOWN
 var campaign_seed: int = 0
 ## Delves started so far. Also numbers the current delve while in one.
 var delve_count: int = 0
+## Times the current delve number was abandoned and retried. The retry has
+## the same map but fresh rolls (DelveRun.run_seed). Back to 0 on a real
+## outcome.
+var delve_attempt: int = 0
 
 var _resources: Dictionary[String, int] = {}
 ## Villagers living in town and landmarks rebuilt, in the order they came.
@@ -80,6 +84,7 @@ func finish_delve(data: GameData, outcome: String, haul: Haul) -> bool:
 		_undo_go_down()
 	else:
 		_set_budget(data)
+		delve_attempt = 0
 	settle_villagers(data)
 	return true
 
@@ -93,6 +98,7 @@ func _undo_go_down() -> void:
 	town.kept = mini(town.kept, town.actions_left)
 	town.held_at_go_down = 0
 	delve_count -= 1
+	delve_attempt += 1
 
 
 ## The visit's budget (TC-1): base_actions plus the kept action, if any.
@@ -412,6 +418,7 @@ func to_dict() -> Dictionary:
 		"phase": Phase.keys()[phase],
 		"campaign_seed": str(campaign_seed),
 		"delve_count": delve_count,
+		"delve_attempt": delve_attempt,
 		"resources": resource_data,
 		"seen_twists": _seen_twists.duplicate(),
 		"villagers": _villagers.duplicate(),
@@ -441,6 +448,7 @@ static func migrate_to_v3(payload: Dictionary) -> Dictionary:
 	if not payload.get(PAYLOAD_KEY) is Dictionary:
 		return payload
 	(payload[PAYLOAD_KEY] as Dictionary)["town"] = Town.new().to_dict()
+	(payload[PAYLOAD_KEY] as Dictionary)["delve_attempt"] = 0
 	return payload
 
 
@@ -449,14 +457,18 @@ static func migrate_to_v3(payload: Dictionary) -> Dictionary:
 ## "seen_twists" is optional, so saves from before it existed still load.
 ## "villagers", "landmarks" and "last_delve" are required: version 2 saves
 ## always have them, and older saves get them from migrate_to_v2().
-## "town" is required too (version 3, or migrate_to_v3()). Checks against
-## the data, like whether buildings fit the map, are in town_problems().
+## "town" and "delve_attempt" are required too (version 3, or
+## migrate_to_v3()). Checks against the data, like whether buildings fit
+## the map, are in town_problems().
 static func from_dict(data: Dictionary) -> GameState:
 	var phase_name: Variant = data.get("phase")
 	if not (phase_name is String and Phase.has(phase_name)):
 		return null
 	var seed_value: Variant = data.get("campaign_seed")
 	var count: Variant = data.get("delve_count")
+	var attempt: Variant = data.get("delve_attempt")
+	if not SaveCodec.is_int_like(attempt) or SaveCodec.to_int_or(attempt, -1) < 0:
+		return null
 	var resource_data: Variant = data.get("resources", {})
 	if not SaveCodec.is_int_like(seed_value) or not seed_value is String:
 		return null
@@ -482,6 +494,7 @@ static func from_dict(data: Dictionary) -> GameState:
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
 	state.phase = Phase[phase_name as String] as Phase
 	state.delve_count = SaveCodec.to_int_or(count, 0)
+	state.delve_attempt = SaveCodec.to_int_or(attempt, 0)
 	if state.phase == Phase.DELVE and state.delve_count < 1:
 		return null
 	for id: Variant in resource_data as Dictionary:

@@ -154,7 +154,7 @@ func go_down() -> bool:
 	if SceneFlow.busy or not state.start_delve(data):
 		return false
 	run = DelveRun.create(data, state.current_delve_seed(), state.delve_perks(data),
-		state.villagers_left(data), state.landmarks_left(data))
+		state.villagers_left(data), state.landmarks_left(data), state.delve_attempt)
 	save()
 	delve_started.emit(state.delve_count, state.current_delve_seed())
 	SceneFlow.change_half(DELVE_SCENE, TideTransition.Direction.DOWN)
