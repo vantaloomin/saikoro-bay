@@ -189,7 +189,7 @@ func test_building_in_town_saves_at_once() -> void:
 	assert_eq(Game.move_building(1, Vector2i(2, 2)), "")
 	saved = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
 	assert_eq([saved.town.placed[0]["x"], saved.town.placed[0]["y"]], [2, 2], "a free move is saved too")
-	assert_eq(Game.build("cottage", Vector2i(3, 3))[0]["text"], "Needs 4 more Driftwood (you have 0) · found in fights and small locks below")
+	assert_eq(Game.build("cottage", Vector2i(3, 3))[0]["text"], "Needs 4 more driftwood (you have 0) · found in fights and small locks below")
 
 
 func test_a_rescued_villager_moves_into_a_free_home_before_the_save() -> void:

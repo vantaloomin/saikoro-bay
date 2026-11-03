@@ -1,23 +1,30 @@
 extends GutTest
-## The town screen (M3 PR 5a) on the real Game autoload: it opens on the
-## diorama with the HUD filled in, says how the last delve ended, shows a
-## card for what you pick, and labels "Go down" with what's kept and lost.
+## The town screen (M3 PRs 5a and 5b) on the real Game autoload: it opens
+## on the diorama with the HUD filled in, says how the last delve ended,
+## shows a card for what you pick, and labels "Go down" with what's kept and
+## lost. Building goes list, card, carry, stamp; free things never ask.
 
 const TOWN_SCENE: PackedScene = preload("res://game/town/town.tscn")
+const TEST_SAVE: String = "user://test_town_screen.save"
 
 var _original_state: GameState
 var _original_problem: String
+var _original_store: SaveStore
 
 
 func before_each() -> void:
 	_original_state = Game.state
 	_original_problem = Game.save_problem
+	_original_store = Game.store
+	Game.store = SaveStore.new(TEST_SAVE)
 	Game.state = GameState.new(77)
 	Game.state.arrive(Game.data)
 	Game.save_problem = ""
 
 
 func after_each() -> void:
+	Game.store.erase()
+	Game.store = _original_store
 	Game.state = _original_state
 	Game.save_problem = _original_problem
 
@@ -62,7 +69,7 @@ func test_cards_for_buildings_and_villagers() -> void:
 	var empty: int = state.town.place("cottage", Vector2i(2, 2))
 	var home: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "building", "uid": cottage})
 	assert_eq(home["title"], "Cottage")
-	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver · happy"])
+	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver\u00a0·\u00a0happy"])
 	assert_eq(Array(TownScreen.card_for(Game.data, state, {"kind": "building", "uid": empty})["lines"])[1],
 		"Nobody lives here yet.")
 	var diver: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "villager", "villager": "pearl_diver"})
@@ -153,3 +160,178 @@ func test_the_land_is_framed_clear_of_the_hud() -> void:
 		var corners: PackedVector2Array = [rect.position, Vector2(rect.end.x, rect.position.y), rect.end,
 			Vector2(rect.position.x, rect.end.y)]
 		assert_eq(Geometry2D.intersect_polygons(outline, corners).size(), 0, "nothing of the land under %s" % rect)
+
+
+# --- Building, moving and homes (PR 5b) -----------------------------------------------------
+
+func _cell_point(board: TownBoard, cell: Vector2i) -> Vector2:
+	return board.view.to_screen(Vector3(cell.x + 0.5, 0.0, cell.y + 0.5))
+
+
+func _rich(town_actions: int = 4) -> void:
+	Game.state.town.actions_left = town_actions
+	Game.state.add_resource("driftwood", 20)
+	Game.state.add_resource("pearls", 5)
+
+
+func test_a_build_goes_list_card_carry_stamp() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.open_build_list()
+	assert_eq(town.sheet, {"kind": "list"})
+	assert_not_null(town.find_child("cottage", true, false), "the list has a Cottage row")
+	town.open_building("cottage")
+	town.start_carry("cottage")
+	assert_eq(board.mode, TownBoard.Mode.CARRY)
+	board._pick_at(_cell_point(board, Vector2i(4, 2)))
+	assert_eq(town.sheet["kind"], "carry", "a path is no spot")
+	assert_eq(board.carry_problem, "On a path")
+	board._pick_at(_cell_point(board, Vector2i(1, 1)))
+	assert_eq(town.sheet["kind"], "confirm", "a costed build asks for the stamp")
+	assert_eq(Game.state.town.placed.size(), 0, "nothing is spent before the stamp")
+	assert_true(board.carry_held, "the ghost waits on its spot")
+	var stamp: HankoButton = town.find_child("Stamp", true, false) as HankoButton
+	stamp.pressed.emit()
+	stamp.pressed.emit()
+	assert_eq(Game.state.town.placed.size(), 1, "one stamp, one build")
+	assert_eq(Game.state.town.actions_left, 3, "one shell spent, once")
+	assert_eq(Game.state.resource("driftwood"), 16)
+	assert_eq(town.sheet, {})
+	assert_eq(board.mode, TownBoard.Mode.LOOK)
+	assert_eq(board.selected, {"kind": "building", "uid": Game.state.town.placed[0]["uid"]}, "the new home is picked")
+
+
+func test_backing_out_of_a_build_changes_nothing() -> void:
+	_rich()
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.open_building("cottage")
+	town.start_carry("cottage")
+	board._pick_at(_cell_point(board, Vector2i(1, 1)))
+	var esc: InputEventAction = InputEventAction.new()
+	esc.action = &"ui_cancel"
+	esc.pressed = true
+	town._unhandled_input(esc)
+	assert_eq(town.sheet["kind"], "carry", "Not here goes back to carrying")
+	assert_false(board.carry_held)
+	board.cancelled.emit()
+	assert_eq(town.sheet, {"kind": "building", "id": "cottage"}, "putting it back returns to its card")
+	town._unhandled_input(esc)
+	assert_eq(town.sheet, {"kind": "list"})
+	town._unhandled_input(esc)
+	assert_eq(town.sheet, {})
+	assert_false((town.get_node("%PauseMenu") as PauseMenu).visible, "Esc closed sheets before the menu")
+	assert_eq(Game.state.town.placed.size(), 0)
+	assert_eq(Game.state.town.actions_left, 4)
+
+
+func test_a_card_cant_be_carried_without_what_it_needs() -> void:
+	Game.state.town.actions_left = 4
+	var town: TownScreen = _open()
+	town.open_building("cottage")
+	var pick: Button = null
+	for node: Node in town.find_children("*", "Button", true, false):
+		if (node as Button).text == TownScreen.PICK_A_SPOT:
+			pick = node as Button
+	assert_not_null(pick)
+	assert_true(pick.disabled, "no driftwood, no carrying")
+
+
+func test_a_won_landmark_waits_on_arrival_and_places_free() -> void:
+	Game.state.town.actions_left = 4
+	Game.state._landmarks.append("hot_spring")
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	assert_eq(town.sheet, {"kind": "building", "id": "hot_spring"}, "the first thing on arrival (LM-5)")
+	town.start_carry("hot_spring")
+	board._pick_at(_cell_point(board, Vector2i(10, 0)))
+	assert_eq(Game.state.town.count("hot_spring"), 1, "placed with no stamp: it's free")
+	assert_eq(Game.state.town.actions_left, 4, "and costs no action")
+	assert_eq(town.sheet, {})
+	var said: bool = false
+	for label: Node in (town.get_node("%Notice") as Control).find_children("*", "Label", true, false):
+		said = said or (label as Label).text == TownScreen.CHEER % "Hot Spring"
+	assert_true(said, "the notice board says the town came out")
+
+
+func test_moving_is_free_and_the_last_move_undoes() -> void:
+	Game.state.town.actions_left = 2
+	var uid: int = Game.state.town.place("net_shed", Vector2i(0, 0))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.start_carry("net_shed", uid)
+	assert_eq(board.carry_cell, Vector2i(0, 0), "it lifts from where it stands")
+	board._pick_at(_cell_point(board, Vector2i(5, 5)))
+	assert_eq(Game.state.town.entry(uid)["x"], 5, "moved with no stamp")
+	assert_eq(Game.state.town.actions_left, 2, "for free")
+	assert_eq(town.last_move, {"uid": uid, "cell": Vector2i(0, 0)})
+	town.undo_move()
+	assert_eq(Vector2i(Game.state.town.entry(uid)["x"], Game.state.town.entry(uid)["y"]), Vector2i(0, 0))
+	assert_eq(town.last_move, {}, "one undo")
+
+
+func test_a_villager_moves_to_another_home_from_their_card() -> void:
+	Game.state._villagers.append("pearl_diver")
+	Game.state._villagers.append("shipwright")
+	var sea: int = Game.state.town.place("cottage", Vector2i(0, 7))
+	var inland: int = Game.state.town.place("cottage", Vector2i(1, 1))
+	Game.state.town.homes["pearl_diver"] = inland
+	Game.state.town.homes["shipwright"] = sea
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.pick_home_for("pearl_diver")
+	assert_eq(board.home_choices(), [sea] as Array[int], "every home but her own")
+	board.home_chosen.emit(sea)
+	assert_eq(Game.state.town.homes["pearl_diver"], sea)
+	assert_eq(Game.state.town.homes["shipwright"], inland, "whoever lived there swaps back")
+	assert_eq(board.selected, {"kind": "villager", "villager": "pearl_diver"})
+
+
+func test_the_homeless_line_offers_a_cottage() -> void:
+	Game.state._villagers.append("pearl_diver")
+	var town: TownScreen = _open()
+	var shortcut: Button = null
+	for node: Node in (town.get_node("%Notice") as Control).find_children("*", "Button", true, false):
+		if (node as Button).text == "Build a Cottage":
+			shortcut = node as Button
+	assert_not_null(shortcut)
+	shortcut.pressed.emit()
+	assert_eq(town.sheet, {"kind": "building", "id": "cottage"})
+
+
+func test_carrying_lights_the_spots_that_make_someone_happy() -> void:
+	_rich()
+	Game.state._villagers.append("onsen_keeper")
+	Game.state.town.homes["onsen_keeper"] = Game.state.town.place("cottage", Vector2i(1, 1))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.start_carry("tea_stall")
+	var lit: Array[Vector2i] = board.wish_cells.duplicate()
+	lit.sort()
+	assert_eq(lit, [Vector2i(0, 1), Vector2i(1, 0), Vector2i(1, 2), Vector2i(2, 1)] as Array[Vector2i])
+
+
+func test_name_tags_never_cover_bubbles_or_each_other() -> void:
+	for villager: String in ["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"]:
+		Game.state._villagers.append(villager)
+	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 7))
+	Game.state.town.homes["shipwright"] = Game.state.town.place("cottage", Vector2i(2, 5))
+	Game.state.town.place("net_shed", Vector2i(2, 6))
+	Game.state.town.homes["onsen_keeper"] = Game.state.town.place("cottage", Vector2i(9, 2))
+	Game.state.town.place("tea_stall", Vector2i(1, 1))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	board.show_all_names = true
+	var spots: Dictionary[String, Vector3] = board.view.villager_spots(Game.data, Game.state)
+	var taken: Array[Rect2] = []
+	for rect: Rect2 in board.bubble_rects(spots).values():
+		taken.append(rect)
+	var tags: Array[Dictionary] = board.map_tags(spots)
+	assert_eq(tags.size(), 4 + 5, "every villager and every building")
+	for tag: Dictionary in tags:
+		var rect: Rect2 = tag["rect"]
+		assert_true(Rect2(Vector2.ZERO, board.size).encloses(rect), "%s stays on screen" % tag["text"])
+		for other: Rect2 in taken:
+			assert_false(rect.intersects(other), "%s covers nothing" % tag["text"])
+		taken.append(rect)

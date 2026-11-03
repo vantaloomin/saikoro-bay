@@ -85,8 +85,8 @@ func test_a_card_lists_everything_youre_short_of_and_nothing_changes() -> void:
 	var refusals: Array[Dictionary] = state.build(data, "tea_stall", Vector2i(5, 0))
 	assert_eq(_kinds(refusals), [Town.Refusal.SHORT, Town.Refusal.SHORT, Town.Refusal.NO_ACTIONS])
 	assert_eq(_texts(refusals), [
-		"Needs 1 more Driftwood (you have 2) · found in fights and small locks below",
-		"Needs 1 more Pearls (you have 0) · found in fights and pearl locks below",
+		"Needs 1 more driftwood (you have 2) · found in fights and small locks below",
+		"Needs 1 more pearl (you have 0) · found in fights and pearl locks below",
 		"No actions left",
 	])
 	assert_eq([state.resource("driftwood"), state.town.actions_left, state.town.placed.size()], [2, 0, 0])

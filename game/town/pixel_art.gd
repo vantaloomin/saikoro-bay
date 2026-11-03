@@ -1,7 +1,7 @@
 class_name PixelArt
 extends RefCounted
 ## Placeholder pixel sprites for the town, drawn into images in code so the
-## greybox needs no art files: a 16 × 24 villager and a 14 × 14 mood bubble.
+## greybox needs no art files: a 16 × 24 villager, a 14 × 14 mood bubble and a padlock.
 ## Real sprite sheets replace these at the art pass.
 
 const OUTLINE: Color = Color(0.16, 0.12, 0.12)
@@ -77,6 +77,20 @@ static func mood(value: Town.Mood) -> Image:
 				# A roof with its middle missing.
 				image.fill_rect(Rect2i(2 + step, 5 - step, 1, 1), TownStyle.VERMILION)
 				image.fill_rect(Rect2i(11 - step, 5 - step, 1, 1), TownStyle.VERMILION)
+	outline(image)
+	return image
+
+
+## A 10 × 12 padlock for a building that isn't unlocked yet: a shape, so
+## "locked" never rests on dimming alone.
+static func padlock() -> Image:
+	var image: Image = Image.create(10, 12, false, Image.FORMAT_RGBA8)
+	var shackle: Color = TownStyle.DIM
+	image.fill_rect(Rect2i(2, 1, 6, 1), shackle)
+	image.fill_rect(Rect2i(2, 1, 1, 5), shackle)
+	image.fill_rect(Rect2i(7, 1, 1, 5), shackle)
+	image.fill_rect(Rect2i(1, 5, 8, 6), TownStyle.SAND.darkened(0.15))
+	image.fill_rect(Rect2i(4, 7, 2, 2), OUTLINE)
 	outline(image)
 	return image
 

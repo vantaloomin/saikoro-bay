@@ -223,7 +223,8 @@ func build_refusals(data: GameData, building_id: String) -> Array[Dictionary]:
 		var have: int = resource(id)
 		if have < (cost[id] as int):
 			var resource_row: Dictionary = data.row("resources", id)
-			var text: String = "Needs %d more %s (you have %d)" % [(cost[id] as int) - have, resource_row.get("name", id), have]
+			var short: int = (cost[id] as int) - have
+			var text: String = "Needs %d more %s (you have %d)" % [short, amount_name(data, id, short), have]
 			if not str(resource_row.get("found", "")).is_empty():
 				text += " · " + str(resource_row["found"])
 			out.append(_refusal(Town.Refusal.SHORT, text))
@@ -380,6 +381,18 @@ func _locked_reason(data: GameData, row: Dictionary) -> String:
 			if not _landmarks.has(row["id"]):
 				return "Win it in Koban's vault"
 	return ""
+
+
+## A resource's name beside an amount, as costs and refusals say it: lower
+## case, and one of a plural reads singular ("1 pearl", "2 pearls"). A name
+## that starts with a proper name, like Koban, keeps its capital.
+static func amount_name(data: GameData, id: String, amount: int) -> String:
+	var name: String = str(data.row("resources", id).get("name", id))
+	if not name.begins_with("Koban"):
+		name = name.to_lower()
+	if amount == 1 and name.ends_with("s"):
+		name = name.left(-1)
+	return name
 
 
 static func _refusal(kind: Town.Refusal, text: String) -> Dictionary:

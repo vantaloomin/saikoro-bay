@@ -11,6 +11,14 @@ extends Control
 ## kept and lost (spec section 1). It only moves when touched: a button that
 ## glows or pushes the player would spoil the "second delve unprompted"
 ## signal. Quit lives in the pause menu (Start or Esc), away from it.
+##
+## Building (PR 5b): "Build" on the tray (X, or the B key) opens the build
+## list in the right column. A building's card says what it costs and why
+## it can't be built yet; "Pick a spot" carries it over the town, and a
+## costed build is confirmed with the hanko stamp, the town's only confirm.
+## Free things never ask: placing a won landmark (the town celebrates),
+## moving a building (with an undo for the last move), and moving a
+## villager to another home.
 
 ## What the notice board says about the last delve. An abandoned delve is
 ## said plainly, so a player who quit mid-delve knows what it cost.
@@ -38,6 +46,10 @@ const HOLD_HINT_PAD: String = "Hold"
 ## the HUD grows to keep body text near 24 px (SA-6, the Deck at 1280 × 800).
 const HUD_TARGET_SCALE: float = 0.92
 const HUD_MAX_GROWTH: float = 1.3
+const PICK_A_SPOT: String = "Pick a spot"
+const CHEER: String = "Everyone came out to see the %s."
+## The build sheet's title, close button and margins, around its rows.
+const LIST_CHROME: float = 170.0
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -55,6 +67,17 @@ var _shells: ShellTray
 ## Whether a controller was the last input, for the hint's wording.
 var using_pad: bool = false
 var hud_scale: float = 1.0
+## What the right column shows instead of the selection's card, if
+## anything: {"kind": "list"}, {"kind": "building", "id"} (a card from the
+## list), {"kind": "carry", "id", "uid"} (uid 0 for a new building),
+## {"kind": "confirm", "id", "cell"} (the stamp), or {"kind": "home",
+## "villager"}.
+var sheet: Dictionary = {}
+## The last free move, for its undo: {"uid", "cell"} where it came from.
+var last_move: Dictionary = {}
+## Said on the notice board after a landmark is placed.
+var _cheer: String = ""
+var _stamp: HankoButton
 
 
 func _ready() -> void:
@@ -68,6 +91,9 @@ func _ready() -> void:
 	_pause_menu.closed.connect(SceneFlow.focus_default)
 	_board.setup(Game.data, GameState.town_map(Game.data))
 	_board.picked.connect(_on_picked)
+	_board.spot_chosen.connect(_on_spot_chosen)
+	_board.home_chosen.connect(_on_home_chosen)
+	_board.cancelled.connect(back)
 	_card.resized.connect(_aim_leader)
 	_card.visibility_changed.connect(_aim_leader)
 	get_viewport().size_changed.connect(_fit_hud)
@@ -75,6 +101,10 @@ func _ready() -> void:
 	refresh()
 	_fit_hud.call_deferred()
 	SceneFlow.focus_default()
+	# A landmark won on the last delve is the first thing on arrival (LM-5).
+	var waiting: Array[String] = Game.state.landmarks_waiting()
+	if not waiting.is_empty():
+		open_building(waiting[0])
 
 
 ## Redraws everything from the sim.
@@ -82,14 +112,28 @@ func refresh() -> void:
 	_board.show_state(Game.state)
 	_fill(_ledger, "Ledger", _ledger_rows())
 	var notice: Array[Control] = []
-	for line: String in notice_lines(Game.data, Game.state, Game.save_problem):
+	var homeless: String = Game.state.homeless_line(Game.data)
+	var lines: PackedStringArray = notice_lines(Game.data, Game.state, Game.save_problem)
+	if not _cheer.is_empty():
+		lines.insert(0, _cheer)
+	for line: String in lines:
 		notice.append(TownStyle.label(line))
+		if line == homeless:
+			# The shortcut sits right under the line it answers (VH-4).
+			notice.append(_button("Build a Cottage", open_building.bind("cottage")))
 	_fill(_notice, "Notice board", notice)
 	_shells = ShellTray.new()
 	_shells.show_state(Game.data, Game.state)
-	_fill(_tray_panel, "Actions", [_shells])
+	var build: Button = _button("Build", toggle_build_list)
+	build.name = "Build"
+	var tray: Array[Control] = [_shells]
+	if Game.state.town.actions_left == 0:
+		# Said once, here, not on every card (spec section 3).
+		tray.append(TownStyle.label(ShellTray.describe(Game.state), TownStyle.SMALL))
+	tray.append(build)
+	_fill(_tray_panel, "Actions", tray)
 	_go_down.text = Game.state.go_down_label(Game.data)
-	_show_card(_board.selected)
+	_show_right_column()
 
 
 func _input(event: InputEvent) -> void:
@@ -111,11 +155,35 @@ func _input(event: InputEvent) -> void:
 	elif button.button_index == JOY_BUTTON_START and button.pressed:
 		_pause_menu.open()
 		get_viewport().set_input_as_handled()
+	elif button.button_index == JOY_BUTTON_X and button.pressed:
+		# X is context (two-halves section 3): the selection's card buttons,
+		# or the build list when nothing is selected.
+		var first: Control = _first_button(_card) if _card.visible and sheet.is_empty() else null
+		if first != null:
+			first.grab_focus()
+		else:
+			toggle_build_list()
+		get_viewport().set_input_as_handled()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed(&"ui_cancel"):
-		_pause_menu.toggle()
+	if _pause_menu.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_pause_menu.close()
+			get_viewport().set_input_as_handled()
+		return
+	var key: InputEventKey = event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_B:
+		toggle_build_list()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed(&"ui_cancel"):
+		var focused: Control = get_viewport().gui_get_focus_owner()
+		if not sheet.is_empty():
+			back()
+		elif focused != null and _card.is_ancestor_of(focused):
+			_board.grab_focus()
+		else:
+			_pause_menu.open()
 		get_viewport().set_input_as_handled()
 
 
@@ -125,8 +193,165 @@ func _on_go_down_held() -> void:
 		_fade_hint()
 
 
-func _on_picked(hit: Dictionary) -> void:
-	_show_card(hit)
+func _on_picked(_hit: Dictionary) -> void:
+	sheet = {}
+	_show_right_column()
+
+
+# --- Building, moving and homes -----------------------------------------------------------
+
+func toggle_build_list() -> void:
+	if sheet.get("kind", "") == "list":
+		close_sheet()
+	elif sheet.get("kind", "") not in ["carry", "confirm"]:
+		open_build_list()
+
+
+func open_build_list() -> void:
+	_board.stop_mode()
+	_board.select({})
+	sheet = {"kind": "list"}
+	_show_right_column()
+
+
+## A building's card from the list (or the notice board's shortcut): what
+## it does and costs, why not yet, and "Pick a spot".
+func open_building(building_id: String) -> void:
+	_board.stop_mode()
+	_board.select({})
+	sheet = {"kind": "building", "id": building_id}
+	_show_right_column()
+
+
+func close_sheet() -> void:
+	_board.stop_mode()
+	sheet = {}
+	_show_right_column()
+	SceneFlow.focus_default()
+
+
+## Picks up a new building, or placed building `uid` to move it.
+func start_carry(building_id: String, uid: int = 0) -> void:
+	_board.select({})
+	if using_pad:
+		_board.place_cursor(_board.view.to_screen(_board.view.target))
+	_board.start_carry(building_id, uid)
+	sheet = {"kind": "carry", "id": building_id, "uid": uid}
+	_show_right_column()
+	_board.grab_focus()
+
+
+## One step back: the stamp to the carry, the carry to where it came from,
+## a card to the list, the list (or a home pick) to looking around.
+func back() -> void:
+	match str(sheet.get("kind", "")):
+		"confirm":
+			_board.hold_carry(false)
+			sheet = {"kind": "carry", "id": sheet["id"], "uid": 0}
+			_show_right_column()
+			_board.grab_focus()
+		"carry":
+			var uid: int = sheet["uid"]
+			var building: String = sheet["id"]
+			_board.stop_mode()
+			if uid != 0:
+				sheet = {}
+				_board.select({"kind": "building", "uid": uid})
+				_show_right_column()
+				SceneFlow.focus_default()
+			else:
+				open_building(building)
+		"building":
+			open_build_list()
+		"home":
+			var villager: String = sheet["villager"]
+			_board.stop_mode()
+			sheet = {}
+			_board.select({"kind": "villager", "villager": villager})
+			_show_right_column()
+			SceneFlow.focus_default()
+		_:
+			close_sheet()
+
+
+func _on_spot_chosen(cell: Vector2i) -> void:
+	if sheet.get("kind", "") != "carry":
+		return
+	var building: String = sheet["id"]
+	var uid: int = sheet["uid"]
+	if uid != 0:
+		var from: Dictionary = Game.state.town.entry(uid)
+		var was: Vector2i = Vector2i(from["x"], from["y"])
+		if not Game.move_building(uid, cell).is_empty():
+			return
+		last_move = {"uid": uid, "cell": was} if was != cell else {}
+		_finish_change({"kind": "building", "uid": uid}, "")
+	elif BuildList.cost_text(Game.data, building) == BuildList.FREE:
+		_place(building, cell)
+	else:
+		_board.hold_carry(true)
+		sheet = {"kind": "confirm", "id": building, "cell": cell}
+		_show_right_column()
+
+
+func _on_stamped() -> void:
+	if sheet.get("kind", "") == "confirm":
+		_place(sheet["id"], sheet["cell"])
+
+
+## Builds through the one sim call; on a refusal the stamp's card lists why.
+func _place(building: String, cell: Vector2i) -> void:
+	var refusals: Array[Dictionary] = Game.build(building, cell)
+	if not refusals.is_empty():
+		if sheet.get("kind", "") == "confirm":
+			sheet["refusals"] = refusals
+			_show_right_column()
+		return
+	var uid: int = Game.state.town.placed.back()["uid"]
+	last_move = {}
+	if Game.data.row("buildings", building)["kind"] == "landmark":
+		_finish_change({"kind": "building", "uid": uid}, CHEER % BuildList.card_for(Game.data, Game.state, building)["title"])
+		_board.celebrate(uid)
+	else:
+		_finish_change({"kind": "building", "uid": uid}, "")
+
+
+func undo_move() -> void:
+	if last_move.is_empty():
+		return
+	var uid: int = last_move["uid"]
+	if Game.move_building(uid, last_move["cell"]).is_empty():
+		last_move = {}
+		_finish_change({"kind": "building", "uid": uid}, "")
+
+
+func pick_home_for(villager: String) -> void:
+	_board.select({})
+	_board.start_home_pick(villager)
+	sheet = {"kind": "home", "villager": villager}
+	_show_right_column()
+	_board.grab_focus()
+
+
+func _on_home_chosen(uid: int) -> void:
+	if sheet.get("kind", "") != "home":
+		return
+	var villager: String = sheet["villager"]
+	if Game.swap_home(villager, uid).is_empty():
+		last_move = {}
+		_finish_change({"kind": "villager", "villager": villager}, "")
+
+
+## After a build, move or swap: back to looking, with the thing that
+## changed selected, and `cheer` on the notice board (or nothing).
+func _finish_change(select: Dictionary, cheer: String) -> void:
+	_board.stop_mode()
+	sheet = {}
+	_cheer = cheer
+	refresh()
+	_board.select(select)
+	_show_right_column()
+	SceneFlow.focus_default()
 
 
 # --- Hint, HUD size and framing -------------------------------------------------------------
@@ -207,7 +432,7 @@ static func _scaled_rect(part: Control) -> Rect2:
 
 ## Points the board's leader line at the card's left edge.
 func _aim_leader() -> void:
-	if not _card.visible:
+	if not _card.visible or not sheet.is_empty():
 		_board.leader_target = Vector2.INF
 	else:
 		var card: Rect2 = _card.get_global_rect()
@@ -254,7 +479,7 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 			if row.get("kind", "") == "home":
 				var resident: String = state.town.resident(hit["uid"])
 				lines.append("Nobody lives here yet." if resident.is_empty()
-					else "Home of the %s · %s" % [data.row("villagers", resident).get("role", resident),
+					else "Home of the %s\u00a0·\u00a0%s" % [data.row("villagers", resident).get("role", resident),
 						MOOD_SHORT[state.mood(data, resident)]])
 			return {"title": str(row.get("name", building["building"])), "lines": lines, "chip": "", "quote": ""}
 		"villager":
@@ -291,7 +516,10 @@ func _ledger_rows() -> Array[Control]:
 ## Replaces a panel's contents with a title and `children`.
 func _fill(panel: PanelContainer, title: String, children: Array[Control]) -> void:
 	for old: Node in panel.get_children():
-		panel.remove_child(old)
+		# Hidden and freed at the end of the frame, still in the tree so it
+		# never dangles: a button may be replacing its own panel.
+		(old as Control).visible = false
+		old.name = "Old"
 		old.queue_free()
 	var stack: VBoxContainer = VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 8)
@@ -299,6 +527,151 @@ func _fill(panel: PanelContainer, title: String, children: Array[Control]) -> vo
 	for child: Control in children:
 		stack.add_child(child)
 	panel.add_child(stack)
+
+
+## The right column: the notice board, then the open sheet or the
+## selection's card. The build sheets take the notice board's room.
+func _show_right_column() -> void:
+	var kind: String = str(sheet.get("kind", ""))
+	_notice.visible = kind not in ["list", "building", "confirm"]
+	match kind:
+		"list":
+			_show_list()
+		"building":
+			_show_building(str(sheet["id"]))
+		"carry":
+			_show_carry()
+		"confirm":
+			_show_confirm()
+		"home":
+			_show_home_pick()
+		_:
+			_show_card(_board.selected)
+	_aim_leader()
+
+
+## The build list, scrolling if it's taller than the room above "Go down"
+## (on the Deck, with the HUD grown).
+func _show_list() -> void:
+	var rows: VBoxContainer = VBoxContainer.new()
+	rows.add_theme_constant_override("separation", 8)
+	for entry: Dictionary in BuildList.entries(Game.data, Game.state):
+		rows.add_child(_list_entry(entry))
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.name = "Rows"
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	scroll.add_child(rows)
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fill(_card, "Build", [scroll, _button("Close", close_sheet)])
+	_card.visible = true
+	_fit_list.call_deferred(scroll, rows)
+
+
+func _fit_list(scroll: ScrollContainer, rows: VBoxContainer) -> void:
+	if not is_instance_valid(scroll):
+		return
+	var actions_top: float = _scaled_rect(_actions).position.y
+	var room: float = (actions_top - 16.0 - _right_column.position.y) / hud_scale - LIST_CHROME
+	scroll.custom_minimum_size.y = minf(rows.get_combined_minimum_size().y, maxf(room, 160.0))
+	scroll.scroll_vertical = 0
+	_focus_first()
+
+
+## One row of the build list: the name (with a padlock if it isn't
+## unlocked) over its cost, or over why not yet. Locked and all-built rows
+## are dimmed but still open their card, which says it all.
+func _list_entry(entry: Dictionary) -> Button:
+	var second: String = str(entry["status"]) if entry["locked"] or entry["done"] else str(entry["cost"])
+	if str(entry["status"]) == BuildList.WAITING:
+		second = "%s · %s" % [entry["cost"], entry["status"]]
+	var row: Button = _button("%s\n%s" % [entry["name"], second], open_building.bind(str(entry["id"])))
+	row.name = str(entry["id"])
+	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
+		var box: StyleBox = row.get_theme_stylebox(state)
+		box.content_margin_top = 8
+		box.content_margin_bottom = 8
+	if entry["locked"]:
+		var lock: Image = PixelArt.padlock()
+		lock.resize(lock.get_width() * 3, lock.get_height() * 3, Image.INTERPOLATE_NEAREST)
+		row.icon = ImageTexture.create_from_image(lock)
+	if entry["locked"] or entry["done"]:
+		for color_name: String in ["font_color", "font_hover_color", "font_focus_color"]:
+			row.add_theme_color_override(color_name, TownStyle.DIM)
+	return row
+
+
+func _show_building(building_id: String) -> void:
+	var card: Dictionary = BuildList.card_for(Game.data, Game.state, building_id)
+	var children: Array[Control] = []
+	for line: String in card["lines"]:
+		children.append(TownStyle.label(line))
+	if Game.data.row("buildings", building_id)["kind"] == "landmark":
+		var place: Button = _button("Place now", start_carry.bind(building_id, 0))
+		place.disabled = not card["can_place"]
+		children.append(place)
+		children.append(_button("Later", close_sheet))
+	else:
+		var pick: Button = _button(PICK_A_SPOT, start_carry.bind(building_id, 0))
+		pick.disabled = not card["can_place"]
+		children.append(pick)
+		children.append(_button("Back", open_build_list))
+	_fill(_card, str(card["title"]), children)
+	_card.visible = true
+	_focus_first.call_deferred()
+
+
+func _show_carry() -> void:
+	var building: String = sheet["id"]
+	var moving: bool = int(sheet["uid"]) != 0
+	var name: String = str(BuildList.card_for(Game.data, Game.state, building)["title"])
+	var children: Array[Control] = [
+		TownStyle.label(BuildList.FREE if moving else BuildList.cost_text(Game.data, building)),
+		TownStyle.label("Lit spots would make someone happier.", TownStyle.SMALL, TownStyle.DIM),
+		TownStyle.label(("B" if using_pad else "Right-click") + " to put it back.", TownStyle.SMALL, TownStyle.DIM),
+	]
+	var put_back: Button = _button("Put it back", back)
+	put_back.focus_mode = Control.FOCUS_NONE
+	children.append(put_back)
+	_fill(_card, ("Move the %s" if moving else "Place the %s") % name, children)
+	_card.visible = true
+
+
+func _show_confirm() -> void:
+	var building: String = sheet["id"]
+	var name: String = str(BuildList.card_for(Game.data, Game.state, building)["title"])
+	var children: Array[Control] = [TownStyle.label(BuildList.cost_text(Game.data, building))]
+	for refusal: Dictionary in sheet.get("refusals", []) as Array:
+		children.append(TownStyle.label(str(refusal["text"])))
+	_stamp = HankoButton.new()
+	_stamp.text = "Stamp"
+	_stamp.name = "Stamp"
+	_stamp.stamped.connect(_on_stamped)
+	if sheet.has("refusals"):
+		_stamp.disabled = true
+	children.append(_stamp)
+	children.append(_button("Not here", back))
+	_fill(_card, "Build the %s here?" % name, children)
+	_card.visible = true
+	_focus_first.call_deferred()
+
+
+func _show_home_pick() -> void:
+	var villager: String = sheet["villager"]
+	var role: String = str(Game.data.row("villagers", villager).get("role", villager))
+	var swap_line: String = "Whoever lives there moves into the %s's home." % role if Game.state.town.homes.has(villager) \
+		else "Whoever lives there waits on the dock."
+	var children: Array[Control] = [
+		TownStyle.label("Pick one of the framed homes.", TownStyle.BODY),
+		TownStyle.label(swap_line, TownStyle.SMALL, TownStyle.DIM),
+	]
+	var cancel: Button = _button("Cancel", back)
+	cancel.focus_mode = Control.FOCUS_NONE
+	children.append(cancel)
+	_fill(_card, "A new home for the %s" % role, children)
+	_card.visible = true
 
 
 func _show_card(hit: Dictionary) -> void:
@@ -322,4 +695,43 @@ func _show_card(hit: Dictionary) -> void:
 		children.append(chip)
 	if not str(card["quote"]).is_empty():
 		children.append(TownStyle.label(str(card["quote"]), TownStyle.BODY, TownStyle.DIM))
+	match str(hit.get("kind", "")):
+		"building":
+			var uid: int = hit["uid"]
+			children.append(_button("Move · free", start_carry.bind(str(Game.state.town.entry(uid)["building"]), uid)))
+			if last_move.get("uid", 0) == uid:
+				children.append(_button("Undo move", undo_move))
+		"villager":
+			if _has_other_home(str(hit["villager"])):
+				children.append(_button("Move to another home", pick_home_for.bind(str(hit["villager"]))))
 	_fill(_card, str(card["title"]), children)
+
+
+func _has_other_home(villager: String) -> bool:
+	for building: Dictionary in Game.state.town.placed:
+		if TownView.kind_of(Game.data, building) == "home" and Game.state.town.homes.get(villager, 0) != building["uid"]:
+			return true
+	return false
+
+
+func _button(text: String, action: Callable) -> Button:
+	var button: Button = Button.new()
+	button.text = text
+	TownStyle.style_button(button, TownStyle.SMALL)
+	button.pressed.connect(action)
+	return button
+
+
+func _focus_first() -> void:
+	var first: Control = _first_button(_card)
+	if first != null:
+		first.grab_focus()
+
+
+## The card's first button that can take focus, or null.
+static func _first_button(panel: Control) -> Control:
+	for node: Node in panel.find_children("*", "Button", true, false):
+		var button: Button = node as Button
+		if not button.disabled and button.focus_mode != Control.FOCUS_NONE and not button.is_queued_for_deletion():
+			return button
+	return null
