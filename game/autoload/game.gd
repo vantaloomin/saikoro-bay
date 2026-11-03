@@ -80,7 +80,7 @@ func load_or_new() -> String:
 	else:
 		state = loaded
 		if state.phase == GameState.Phase.DELVE:
-			state.finish_delve(Haul.ABANDONED, Haul.new())
+			state.finish_delve(data, Haul.ABANDONED, Haul.new())
 			save()
 	return scene_for_phase()
 
@@ -133,6 +133,17 @@ func move_building(uid: int, cell: Vector2i) -> String:
 	return problem
 
 
+## Moves a villager into another home for free (whoever lived there swaps
+## back), and saves. Returns "" when done, or why not.
+func swap_home(villager: String, uid: int) -> String:
+	if state.phase != GameState.Phase.TOWN:
+		return "Not in town"
+	var problem: String = state.swap_home(data, villager, uid)
+	if problem.is_empty():
+		save()
+	return problem
+
+
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
 func go_down() -> bool:
 	if SceneFlow.busy or not state.start_delve():
@@ -153,7 +164,7 @@ func go_down() -> bool:
 func come_up() -> bool:
 	if SceneFlow.busy or run == null or not run.is_over():
 		return false
-	if not state.finish_delve(run.outcome(), run.haul):
+	if not state.finish_delve(data, run.outcome(), run.haul):
 		return false
 	run = null
 	var error: Error = save()

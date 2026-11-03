@@ -1,6 +1,8 @@
 extends GutTest
 ## GameState: half changes, integer resources, delve seeds and saving.
 
+var game_data: GameData = GameData.load_dir()
+
 
 func test_starts_in_town() -> void:
 	var state: GameState = GameState.new(1)
@@ -13,8 +15,8 @@ func test_delve_can_only_start_once() -> void:
 	assert_true(state.start_delve())
 	assert_false(state.start_delve(), "a double click can't start a second delve")
 	assert_eq(state.delve_count, 1)
-	assert_true(state.finish_delve(Haul.SURFACED, Haul.new()))
-	assert_false(state.finish_delve(Haul.SURFACED, Haul.new()), "banks only once")
+	assert_true(state.finish_delve(game_data, Haul.SURFACED, Haul.new()))
+	assert_false(state.finish_delve(game_data, Haul.SURFACED, Haul.new()), "banks only once")
 	assert_eq(state.phase, GameState.Phase.TOWN)
 
 
@@ -136,7 +138,7 @@ func _in_delve() -> GameState:
 
 func test_surfacing_banks_the_whole_haul() -> void:
 	var state: GameState = _in_delve()
-	assert_true(state.finish_delve(Haul.SURFACED, _haul()))
+	assert_true(state.finish_delve(game_data, Haul.SURFACED, _haul()))
 	assert_eq(state.phase, GameState.Phase.TOWN)
 	assert_eq(state.resource("driftwood"), 11)
 	assert_eq(state.resource("pearls"), 1)
@@ -147,7 +149,7 @@ func test_surfacing_banks_the_whole_haul() -> void:
 
 func test_washing_up_keeps_half_and_sends_the_rest_back() -> void:
 	var state: GameState = _in_delve()
-	assert_true(state.finish_delve(Haul.WASHED_UP, _haul()))
+	assert_true(state.finish_delve(game_data, Haul.WASHED_UP, _haul()))
 	assert_eq(state.resource("driftwood"), 2 + 4)
 	assert_eq(state.resource("pearls"), 0, "half of 1 rounds down")
 	assert_eq(state.villagers(), [] as Array[String], "the villager goes back below")
@@ -158,7 +160,7 @@ func test_washing_up_keeps_half_and_sends_the_rest_back() -> void:
 
 func test_an_abandoned_delve_keeps_nothing() -> void:
 	var state: GameState = _in_delve()
-	assert_true(state.finish_delve(Haul.ABANDONED, _haul()))
+	assert_true(state.finish_delve(game_data, Haul.ABANDONED, _haul()))
 	assert_eq(state.resource("driftwood"), 2)
 	assert_eq(state.last_delve["outcome"], "abandoned")
 	assert_eq(state.phase, GameState.Phase.TOWN)
@@ -166,13 +168,13 @@ func test_an_abandoned_delve_keeps_nothing() -> void:
 
 func test_banking_refuses_bad_calls_and_never_duplicates() -> void:
 	var state: GameState = GameState.new(3)
-	assert_false(state.finish_delve(Haul.SURFACED, _haul()), "not in a delve")
+	assert_false(state.finish_delve(game_data, Haul.SURFACED, _haul()), "not in a delve")
 	state.start_delve()
-	assert_false(state.finish_delve("vanished", _haul()), "unknown outcome")
+	assert_false(state.finish_delve(game_data, "vanished", _haul()), "unknown outcome")
 	assert_eq(state.phase, GameState.Phase.DELVE)
-	assert_true(state.finish_delve(Haul.SURFACED, _haul()))
+	assert_true(state.finish_delve(game_data, Haul.SURFACED, _haul()))
 	state.start_delve()
-	assert_true(state.finish_delve(Haul.CLEARED, _haul()))
+	assert_true(state.finish_delve(game_data, Haul.CLEARED, _haul()))
 	assert_eq(state.villagers(), ["pearl_diver"] as Array[String], "never twice")
 	assert_eq(state.landmarks(), ["cafe"] as Array[String])
 
@@ -180,7 +182,7 @@ func test_banking_refuses_bad_calls_and_never_duplicates() -> void:
 func test_town_villagers_bring_their_perks_and_leave_the_pools() -> void:
 	var data: GameData = GameData.load_dir()
 	var state: GameState = _in_delve()
-	state.finish_delve(Haul.SURFACED, _haul())
+	state.finish_delve(game_data, Haul.SURFACED, _haul())
 	assert_eq(state.delve_perks(data), [{"perk": "nudge", "source": "pearl_diver"}] as Array[Dictionary])
 	assert_eq(state.villagers_left(data), ["shipwright", "onsen_keeper", "shrine_keeper"] as Array[String])
 	assert_eq(state.landmarks_left(data), ["hot_spring"] as Array[String])
@@ -188,7 +190,7 @@ func test_town_villagers_bring_their_perks_and_leave_the_pools() -> void:
 
 func test_banked_state_round_trips_through_a_save() -> void:
 	var state: GameState = _in_delve()
-	state.finish_delve(Haul.WASHED_UP, _haul())
+	state.finish_delve(game_data, Haul.WASHED_UP, _haul())
 	var decoded: SaveCodec.DecodeResult = SaveCodec.decode(SaveCodec.encode({GameState.PAYLOAD_KEY: state.to_dict()}))
 	var loaded: GameState = GameState.from_dict(decoded.payload[GameState.PAYLOAD_KEY])
 	assert_not_null(loaded)
