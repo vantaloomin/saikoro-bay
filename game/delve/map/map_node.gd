@@ -28,6 +28,12 @@ var lit: bool = false:
 	set(v):
 		lit = v
 		queue_redraw()
+## The room being pointed at: a jade ring to match the glowing paths, so a
+## still frame shows which room it is (Mara, #29).
+var pointed: bool = false:
+	set(v):
+		pointed = v
+		queue_redraw()
 
 
 func _init() -> void:
@@ -93,6 +99,8 @@ func _draw() -> void:
 		draw_arc(c, r, 0, TAU, 48, BoardStyle.GOLD, 3.0, true)
 		if pulse > 0.0:
 			draw_arc(c, r + 4.0 + pulse * 14.0, 0, TAU, 48, Color(BoardStyle.GOLD, 1.0 - pulse), 3.0, true)
+	if pointed:
+		draw_arc(rect.get_center(), SIZE / 2.0 + 18.0, 0, TAU, 48, BoardStyle.JADE, 6.0, true)
 	var width: float = 6.0 if lit or state == "current" else 4.0
 	MapGlyphs.draw_room(self, rect, type, color, width)
 	if state == "visited":

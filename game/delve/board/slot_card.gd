@@ -32,6 +32,9 @@ var held_fit: int = 0
 ## the sockets for a full slot.
 var pulsing: bool = false
 var pulsing_sockets: bool = false
+## A persistent lock that has opened (a rescue cage lock): it stays open
+## and takes no dice, so its sockets show OPEN instead.
+var opened: bool = false
 
 
 func _init() -> void:
@@ -114,7 +117,15 @@ func _draw() -> void:
 	var total: float = socket * sockets + gap * (sockets - 1)
 	var sx: float = (size.x - total) / 2.0
 	var sy: float = 212
-	for i: int in sockets:
+	if opened:
+		var band: Rect2 = Rect2(sx - 8, sy, total + 16, socket)
+		draw_rect(band, BoardStyle.FELT)
+		draw_rect(band, BoardStyle.JADE, false, 5.0)
+		var word: String = "OPEN"
+		var w: float = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.NUMBER).x
+		draw_string(font, Vector2(band.get_center().x - w / 2.0, band.get_center().y + BoardStyle.NUMBER * 0.36), word,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.NUMBER, BoardStyle.JADE)
+	for i: int in (0 if opened else sockets):
 		var sr: Rect2 = Rect2(sx + i * (socket + gap), sy, socket, socket)
 		if i < placed_values.size():
 			BoardStyle.draw_die(self, sr.grow(-6), placed_values[i])

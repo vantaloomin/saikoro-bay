@@ -1,13 +1,13 @@
 extends Control
 ## The delve (M2): plays Game.run on the map screen. You pick rooms on the
-## map, fights play on the dice board, and at each landing you choose
-## Surface or Deeper with the stakes in front of you. The haul strip stays
-## along the top throughout.
+## map, fights play on the fight board, treasure, rest and rescue rooms on
+## the room board, and at each landing you choose Surface or Deeper with
+## the stakes in front of you. The haul strip stays along the top
+## throughout.
 ##
-## Stand-ins until their boards exist (Mara's UX, next): the room bot plays
-## treasure, rest and rescue rooms, and the map says what they gave; the
-## vault bot plays Koban's vault. A wash-up, surfacing or clearing the
-## vault goes back to town, where the haul is banked.
+## Stand-in until its board exists: the vault bot plays Koban's vault. A
+## wash-up, surfacing or clearing the vault goes back to town, where the
+## haul is banked.
 
 const BOARD_SCENE: PackedScene = preload("res://game/delve/board/fight_board.tscn")
 
@@ -15,8 +15,9 @@ var _strip: HaulStrip
 var _map: MapView
 var _landing: LandingPanel
 var _board: FightBoard
+var _room_board: RoomBoard
 var _head_up: Button
-## What the rooms played since the last stop gave, for the map.
+## What the fights since the last stop paid, for the map and the landing.
 var _notes: PackedStringArray = []
 
 
@@ -72,7 +73,8 @@ func _advance() -> void:
 					_show_fight(run)
 					return
 				if run.room != null:
-					_play_room(run)
+					_show_room(run)
+					return
 				run.finish_room()
 			DelveRun.Step.LANDING:
 				_show(_landing)
@@ -117,27 +119,26 @@ func _on_room_chosen(col: int) -> void:
 	_advance()
 
 
-## Stand-in until the room boards (Mara's UX): the room bot plays it.
-func _play_room(run: DelveRun) -> void:
-	var played: DiceRoom = run.room
-	RoomBot.new().play_room(played)
-	var gave: PackedStringArray = []
-	var found: PackedStringArray = []
-	for id: String in played.payout:
-		found.append("%d %s" % [played.payout[id], Game.data.row("resources", id)["name"]])
-	if not found.is_empty():
-		gave.append("found " + ", ".join(found))
-	var before: int = run.hp
-	if played.hp > before:
-		gave.append("healed %d HP" % (played.hp - before))
-	elif played.hp < before:
-		gave.append("lost %d HP to the tide" % (before - played.hp))
-	if played.room_id == DelveMap.RESCUE:
-		gave.append("the cage opened" if played.succeeded else "they're still caged; you'll find them again")
-	var room_name: String = Game.data.row("rooms", played.room_id)["name"]
-	_notes.append("%s: %s" % [room_name, ", ".join(gave) if not gave.is_empty() else "nothing this time"])
-	PlaytestLog.log_event("room_played", {"room": played.room_id, "floor": run.floor_index, "row": run.row,
-		"payout": played.payout, "hp": played.hp, "opened": played.succeeded})
+func _show_room(run: DelveRun) -> void:
+	_show(null)
+	_room_board = RoomBoard.new()
+	_room_board.setup(run.room, Game.data, run.map.rescue_villager if run.room_type == DelveMap.RESCUE else "")
+	_room_board.top_inset = HaulStrip.HEIGHT
+	_room_board.finished.connect(_on_room_over)
+	add_child(_room_board)
+	move_child(_room_board, 1)
+	PlaytestLog.log_event("room_start", {"room": run.room_type, "floor": run.floor_index, "row": run.row})
+
+
+func _on_room_over() -> void:
+	if _room_board != null:
+		_room_board.queue_free()
+		_room_board = null
+	var played: DiceRoom = Game.run.room
+	Game.run.finish_room()
+	PlaytestLog.log_event("room_played", {"room": played.room_id, "floor": Game.run.floor_index, "payout": played.payout,
+		"hp": played.hp, "opened": played.succeeded})
+	_advance()
 
 
 func _show_fight(run: DelveRun) -> void:
@@ -164,7 +165,13 @@ func _on_fight_over() -> void:
 	if _board != null:
 		_board.queue_free()
 		_board = null
+	var enemy: String = Game.run.fight.enemy_name if Game.run.fight != null else "Fight"
 	Game.run.finish_room()
+	var found: PackedStringArray = []
+	for id: String in Game.run.last_loot:
+		found.append("%d %s" % [Game.run.last_loot[id], str(Game.data.row("resources", id)["name"]).to_lower()])
+	if not found.is_empty() and not Game.run.is_over():
+		_notes.append("%s: found %s" % [enemy, ", ".join(found)])
 	_advance()
 
 
