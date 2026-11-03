@@ -359,8 +359,8 @@ func gather_at(uid: int, moods_before: Dictionary[String, Town.Mood]) -> void:
 ## Rescued `villagers` walk from the end of the dock to where they now
 ## stand (specs/bridge.md section 6), round buildings as the gathering
 ## does, then `walked_in` fires. A press skips it like a gathering. With
-## reduce motion, or nobody to walk, it fires at once.
-func walk_in(villagers: Array[String]) -> void:
+## reduce motion, nobody to walk, or `at_once` (a skip), they arrive at once.
+func walk_in(villagers: Array[String], at_once: bool = false) -> void:
 	stop_gathering()
 	var spots: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
 	_routes.clear()
@@ -375,7 +375,7 @@ func walk_in(villagers: Array[String]) -> void:
 			_arrive_delay[villager] = ARRIVE_STAGGER * _arrive_delay.size()
 			_arrive_time[villager] = clampf(_length(_routes[villager]) / ARRIVE_SPEED, 0.3, ARRIVE_SECONDS)
 			longest = maxf(longest, _arrive_delay[villager] + _arrive_time[villager])
-	if _routes.is_empty() or Settings.reduce_motion:
+	if _routes.is_empty() or Settings.reduce_motion or at_once:
 		var arrived: Array[String] = []
 		for villager: String in _routes:
 			arrived.append(villager)

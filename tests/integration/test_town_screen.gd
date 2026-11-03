@@ -954,3 +954,19 @@ func test_a_skip_does_not_outlast_its_arrival() -> void:
 	var town: TownScreen = _open()
 	town.skip_arrival()
 	assert_false(town._skipped)
+
+
+## Imogen's #62 re-check: a skip mid-count still says who came home, and a
+## later arrival's pulse isn't cleared by an earlier one's timer.
+func test_a_skip_mid_count_still_says_who_came_home() -> void:
+	_came_back(["pearl_diver"] as Array[String])
+	var town: TownScreen = _open()
+	town.skip_arrival()
+	assert_true(_notice_says(town, TownScreen.arrival_line(Game.data, Game.state, "pearl_diver")))
+	assert_eq(town._kit_strip.pulse, "+1 perk")
+	town._on_villager_home("pearl_diver")
+	assert_eq(town._kit_strip.pulse, "+2 perks")
+	town._end_pulse(1)
+	assert_eq(town._kit_strip.pulse, "+2 perks", "the first timer doesn't clear the second pulse")
+	town._end_pulse(2)
+	assert_eq(town._kit_strip.pulse, "")

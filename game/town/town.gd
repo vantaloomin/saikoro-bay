@@ -153,6 +153,8 @@ var _skipped: bool = false
 ## "The Pearl diver is home…", newest first, posted as each reaches home.
 var _arrived_lines: PackedStringArray = []
 var _perks_joined: int = 0
+## Bumped per pulse, so only the latest one's timer clears the chip.
+var _pulse_id: int = 0
 
 
 func _ready() -> void:
@@ -285,7 +287,8 @@ func _end_count() -> void:
 func _walk_in() -> void:
 	if arrival != "walk":
 		return
-	_board.walk_in([] as Array[String] if _skipped else _rescued())
+	# A skip still brings them home, lines and pulse included (Imogen's #62 audit).
+	_board.walk_in(_rescued(), _skipped)
 
 
 ## Who the delve rescued, if they're in town.
@@ -308,12 +311,15 @@ func _on_villager_home(villager: String) -> void:
 		_perks_joined += 1
 		_kit_strip.pulse = "+%d perk%s" % [_perks_joined, "" if _perks_joined == 1 else "s"]
 		_kit_strip.queue_redraw()
-		get_tree().create_timer(GAIN_SECONDS).timeout.connect(_end_pulse)
+		_pulse_id += 1
+		get_tree().create_timer(GAIN_SECONDS).timeout.connect(_end_pulse.bind(_pulse_id))
 	if arrival.is_empty() or _notice.visible:
 		_show_notice(false)
 
 
-func _end_pulse() -> void:
+func _end_pulse(id: int = -1) -> void:
+	if id >= 0 and id != _pulse_id:
+		return
 	_perks_joined = 0
 	if is_instance_valid(_kit_strip):
 		_kit_strip.pulse = ""
