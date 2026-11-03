@@ -74,7 +74,7 @@ func test_cards_for_buildings_and_villagers() -> void:
 	assert_eq(Array(TownScreen.card_for(Game.data, state, {"kind": "building", "uid": empty})["lines"])[1],
 		"Nobody lives here yet.")
 	var diver: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "villager", "villager": "pearl_diver"})
-	assert_eq(diver["title"], "Natsu", "the name heads the card")
+	assert_eq(diver["title"], "Isoko", "the name heads the card")
 	assert_eq(Array(diver["lines"]), ["Pearl diver", TownScreen.MOOD_WORDS[Town.Mood.HAPPY]], "the role is its subline")
 	assert_eq(diver["chip"], "Wish: Next to the sea")
 	var keeper: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "villager", "villager": "shrine_keeper"})

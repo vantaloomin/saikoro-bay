@@ -127,7 +127,7 @@ func test_a_whole_date_spends_the_action_and_saves_the_affection() -> void:
 	var loaded: GameState = GameState.from_dict(saved.payload[GameState.PAYLOAD_KEY])
 	assert_eq(loaded.affection("pearl_diver"), Game.state.affection("pearl_diver"))
 	var lines: PackedStringArray = DateScreen.result_lines(Game.data, Game.state, screen.session, [], screen.scene_reached)
-	assert_eq(lines[0], "Date with Natsu")
+	assert_eq(lines[0], "Date with Isoko")
 	assert_has(lines, "1 action spent")
 	assert_false(lines.has("Close"), "a milestone is never a bare word that reads as a button (Mara)")
 	(screen.get_node("Box").find_child("BackToTown", true, false) as Button).pressed.emit()
