@@ -137,6 +137,7 @@ func test_an_adult_who_misclicked_can_ask_again_next_launch() -> void:
 	var confirm: Control = menu.find_child("Confirm", true, false) as Control
 	assert_true(confirm.visible, "behind a confirm")
 	assert_true((confirm.find_child("No", true, false) as Button).has_focus(), "Cancel is the safe default")
+	assert_false((menu.find_child("Back", true, false) as Button).visible, "and the only way out")
 	menu.cancel()
 	assert_false(confirm.visible, "Back cancels it")
 	assert_eq(Settings.age_answer, ContentLevel.AgeAnswer.UNDER_18)

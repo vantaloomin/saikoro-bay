@@ -114,6 +114,8 @@ func _show_content() -> void:
 	_content.show_settings()
 	(_content_page.get_node("Hint") as Control).visible = not _content.is_locked()
 	_ask_again.visible = Settings.can_ask_age_again() and not _confirm.visible
+	# One way out at a time: Cancel while the question is open.
+	(_content_page.get_node("Back") as Control).visible = not _confirm.visible
 
 
 ## Swaps the ask-again button for its confirm, or back.

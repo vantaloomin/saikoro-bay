@@ -20,14 +20,15 @@ signal finished
 enum Step { WARNING, LEVEL, UNDER_18 }
 
 ## Keep in step with the store pages' content descriptions (Nori: reviewers
-## compare them).
+## compare them) and the youngest stated age with the character sheets.
+const AGES_LINE: String = "Every character is an adult, 27 or older. The game has:"
 const WARNINGS: Array[String] = [
 	"Flirting, dates and romance",
 	"Swimsuits and towels, even with nudity off",
 	"Optional nudity: topless and bare-rear, never sex",
-	"Casino-style dice games. No real money can be spent or won",
-	"Characters drinking alcohol",
+	"Characters drinking alcohol and smoking a pipe",
 	"Mild cartoon fights",
+	"Casino-style dice games. No real money can be spent or won",
 ]
 
 var step: Step = Step.WARNING
@@ -76,12 +77,19 @@ func show_step(value: Step) -> void:
 func _warning_page() -> Control:
 	var page: VBoxContainer = _page("WarningPage")
 	page.add_child(NeutralSkin.label("Saikoro Bay is for adults", 40))
-	page.add_child(NeutralSkin.paragraph("Every character is an adult. The game has:", 24))
+	page.add_child(NeutralSkin.paragraph(AGES_LINE, 24))
 	var list: VBoxContainer = VBoxContainer.new()
 	list.name = "Warnings"
 	list.add_theme_constant_override("separation", 6)
 	for warning: String in WARNINGS:
-		list.add_child(NeutralSkin.paragraph("•  " + warning, 24))
+		# A dot in its own column, so a wrapped line hangs under the words.
+		var item: HBoxContainer = HBoxContainer.new()
+		item.add_theme_constant_override("separation", 12)
+		var dot: Label = NeutralSkin.label("•", 24)
+		dot.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		item.add_child(dot)
+		item.add_child(NeutralSkin.paragraph(warning, 24))
+		list.add_child(item)
 	page.add_child(list)
 	page.add_child(NeutralSkin.paragraph("Nudity stays off unless you turn it on.", 24, NeutralSkin.SOFT_INK))
 	var buttons: HBoxContainer = HBoxContainer.new()
