@@ -371,3 +371,36 @@ func test_a_new_home_says_who_moved_in() -> void:
 	for label: Node in (town.get_node("%Notice") as Control).find_children("*", "Label", true, false):
 		said = said or (label as Label).text == TownScreen.MOVED_IN % ["Kitsune shrine keeper", "Cottage"]
 	assert_true(said)
+
+
+func test_the_town_wears_its_own_type_and_furniture() -> void:
+	var town: TownScreen = _open()
+	assert_eq(town.theme.default_font.resource_path, TownStyle.UI_FONT_PATH, "M PLUS Rounded for the UI")
+	var kinds: Dictionary = {"%Ledger": PaperBox.Kind.LEDGER, "%Notice": PaperBox.Kind.BOARD,
+		"%Tray": PaperBox.Kind.TRAY, "%Card": PaperBox.Kind.PAPER}
+	for path: String in kinds:
+		var box: PaperBox = (town.get_node(path) as PanelContainer).get_theme_stylebox("panel") as PaperBox
+		assert_not_null(box, "%s is drawn by hand" % path)
+		assert_eq(box.kind, kinds[path], "%s is its own piece of furniture" % path)
+	var notes: Array[Node] = (town.get_node("%Notice") as Node).find_children("*", "Label", true, false)
+	assert_eq((notes[0] as Label).get_theme_font("font").resource_path, TownStyle.SIGN_FONT_PATH,
+		"notes on the board are handwritten")
+	var pause: Control = town.get_node("%PauseMenu")
+	assert_eq(pause.get_theme_default_font(), ThemeDB.fallback_font, "the pause menu keeps its neutral skin")
+
+
+func test_the_open_tab_sits_flush_on_its_sheet() -> void:
+	var town: TownScreen = _open()
+	await wait_process_frames(2)
+	var tabs: Control = town.get_node("RightColumn/Tabs")
+	var notice: Control = town.get_node("%Notice")
+	assert_eq(tabs.get_rect().end.y, notice.position.y, "the notice tab joins the board")
+	town.show_tab(TownScreen.TAB_BUILD)
+	await wait_process_frames(2)
+	assert_eq(tabs.get_rect().end.y, (town.get_node("%Card") as Control).position.y, "the build tab joins the list")
+	var open: PaperBox = town._tabs[TownScreen.TAB_BUILD].get_theme_stylebox("pressed") as PaperBox
+	var shut: PaperBox = town._tabs[TownScreen.TAB_BUILD].get_theme_stylebox("normal") as PaperBox
+	assert_eq(open.fill, TownStyle.WASHI, "the open tab is the sheet's paper")
+	assert_eq(shut.edge_width, 0.0, "a closed tab is flat, with no border")
+	assert_eq(town._tabs[TownScreen.TAB_NOTICE].get_theme_stylebox("pressed").get("fill"), TownStyle.DRIFTWOOD,
+		"the notice tab is the board's driftwood")

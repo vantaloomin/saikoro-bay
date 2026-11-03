@@ -78,12 +78,12 @@ func _draw_shell(center: Vector2, token: String) -> void:
 		draw_polyline(outline, TownStyle.INK, 2.5)
 		return
 	if token != "spent":
-		draw_colored_polygon(points, TownStyle.SAND if token == "fresh" else TownStyle.WASHI)
+		draw_colored_polygon(points, TownStyle.SHELL if token == "fresh" else TownStyle.WASHI)
 	for step: int in range(2, 12, 3):
 		var angle: float = PI + PI * step / 12.0
 		draw_line(center + Vector2(0, SHELL * 0.8), center + Vector2(cos(angle), sin(angle)) * SHELL,
-			TownStyle.LOT_LINE if token != "spent" else TownStyle.STONE, 1.5)
-	draw_polyline(outline, TownStyle.INK if token != "spent" else TownStyle.STONE, 2.5 if token != "spent" else 2.0)
+			TownStyle.LOT_LINE if token != "spent" else TownStyle.SPENT, 1.5)
+	draw_polyline(outline, TownStyle.INK if token != "spent" else TownStyle.SPENT, 2.5 if token != "spent" else 2.0)
 	if token == "kept":
 		draw_circle(center + Vector2(0, -SHELL * 0.25), SHELL * 0.32, Color.WHITE)
 		draw_arc(center + Vector2(0, -SHELL * 0.25), SHELL * 0.32, 0.0, TAU, 24, TownStyle.INK, 2.0)

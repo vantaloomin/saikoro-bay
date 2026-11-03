@@ -52,6 +52,10 @@ const TAB_NOTICE: String = "Notice board"
 const TAB_BUILD: String = "Build"
 ## The build sheet's margins, around its rows.
 const LIST_CHROME: float = 50.0
+## The room between the notice board and a card under it.
+const COLUMN_GAP: float = 16.0
+## How far the tabs sit in from the sheet's sides, past its round corners.
+const TAB_INSET: int = 18
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
@@ -81,11 +85,26 @@ var last_move: Dictionary = {}
 var _cheer: String = ""
 var _stamp: HankoButton
 var _tabs: Dictionary[String, Button] = {}
+## Between the notice board and a card under it. The tabs sit flush on
+## whichever sheet is first.
+var _column_gap: Control
 
 
 func _ready() -> void:
-	for panel: PanelContainer in [_ledger, _notice, _card, _tray_panel]:
-		panel.add_theme_stylebox_override("panel", TownStyle.panel())
+	# The HUD frame (M3 PR 5c): each panel is a thing in the town, not a
+	# window. The pause menu keeps its neutral skin (two-halves section 2).
+	theme = TownStyle.theme()
+	_ledger.add_theme_stylebox_override("panel", PaperBox.make(PaperBox.Kind.LEDGER))
+	_notice.add_theme_stylebox_override("panel", PaperBox.make(PaperBox.Kind.BOARD))
+	_card.add_theme_stylebox_override("panel", TownStyle.panel())
+	_tray_panel.add_theme_stylebox_override("panel", PaperBox.make(PaperBox.Kind.TRAY))
+	_right_column.add_theme_constant_override("separation", 0)
+	_column_gap = Control.new()
+	_column_gap.name = "Gap"
+	_column_gap.custom_minimum_size = Vector2(0, COLUMN_GAP)
+	_column_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_right_column.add_child(_column_gap)
+	_right_column.move_child(_column_gap, _card.get_index())
 	TownStyle.style_button(_go_down, TownStyle.TITLE)
 	TownStyle.style_button(_menu_button, TownStyle.SMALL)
 	_go_down.held.connect(_on_go_down_held)
@@ -144,7 +163,10 @@ func _show_notice(folded: bool) -> void:
 	if folded and lines.size() > 1:
 		lines = lines.slice(0, 1)
 	for line: String in lines:
-		notice.append(TownStyle.label(line))
+		# Notes on the board are handwritten (two-halves: Klee One).
+		var note: Label = TownStyle.label(line)
+		note.add_theme_font_override("font", TownStyle.sign_font())
+		notice.append(note)
 		if line == homeless and not folded:
 			# The shortcut sits right under the line it answers (VH-4).
 			notice.append(_button("Build a Cottage", choose_building.bind("cottage")))
@@ -154,9 +176,17 @@ func _show_notice(folded: bool) -> void:
 ## The column's header: "Notice board | Build" (Mara's #42 review), so the
 ## build list opens where it's used and the board never just vanishes.
 func _make_tabs() -> void:
+	# Inset, so a tab's sides land on the sheet's straight top edge, and
+	# drawn over the sheet, so the open tab covers the edge it joins.
+	var inset: MarginContainer = MarginContainer.new()
+	inset.name = "Tabs"
+	inset.z_index = 1
+	inset.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side: String in ["left", "right"]:
+		inset.add_theme_constant_override("margin_" + side, TAB_INSET)
 	var row: HBoxContainer = HBoxContainer.new()
-	row.name = "Tabs"
 	row.add_theme_constant_override("separation", 8)
+	inset.add_child(row)
 	for tab: String in [TAB_NOTICE, TAB_BUILD]:
 		var button: Button = Button.new()
 		button.text = tab
@@ -164,12 +194,15 @@ func _make_tabs() -> void:
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		TownStyle.style_tab(button)
+		if tab == TAB_NOTICE:
+			TownStyle.style_tab(button, TownStyle.DRIFTWOOD, TownStyle.DRIFTWOOD_DARK)
+		else:
+			TownStyle.style_tab(button)
 		button.pressed.connect(show_tab.bind(tab))
 		row.add_child(button)
 		_tabs[tab] = button
-	_right_column.add_child(row)
-	_right_column.move_child(row, 0)
+	_right_column.add_child(inset)
+	_right_column.move_child(inset, 0)
 
 
 func current_tab() -> String:
@@ -606,7 +639,7 @@ func _fill(panel: PanelContainer, title: String, children: Array[Control]) -> vo
 	var stack: VBoxContainer = VBoxContainer.new()
 	stack.add_theme_constant_override("separation", 8)
 	if not title.is_empty():
-		stack.add_child(TownStyle.label(title, TownStyle.TITLE))
+		stack.add_child(TownStyle.title_label(title))
 	for child: Control in children:
 		stack.add_child(child)
 	panel.add_child(stack)
@@ -634,6 +667,7 @@ func _show_right_column() -> void:
 			_show_home_pick()
 		_:
 			_show_card(_board.selected)
+	_column_gap.visible = _notice.visible and _card.visible
 	_aim_leader()
 
 
@@ -645,7 +679,8 @@ func _show_list() -> void:
 	var built: PackedStringArray = []
 	for entry: Dictionary in BuildList.entries(Game.data, Game.state):
 		if entry["done"]:
-			built.append(str(entry["name"]))
+			# A name never wraps in the middle ("Tea / stall", Mara's #44 review).
+			built.append(str(entry["name"]).replace(" ", "\u00a0"))
 		else:
 			rows.add_child(_list_entry(entry))
 	if not built.is_empty():
@@ -679,18 +714,24 @@ func _list_entry(entry: Dictionary) -> Button:
 	var second: String = str(entry["cost"]) if entry["status"] == "" else str(entry["status"])
 	if str(entry["status"]) == BuildList.WAITING:
 		second = "%s · %s" % [entry["cost"], entry["status"]]
+	# An amount never wraps away from what it counts ("1 / pearl").
+	var amounts: RegEx = RegEx.create_from_string("(\\d) ")
+	second = amounts.sub(second, "$1\u00a0", true)
 	var row: Button = _button("%s\n%s" % [entry["name"], second], choose_building.bind(str(entry["id"])))
 	row.name = str(entry["id"])
+	# Rows are read more than pressed, so they take the body weight.
+	row.add_theme_font_override("font", TownStyle.theme().default_font)
 	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	for state: String in ["normal", "hover", "pressed", "focus", "disabled"]:
-		var box: StyleBoxFlat = row.get_theme_stylebox(state) as StyleBoxFlat
+		var box: PaperBox = row.get_theme_stylebox(state) as PaperBox
 		box.content_margin_top = 8
 		box.content_margin_bottom = 8
 		if not entry["can_place"] and state != "focus":
-			box.draw_center = state == "hover"
-			box.bg_color = TownStyle.WASHI.darkened(0.04)
-			box.set_border_width_all(1)
+			box.draw_fill = state == "hover"
+			box.shadow = false
+			box.fill = TownStyle.WASHI.darkened(0.04)
+			box.edge_width = 1.0
 	if entry["locked"]:
 		var lock: Image = PixelArt.padlock()
 		lock.resize(lock.get_width() * 3, lock.get_height() * 3, Image.INTERPOLATE_NEAREST)

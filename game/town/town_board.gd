@@ -62,7 +62,7 @@ var show_all_names: bool = false
 ## Grows the map's name tags with the HUD on small screens.
 var text_scale: float = 1.0
 var _bubble_textures: Dictionary[Town.Mood, ImageTexture] = {}
-var _font: Font = ThemeDB.fallback_font
+var _font: Font = TownStyle.theme().default_font
 var _cursor: Vector2 = Vector2.ZERO
 ## Shown once a controller or the arrow keys move it; the mouse hides it.
 var _cursor_shown: bool = false
