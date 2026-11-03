@@ -68,4 +68,5 @@ exports/
 # clone see SFW content only. Source art lives outside the repo entirely.
 content/adult/*
 !content/adult/README.md
+!content/adult/ci_canary/
 art-src/
