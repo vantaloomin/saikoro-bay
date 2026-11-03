@@ -35,7 +35,7 @@ func test_invalid_drop_explains_and_changes_nothing() -> void:
 	board._on_die_pressed(0)
 	board._on_slot_pressed("high_roller")
 	assert_true(fight.slot("high_roller").dice.is_empty())
-	assert_eq(board._message.text, "Needs 5 to 6.")
+	assert_eq(board._slot_cards["high_roller"].preview_text, "Needs 5 to 6.", "the refusal shows on the slot")
 	assert_true(fight.moves.is_empty())
 
 
@@ -54,10 +54,28 @@ func test_previews_show_on_every_slot_for_the_held_die() -> void:
 	board._on_die_pressed(1)
 	assert_eq(board._slot_cards["high_roller"].preview_text, "8 damage")
 	assert_eq(board._slot_cards["guard"].preview_text, "Needs 1 to 4.")
-	assert_false(board._slot_cards["guard"].preview_ok)
+	assert_eq(board._slot_cards["guard"].preview_tone, "error")
+	assert_eq(board._slot_cards["guard"].held_fit, -1, "a slot the die can't go in dims")
+	assert_eq(board._slot_cards["high_roller"].held_fit, 1, "a slot it can go in lights up")
 	board._on_die_pressed(1)
 	board._on_die_pressed(2)
-	assert_eq(board._slot_cards["pair_bet"].preview_text, "16 damage with another 4")
+	assert_eq(board._slot_cards["pair_bet"].preview_text, "Waits for another 4: 16 damage")
+	assert_eq(board._slot_cards["pair_bet"].preview_tone, "wait", "waiting is neutral, not an error")
+
+
+func test_a_held_die_lifts_and_a_placed_die_shows_its_slot() -> void:
+	board._on_die_pressed(1)
+	assert_true(board._dice[1].selected)
+	board._on_slot_pressed("high_roller")
+	assert_eq(board._dice[1].placed_order, 3, "High Roller is slot 3 on the card")
+
+
+func test_an_invalid_drop_explains_itself_on_the_slot() -> void:
+	board._on_die_pressed(1)
+	board._on_slot_pressed("guard")
+	assert_true(fight.hand[1].is_free(), "the die snaps back")
+	assert_eq(board._slot_cards["guard"].preview_text, "Needs 1 to 4.")
+	assert_eq(board._slot_cards["guard"].preview_tone, "error")
 
 
 func test_snake_eyes_marks_unplaced_ones() -> void:
@@ -94,12 +112,25 @@ func test_nudge_uses_the_selected_die_and_shows_a_badge() -> void:
 func test_end_turn_preview_matches_the_turn() -> void:
 	board._on_die_pressed(1)
 	board._on_slot_pressed("high_roller")
-	assert_eq(board.end_turn_summary(), "You deal 8 · Block 3 · Snake eyes 1 · Hits 6, you take 3")
+	assert_eq(board.end_turn_summary(), "Deal 8 · Lose 4", "HP lost counts the bite as well as the hit")
+	var t: Dictionary = board.turn_preview()
+	assert_eq(t["bites"], 1)
+	assert_eq(t["hit_taken"], 3)
+	assert_eq(t["lost"], 4)
+	assert_eq(board._player_bar.ghost, 4, "the HP bar ghosts the same 4")
 	await board._on_end_turn()
 	assert_eq(fight.enemy_hp, 34 - 8)
 	assert_eq(fight.player_hp, 26, "3 through block and 1 bite")
 	assert_eq(fight.turn, 2)
 	assert_eq(board._player_hp.text, "HP 26 / 30")
+	assert_string_contains(board._last_turn.text, "Last turn: you dealt 8")
+	var free: int = -1
+	for d: Fight.Die in fight.hand:
+		if d.is_free() and not d.locked and free < 0:
+			free = d.id
+	board._on_die_pressed(free)
+	board._on_slot_pressed("strike")
+	assert_eq(board._last_turn.text, "", "the last-turn line clears on the next move")
 
 
 func test_winning_shows_results() -> void:

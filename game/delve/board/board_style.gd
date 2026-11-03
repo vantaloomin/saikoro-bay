@@ -13,11 +13,13 @@ const JADE: Color = Color(0.36, 0.72, 0.6)
 const INK: Color = Color(0.93, 0.9, 0.84)
 const DIM: Color = Color(0.55, 0.52, 0.6)
 const DANGER: Color = Color(0.9, 0.38, 0.3)
+## Waiting, not refused (a half-filled Pair Bet).
+const AMBER: Color = Color(0.95, 0.66, 0.25)
 const DIE_FACE: Color = Color(0.93, 0.9, 0.84)
 const DIE_PIP: Color = Color(0.08, 0.06, 0.12)
 
 const BODY: int = 26
-const SMALL: int = 22
+const SMALL: int = 24
 const NUMBER: int = 40
 const BIG: int = 56
 

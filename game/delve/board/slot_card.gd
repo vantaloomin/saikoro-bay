@@ -19,13 +19,20 @@ var sockets: int = 1
 var placed_values: Array[int] = []
 ## Preview line for the held die, e.g. "8 damage (4 through guard)".
 var preview_text: String = ""
-var preview_ok: bool = true
-## Briefly true after an invalid drop, so the ruler pulses.
+## How the footer reads: "ok", "wait" (allowed, needs more dice) or "error".
+var preview_tone: String = "ok"
+## The value of the die being held (0 = none): a caret marks it on the ruler.
+var held_value: int = 0
+## Whether the held die fits here: 0 nothing held, 1 fits, -1 refused.
+var held_fit: int = 0
+## Briefly true after an invalid drop: the ruler pulses for a wrong value,
+## the sockets for a full slot.
 var pulsing: bool = false
+var pulsing_sockets: bool = false
 
 
 func _init() -> void:
-	custom_minimum_size = Vector2(380, 360)
+	custom_minimum_size = Vector2(400, 388)
 	focus_mode = Control.FOCUS_ALL
 	flat = true
 	for state: String in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
@@ -50,7 +57,14 @@ func _draw() -> void:
 	var font: Font = get_theme_default_font()
 	var r: Rect2 = Rect2(Vector2.ZERO, size)
 	draw_rect(r, BoardStyle.LACQUER)
-	draw_rect(r, BoardStyle.GOLD if has_focus() or is_hovered() else BoardStyle.DIM, false, 2.0)
+	var border: Color = BoardStyle.GOLD if has_focus() or is_hovered() else BoardStyle.DIM
+	var border_width: float = 2.0
+	if held_fit == 1:
+		border = BoardStyle.INK
+		border_width = 5.0
+	elif held_fit == -1:
+		border = BoardStyle.DIM.darkened(0.5)
+	draw_rect(r, border, false, border_width)
 	# Order badge, so "resolve top to bottom" is visible (Mara 10).
 	draw_rect(Rect2(12, 12, 40, 40), BoardStyle.GOLD)
 	draw_string(font, Vector2(23, 42), str(order), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.LACQUER)
@@ -73,22 +87,44 @@ func _draw() -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL, BoardStyle.DIM)
 	if pulsing:
 		draw_rect(Rect2(ruler_x - 6, ruler_y - 6, (cell + 4) * 6 + 8, cell + 12), BoardStyle.DANGER, false, 3.0)
+	if held_value >= 1 and held_value <= 6:
+		var cx: float = ruler_x + (held_value - 1) * (cell + 4) + cell / 2.0
+		var cy: float = ruler_y + cell + 6
+		draw_colored_polygon(PackedVector2Array([Vector2(cx, cy), Vector2(cx - 9, cy + 12), Vector2(cx + 9, cy + 12)]), BoardStyle.INK)
 
 	# Sockets.
 	var socket: float = 88
 	var gap: float = 44 if is_pair else 0
 	var total: float = socket * sockets + gap * (sockets - 1)
 	var sx: float = (size.x - total) / 2.0
-	var sy: float = 204
+	var sy: float = 212
 	for i: int in sockets:
 		var sr: Rect2 = Rect2(sx + i * (socket + gap), sy, socket, socket)
 		if i < placed_values.size():
 			BoardStyle.draw_die(self, sr.grow(-6), placed_values[i])
 		else:
 			draw_rect(sr, BoardStyle.DIM, false, 3.0)
+		if pulsing_sockets:
+			draw_rect(sr.grow(4), BoardStyle.DANGER, false, 4.0)
 		if is_pair and i < sockets - 1:
 			draw_string(font, Vector2(sr.end.x + 8, sy + socket * 0.62), "=", HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.NUMBER, BoardStyle.INK)
 
 	if not preview_text.is_empty():
-		draw_string(font, Vector2(16, size.y - 20), preview_text, HORIZONTAL_ALIGNMENT_LEFT, size.x - 32,
-			BoardStyle.SMALL, BoardStyle.JADE if preview_ok else BoardStyle.DANGER)
+		var tone: Color = BoardStyle.JADE
+		var mark: String = ""
+		match preview_tone:
+			"wait":
+				tone = BoardStyle.AMBER
+				mark = "… "
+			"error":
+				tone = BoardStyle.DANGER
+				mark = "× "
+		# Two lines at most, so a long preview wraps instead of clipping.
+		var text: String = mark + preview_text
+		var width: float = size.x - 32
+		var one_line: bool = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL).x <= width
+		var top: float = size.y - (20 if one_line else 50)
+		draw_multiline_string(font, Vector2(16, top), text, HORIZONTAL_ALIGNMENT_LEFT, width,
+			BoardStyle.SMALL, 2, tone)
+	if held_fit == -1:
+		draw_rect(r, Color(0, 0, 0, 0.35))

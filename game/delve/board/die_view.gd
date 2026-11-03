@@ -31,6 +31,8 @@ var placed: bool = false:
 	set(v):
 		placed = v
 		queue_redraw()
+## The order number of the slot it's in, shown as "→3" on the outline.
+var placed_order: int = 0
 ## Shows "-1 if unplaced" against Snake eyes.
 var bite_marker: bool = false:
 	set(v):
@@ -60,13 +62,26 @@ func _gui_input(event: InputEvent) -> void:
 		accept_event()
 
 
+func _draw_dashed_rect(rect: Rect2, color: Color) -> void:
+	var corners: Array[Vector2] = [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]
+	for i: int in 4:
+		draw_dashed_line(corners[i], corners[(i + 1) % 4], color, 3.0, 10.0)
+
+
 func _draw() -> void:
 	var rect: Rect2 = Rect2(Vector2(8, 8), size - Vector2(16, 16))
 	if placed:
-		draw_rect(rect, BoardStyle.DIM, false, 3.0)
+		_draw_dashed_rect(rect, BoardStyle.DIM)
+		var font: Font = get_theme_default_font()
+		draw_string(font, rect.position + Vector2(rect.size.x * 0.22, rect.size.y * 0.62), "→%d" % placed_order,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.NUMBER, BoardStyle.DIM)
 		if has_focus() or is_hovered():
 			BoardStyle.draw_brackets(self, rect, BoardStyle.INK, 3.0)
 		return
+	if selected:
+		# A held die lifts off the felt, so held vs focused isn't color alone.
+		draw_rect(rect, Color(0, 0, 0, 0.55))
+		rect.position.y -= 14
 	var face: Color = BoardStyle.DIE_FACE
 	if discarded:
 		face = BoardStyle.DIM
