@@ -132,13 +132,15 @@ func test_a_save_that_decodes_but_wont_load_is_kept_not_replaced() -> void:
 	assert_eq(Game.save(), ERR_UNAUTHORIZED)
 	Game.save()
 	assert_eq(FileAccess.get_file_as_bytes(TEST_SAVE), before, "the campaign's bytes survive")
+	Game.load_or_new()
+	assert_push_error("decodes but doesn't load")
 	var kept: PackedStringArray = DirAccess.get_files_at(TEST_SAVE.get_base_dir())
 	var copies: int = 0
 	for file_name: String in kept:
 		if file_name.contains(".unloadable-"):
 			copies += 1
 			DirAccess.remove_absolute(TEST_SAVE.get_base_dir().path_join(file_name))
-	assert_gt(copies, 0, "and are copied aside")
+	assert_eq(copies, 2, "copied aside once each (main and backup), not again on the next launch")
 
 
 func test_empty_slot_starts_a_new_campaign_in_town() -> void:

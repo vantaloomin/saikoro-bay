@@ -52,7 +52,10 @@ func _advance() -> void:
 				_set_status(run, "Koban's vault opens in a later build. Close the game to leave.")
 				return
 			_:
-				Game.come_up()
+				if not Game.come_up():
+					# Refused (a transition was running): let the player retry.
+					_surface.visible = true
+					_surface.grab_focus()
 				return
 
 
@@ -83,7 +86,8 @@ func _on_fight_over() -> void:
 
 
 func _on_surface_pressed() -> void:
-	if Game.run.surface():
+	# Also retries coming up if an earlier try was refused after surfacing.
+	if Game.run.surface() or Game.run.is_over():
 		Game.come_up()
 
 
