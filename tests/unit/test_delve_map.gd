@@ -57,7 +57,18 @@ func test_the_rescue_is_reachable_from_every_start_of_floor_two() -> void:
 	for s: int in range(1, 101):
 		var map: DelveMap = _map(s)
 		assert_true(map._rescue_reachable_from_every_start(DelveMap.RESCUE_FLOOR), "seed %d" % s)
-		assert_true(VILLAGERS.has(map.rescue_villager))
+		assert_eq(map.rescue_villager, "pearl_diver", "Pearl diver is rescued first")
+
+
+func test_rescues_follow_the_fixed_order() -> void:
+	var left: Array[String] = VILLAGERS.duplicate()
+	var rescued: Array[String] = []
+	for s: int in range(1, 5):
+		var map: DelveMap = _map(s, left)
+		rescued.append(map.rescue_villager)
+		left.erase(map.rescue_villager)
+	assert_eq(rescued, VILLAGERS, "data order, whatever the seed")
+	assert_eq(data.ids("villagers"), PackedStringArray(VILLAGERS), "the order lives in villagers.json")
 
 
 func test_no_rescue_when_everyone_is_home() -> void:
