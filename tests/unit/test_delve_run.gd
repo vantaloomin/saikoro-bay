@@ -91,6 +91,47 @@ func test_won_fights_pay_loot_from_the_table() -> void:
 	assert_gt(paid, 20)
 
 
+func _without_the_elite() -> GameData:
+	var texts: Dictionary[String, String] = {}
+	for table: String in GameData.TABLES:
+		texts[table] = FileAccess.get_file_as_string("res://data/%s.json" % table)
+	var enemies: Dictionary = JSON.parse_string(texts["enemies"])
+	enemies["items"] = (enemies["items"] as Array).filter(func(e: Dictionary) -> bool: return e["tier"] != "elite")
+	texts["enemies"] = JSON.stringify(enemies)
+	var broken: GameData = GameData.new()
+	broken.load_texts(texts)
+	return broken
+
+
+func test_data_needs_an_enemy_of_every_tier() -> void:
+	assert_has(_without_the_elite().errors, "enemies: needs at least one elite enemy")
+
+
+func test_a_fight_room_without_a_fight_is_refused_not_paid() -> void:
+	var run: DelveRun = DelveRun.create(_without_the_elite(), 11, [], VILLAGERS, LANDMARKS)
+	run.map.room(0, 0, 0).type = DelveMap.ELITE
+	assert_false(run.choose(0), "no elite to fight: the room isn't entered")
+	assert_push_error("no elite enemy")
+	assert_eq(run.step, DelveRun.Step.CHOOSE_ROOM)
+	assert_eq(run.row, -1)
+	assert_true(run.haul.is_empty())
+	assert_eq(run.choices, [] as Array[Dictionary])
+
+
+func test_a_fight_room_only_finishes_with_its_fight_over() -> void:
+	var run: DelveRun = _run()
+	run.choose(0)
+	run.fight = null
+	assert_false(run.finish_room(), "keyed on the room type, not on whether a fight exists")
+	assert_true(run.haul.is_empty())
+
+
+func test_choices_name_the_enemy_met() -> void:
+	var run: DelveRun = _run()
+	run.choose(0)
+	assert_eq(run.choices[0], {"choose": 0, "enemy": run.fight.enemy_id})
+
+
 func test_the_elite_pool_holds_only_the_elite() -> void:
 	assert_eq(DelveRun.enemy_pool(data, "elite"), ["pit_boss_octopus"] as Array[String])
 	assert_false(DelveRun.enemy_pool(data, "regular").has("pit_boss_octopus"))
@@ -219,14 +260,35 @@ func test_hidden_rooms_never_change_the_view() -> void:
 		var run: DelveRun = _run(s)
 		if s % 2 == 0:
 			_play(run, DelveRun.Step.LANDING)
-		var before: Dictionary = RunView.new(run).to_dict()
-		var revealed_to: int = run.row + run.reveal_rows
-		for rm: DelveMap.Room in run.map.all_rooms():
-			var hidden: bool = rm.floor_index > run.floor_index or (rm.floor_index == run.floor_index and rm.row > revealed_to)
-			var peeked: bool = run.step == DelveRun.Step.LANDING and rm.floor_index == run.floor_index + 1 and rm.row == 0
-			if hidden and not peeked:
-				rm.type = DelveMap.ELITE if rm.type != DelveMap.ELITE else DelveMap.REST
-		assert_eq(RunView.new(run).to_dict(), before, "seed %d" % s)
+		_assert_hidden_rooms_dont_show(run, "seed %d" % s)
+		var ahead: DelveRun = _run(s, FORESIGHT)
+		if s % 2 == 0:
+			_play(ahead, DelveRun.Step.LANDING)
+		_assert_hidden_rooms_dont_show(ahead, "seed %d with Foresight" % s)
+
+
+## Changes everything the player can't see yet (room types, and the rescue
+## villager and vault prize where they aren't shown) and checks the view
+## doesn't move.
+func _assert_hidden_rooms_dont_show(run: DelveRun, label: String) -> void:
+	var before: Dictionary = RunView.new(run).to_dict()
+	var revealed_to: int = run.row + run.reveal_rows
+	var peek_rows: int = 2 if run.foresight else 1
+	var rescue_shown: bool = false
+	for rm: DelveMap.Room in run.map.all_rooms():
+		var hidden: bool = rm.floor_index > run.floor_index or (rm.floor_index == run.floor_index and rm.row > revealed_to)
+		var peeked: bool = run.step == DelveRun.Step.LANDING and rm.floor_index == run.floor_index + 1 and rm.row < peek_rows
+		if hidden and not peeked:
+			rm.type = DelveMap.ELITE if rm.type != DelveMap.ELITE else DelveMap.REST
+		elif rm.type == DelveMap.RESCUE:
+			rescue_shown = true
+	var rescue_peeked: bool = run.step == DelveRun.Step.LANDING and run.floor_index + 1 == DelveMap.RESCUE_FLOOR
+	if not rescue_shown and not rescue_peeked:
+		run.map.rescue_villager = "someone_else"
+	var vault_peeked: bool = run.step == DelveRun.Step.LANDING and run.floor_index + 1 == run.map.floors.size() - 1
+	if run.floor_index < run.map.floors.size() - 1 and not vault_peeked:
+		run.map.vault_prize = {"landmark": "somewhere_else"}
+	assert_eq(RunView.new(run).to_dict(), before, label)
 
 
 func test_room_states_follow_the_paths() -> void:

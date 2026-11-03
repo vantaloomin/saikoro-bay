@@ -132,30 +132,49 @@ func rooms_to_landing() -> int:
 	return map.rows_in_floor(floor_index) - 1 - row
 
 
+## Walks into a room. A fight room whose fight can't be built (no enemy of
+## its tier in the data) is refused with an error, never entered empty.
 func choose(next_col: int) -> bool:
 	if not reachable().has(next_col):
 		return false
+	var next_type: String = map.room(floor_index, row + 1, next_col).type
+	var entry: Dictionary = {"choose": next_col}
+	var next_fight: Fight = null
+	if is_fight_room(next_type):
+		var tier: String = "elite" if next_type == DelveMap.ELITE else "regular"
+		var pool: Array[String] = enemy_pool(_data, tier)
+		if pool.is_empty():
+			push_error("DelveRun: no %s enemy for a %s room" % [tier, next_type])
+			return false
+		var enemy_id: String = pool[_rng.index(RngStreams.Stream.ENEMIES, pool.size())]
+		next_fight = Fight.create(_data, LOADOUT, enemy_id, _rng, perks, hp)
+		if next_fight == null:
+			push_error("DelveRun: can't build a fight against \"%s\" at %d HP" % [enemy_id, hp])
+			return false
+		# Who you meet depends on the path, so logs name them (replay ignores it).
+		entry["enemy"] = enemy_id
 	row += 1
 	col = next_col
 	path.append([floor_index, row, col])
-	choices.append({"choose": next_col})
+	choices.append(entry)
 	step = Step.IN_ROOM
-	room_type = map.room(floor_index, row, col).type
+	room_type = next_type
+	fight = next_fight
 	last_loot = {}
-	if room_type == DelveMap.FIGHT or room_type == DelveMap.ELITE:
-		var pool: Array[String] = enemy_pool(_data, "elite" if room_type == DelveMap.ELITE else "regular")
-		var enemy_id: String = pool[_rng.index(RngStreams.Stream.ENEMIES, pool.size())]
-		fight = Fight.create(_data, LOADOUT, enemy_id, _rng, perks, hp)
 	return true
 
 
-## Ends the room once its play is over: a fight must be won or lost. A win
-## pays loot and moves on; a loss washes up in the barrel.
+static func is_fight_room(type: String) -> bool:
+	return type == DelveMap.FIGHT or type == DelveMap.ELITE
+
+
+## Ends the room once its play is over: a fight room needs its fight won or
+## lost. A win pays loot and moves on; a loss washes up in the barrel.
 func finish_room() -> bool:
 	if step != Step.IN_ROOM:
 		return false
-	if fight != null:
-		if fight.state == Fight.State.PLAYER_TURN:
+	if is_fight_room(room_type):
+		if fight == null or fight.state == Fight.State.PLAYER_TURN:
 			return false
 		choices.append({"room": fight.moves.duplicate(true)})
 		hp = fight.player_hp

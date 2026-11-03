@@ -236,6 +236,15 @@ func _check_rows() -> void:
 		if (slot_row["min_dice"] as int) < 1 or (slot_row["min_dice"] as int) > (slot_row["max_dice"] as int):
 			errors.append("slots \"%s\": needs 1 <= min_dice <= max_dice, got %d and %d" % [
 				id, slot_row["min_dice"], slot_row["max_dice"]])
+	# Every tier needs an enemy: the map places fight and elite rooms.
+	if _tables.has("enemies"):
+		var tiers: Dictionary[String, int] = {"regular": 0, "elite": 0}
+		for id: String in ids("enemies"):
+			var tier: String = row("enemies", id)["tier"]
+			tiers[tier] = tiers.get(tier, 0) + 1
+		for tier: String in tiers:
+			if tiers[tier] == 0:
+				errors.append("enemies: needs at least one %s enemy" % tier)
 	for id: String in ids("loot"):
 		var loot_row: Dictionary = row("loot", id)
 		if (loot_row["chance_percent"] as int) < 0 or (loot_row["chance_percent"] as int) > 100:

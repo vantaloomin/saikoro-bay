@@ -11,6 +11,8 @@ const TEST_ENEMIES: Array[Dictionary] = [
 		"twist": "house_lock", "twist_text": "t"},
 	{"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "tier": "regular", "hp": 16, "intents": ["attack:4", "attack:4", "attack:9"],
 		"twist": "snake_eyes", "twist_text": "t"},
+	{"id": "test_elite", "name": "Test Elite", "tier": "elite", "hp": 40, "intents": ["attack:8"],
+		"twist": "none", "twist_text": ""},
 ]
 
 var data: GameData
