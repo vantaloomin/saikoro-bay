@@ -6,12 +6,14 @@ extends GutTest
 var _state: GameState
 var _store: SaveStore
 var _problem: String
+var _fake: bool
 
 
 func before_each() -> void:
 	_state = Game.state
 	_store = Game.store
 	_problem = Game.save_problem
+	_fake = Game.fake_town
 
 
 func after_each() -> void:
@@ -19,6 +21,7 @@ func after_each() -> void:
 	Game.state = _state
 	Game.store = _store
 	Game.save_problem = _problem
+	Game.fake_town = _fake
 
 
 func test_the_fake_town_is_a_town_the_game_could_reach() -> void:
@@ -44,12 +47,27 @@ func test_it_plays_in_its_own_slot_and_starts_fresh() -> void:
 	assert_eq(scene, Game.TOWN_SCENE)
 	assert_ne(Game.store, real, "the real slot is never touched")
 	assert_eq(Game.store.path, FakeTown.SAVE_PATH)
-	assert_eq(Game.save_problem, FakeTown.NOTICE, "the notice board says it's a test town")
+	assert_true(Game.fake_town)
+	assert_eq(Game.save_problem, "", "the test town's notice isn't a save problem")
 	Game.state.add_resource("driftwood", 50)
 	Game.save()
+	var town: TownScreen = (load(Game.TOWN_SCENE) as PackedScene).instantiate() as TownScreen
+	add_child_autofree(town)
+	town.show_tab(TownScreen.TAB_NOTICE)
+	var texts: Array = town.get_node("%Notice").find_children("*", "Label", true, false).map(
+		func(label: Node) -> String: return (label as Label).text)
+	assert_has(texts, FakeTown.NOTICE, "the notice board still says it's a test town after a save (Imogen's #47 audit)")
 	Game.load_or_new(true)
 	assert_eq(Game.state.resource("driftwood"), FakeTown.HAUL_RESOURCES["driftwood"], "fresh on every launch")
 
 
 func test_it_needs_the_flag() -> void:
 	assert_false(FakeTown.requested(), "a plain launch is the real game")
+
+
+func test_a_real_launch_isnt_the_test_town() -> void:
+	Game.load_or_new(true)
+	Game.store = SaveStore.new("user://test_fake_town_real.save")
+	Game.load_or_new(false)
+	assert_false(Game.fake_town, "the notice and the playtest log know it's the real game")
+	Game.store.erase()

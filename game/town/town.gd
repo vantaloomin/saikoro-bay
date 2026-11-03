@@ -229,6 +229,9 @@ func _show_notice(folded: bool) -> void:
 	var notice: Array[Control] = []
 	var homeless: String = Game.state.homeless_line(Game.data)
 	var lines: PackedStringArray = notice_lines(Game.data, Game.state, Game.save_problem)
+	if Game.fake_town:
+		# Its own line, so a save (or a save failing) never replaces it.
+		lines.append(FakeTown.NOTICE)
 	if not _cheer.is_empty():
 		lines.insert(0, _cheer)
 	if folded and lines.size() > 1:

@@ -51,6 +51,8 @@ func start(file_path: String) -> Error:
 		"sfw_build": OS.has_feature("sfw"),
 		"campaign_seed": str(Game.state.campaign_seed),
 		"delve_count": Game.state.delve_count,
+		# Exit-check sessions in the test town, to leave out of real numbers.
+		"fake_town": Game.fake_town,
 	})
 	if Game.state.phase == GameState.Phase.TOWN:
 		_town_since_ms = _session_start_ms

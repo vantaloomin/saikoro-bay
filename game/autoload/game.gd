@@ -35,6 +35,9 @@ var store: SaveStore:
 var saving_locked: bool = false
 ## Why saving is off or the last save failed, for the town to show, or "".
 var save_problem: String = ""
+## True while playing the M3 exit check's test town (FakeTown), so the
+## notice board and the playtest log can say so.
+var fake_town: bool = false
 
 
 func _init() -> void:
@@ -55,8 +58,9 @@ func _ready() -> void:
 ## an abandoned delve (Imogen's #6 audit): it washes up in the barrel with
 ## nothing kept, it's saved at once, and the town shows it. So quitting
 ## can't be used to retry a bad delve.
-func load_or_new(fake_town: bool = FakeTown.requested()) -> String:
-	if fake_town:
+func load_or_new(test_town: bool = FakeTown.requested()) -> String:
+	fake_town = test_town
+	if test_town:
 		return _start_fake_town()
 	var result: SaveStore.ReadResult = store.read()
 	saving_locked = result.status == SaveCodec.Status.TOO_NEW
@@ -102,8 +106,6 @@ func _start_fake_town() -> String:
 		state = GameState.new(_new_campaign_seed())
 		state.arrive(data)
 	save()
-	# After the save, which clears save_problem when it works.
-	save_problem = FakeTown.NOTICE
 	return scene_for_phase()
 
 
