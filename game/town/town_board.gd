@@ -106,6 +106,10 @@ var _party_at: Vector3 = Vector3.ZERO
 ## through them), seconds left of the walk, of the pop and of the stay,
 ## and each mood before the landmark.
 var _routes: Dictionary[String, PackedVector3Array] = {}
+## Each route's leg with no way round (-1 for none), and how visible each
+## walker is right now; a villager missing from it is fully visible.
+var _blocked: Dictionary[String, int] = {}
+var walker_opacity: Dictionary[String, float] = {}
 var _walk_left: float = 0.0
 var _going_home: bool = false
 var _pop_left: float = 0.0
@@ -326,7 +330,7 @@ func gather_at(uid: int, moods_before: Dictionary[String, Town.Mood]) -> void:
 	var to: Array[Vector3] = view.gather_spots(_data, _state.town, building, names.size())
 	_routes.clear()
 	for i: int in names.size():
-		_routes[names[i]] = view.walk_route(_data, _state.town, from[names[i]], to[i])
+		_set_route(names[i], from[names[i]], to[i])
 	_going_home = false
 	_walk_left = WALK_SECONDS
 
@@ -343,10 +347,15 @@ func advance_gathering(seconds: float) -> void:
 		var t: float = smoothstep(0.0, 1.0, 1.0 - _walk_left / WALK_SECONDS)
 		for villager: String in _routes:
 			var spot: Vector3 = TownView.along(_routes[villager], t)
+			var seen: float = TownView.walk_opacity(_routes[villager], _blocked[villager], t) if _walk_left > 0.0 else 1.0
+			if seen < 1.0:
+				walker_opacity[villager] = seen
+			else:
+				walker_opacity.erase(villager)
 			# A little bob in the step, so it reads as a walk.
 			spot.y += absf(sin(t * PI * 6.0)) * 0.05 if _walk_left > 0.0 else 0.0
 			view.walking[villager] = spot
-			diorama.move_villager(villager, spot)
+			diorama.move_villager(villager, spot, seen)
 		if _walk_left <= 0.0:
 			if _going_home:
 				view.walking.clear()
@@ -374,6 +383,7 @@ func stop_gathering() -> void:
 	_pop_left = 0.0
 	_stay_left = 0.0
 	bubble_reveal = 1.0
+	walker_opacity.clear()
 	if not view.walking.is_empty():
 		view.walking.clear()
 		if _state != null:
@@ -399,9 +409,14 @@ func _walk_home() -> void:
 	view.walking = walking
 	_routes.clear()
 	for villager: String in homes:
-		_routes[villager] = view.walk_route(_data, _state.town, walking.get(villager, homes[villager]), homes[villager])
+		_set_route(villager, walking.get(villager, homes[villager]), homes[villager])
 	_going_home = true
 	_walk_left = WALK_SECONDS
+
+
+func _set_route(villager: String, from: Vector3, to: Vector3) -> void:
+	_routes[villager] = view.walk_route(_data, _state.town, from, to)
+	_blocked[villager] = view.blocked_leg(_data, _state.town, _routes[villager])
 
 
 func _still_there(hit: Dictionary) -> bool:
@@ -651,8 +666,9 @@ func _draw_bubbles() -> void:
 	for villager: String in rects:
 		var now: Town.Mood = _state.mood(_data, villager)
 		var before: Town.Mood = _moods_before.get(villager, now)
+		var seen: Color = Color(1, 1, 1, walker_opacity.get(villager, 1.0))
 		if bubble_reveal >= 1.0 or before == now:
-			_bubbles.draw_texture_rect(_bubble_textures[now], rects[villager], false)
+			_bubbles.draw_texture_rect(_bubble_textures[now], rects[villager], false, seen)
 		elif Settings.reduce_motion:
 			# A crossfade from the old mood to the new.
 			_bubbles.draw_texture_rect(_bubble_textures[before], rects[villager], false, Color(1, 1, 1, 1.0 - bubble_reveal))
@@ -664,9 +680,9 @@ func _draw_bubbles() -> void:
 			var pop: float = clampf(bubble_reveal * 2.0 - 1.0, 0.0, 1.0)
 			var grow: float = pop + sin(pop * PI) * 0.25
 			if out > 0.0:
-				_bubbles.draw_texture_rect(_bubble_textures[before], _scaled(rects[villager], out), false)
+				_bubbles.draw_texture_rect(_bubble_textures[before], _scaled(rects[villager], out), false, seen)
 			if grow > 0.0:
-				_bubbles.draw_texture_rect(_bubble_textures[now], _scaled(rects[villager], grow), false)
+				_bubbles.draw_texture_rect(_bubble_textures[now], _scaled(rects[villager], grow), false, seen)
 
 
 static func _scaled(rect: Rect2, by: float) -> Rect2:
@@ -692,14 +708,16 @@ func _draw_overlay() -> void:
 	for tag: Dictionary in tags:
 		var rect: Rect2 = tag["rect"]
 		var anchor: Vector2 = tag["anchor"]
+		var seen: float = walker_opacity.get(str(tag.get("villager", "")), 1.0)
 		if absf(rect.position.y - anchor.y) > rect.size.y / 2.0:
 			# Pushed off its owner: a tick says whose it is (Mara's #41
 			# review). Ticks go first, so tags cover the ones that cross them.
 			var top: Vector2 = Vector2(clampf(anchor.x, rect.position.x + 8.0, rect.end.x - 8.0), rect.position.y)
-			_overlay.draw_line(anchor, top, TownStyle.WASHI, 4.0, true)
-			_overlay.draw_line(anchor, top, TownStyle.INK, 2.0, true)
+			_overlay.draw_line(anchor, top, Color(TownStyle.WASHI, seen), 4.0, true)
+			_overlay.draw_line(anchor, top, Color(TownStyle.INK, seen), 2.0, true)
 	for tag: Dictionary in tags:
-		_draw_tag_in(tag["text"], tag["rect"], 0.85 if tag["kind"] == "villager" else 1.0)
+		var seen: float = walker_opacity.get(str(tag.get("villager", "")), 1.0)
+		_draw_tag_in(tag["text"], tag["rect"], (0.85 if tag["kind"] == "villager" else 1.0) * seen, seen)
 	# What the pointer is about to do goes over every name.
 	if mode == Mode.CARRY:
 		_draw_carry_tag()
@@ -912,7 +930,7 @@ func map_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
 		var role: String = str(_data.row("villagers", villager).get("role", villager))
 		var feet: Vector2 = view.to_screen(spots[villager])
 		var head: Vector2 = Vector2(feet.x, bubbles[villager].position.y - 2.0)
-		villagers.append({"text": role, "anchor": feet, "kind": "villager", "above": head,
+		villagers.append({"text": role, "anchor": feet, "kind": "villager", "villager": villager, "above": head,
 			"rect": _tag_rect(role, feet + Vector2(0, 6), false)})
 	var buildings: Array[Dictionary] = []
 	for uid: int in building_names():
@@ -984,7 +1002,7 @@ func _draw_tag(text: String, at: Vector2, above: bool, opacity: float) -> void:
 	_draw_tag_in(text, _tag_rect(text, at, above), opacity)
 
 
-func _draw_tag_in(text: String, box: Rect2, opacity: float) -> void:
+func _draw_tag_in(text: String, box: Rect2, opacity: float, ink: float = 1.0) -> void:
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(TownStyle.WASHI, opacity)
 	style.border_color = Color(TownStyle.LOT_LINE, opacity)
@@ -992,7 +1010,7 @@ func _draw_tag_in(text: String, box: Rect2, opacity: float) -> void:
 	style.set_corner_radius_all(8)
 	_overlay.draw_style_box(style, box)
 	_overlay.draw_string(_font, Vector2(box.position.x + 10, box.end.y - 4 - _font.get_descent(_tag_font_size()) * 0.5),
-		text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tag_font_size(), TownStyle.INK)
+		text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tag_font_size(), Color(TownStyle.INK, ink))
 
 
 ## Corner brackets around a pick: around a building's block, or around a

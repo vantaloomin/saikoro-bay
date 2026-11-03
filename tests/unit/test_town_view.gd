@@ -124,14 +124,20 @@ func test_villagers_with_no_home_wait_on_the_dock() -> void:
 ## few centimetres, and whether it ever leaves the land or the dock.
 func _walk_problem(view: TownView, state: GameState, route: PackedVector3Array) -> String:
 	for i: int in 401:
-		var at: Vector3 = TownView.along(route, i / 400.0)
-		var feet: Vector3 = Vector3(at.x, 0.05, at.z)
-		for placed: Dictionary in state.town.placed:
-			if TownView.block_box(data, placed).has_point(feet):
-				return "walks through the %s at %s" % [placed["building"], at]
-		var on_dock: bool = at.z < map.land_rows + 1.1 and at.x < TownView.DOCK_CELLS + 0.3
-		if at.x < 0.0 or at.x > map.width or at.z < 0.0 or (at.z > map.land_rows and not on_dock):
-			return "walks off the land at %s" % at
+		var problem: String = _point_problem(state, TownView.along(route, i / 400.0))
+		if not problem.is_empty():
+			return problem
+	return ""
+
+
+func _point_problem(state: GameState, at: Vector3) -> String:
+	var feet: Vector3 = Vector3(at.x, 0.05, at.z)
+	for placed: Dictionary in state.town.placed:
+		if TownView.block_box(data, placed).has_point(feet):
+			return "walks through the %s at %s" % [placed["building"], at]
+	var on_dock: bool = at.z < map.land_rows + 1.1 and at.x < TownView.DOCK_CELLS + 0.3
+	if at.x < 0.0 or at.x > map.width or at.z < 0.0 or (at.z > map.land_rows and not on_dock):
+		return "walks off the land at %s" % at
 	return ""
 
 
@@ -187,6 +193,85 @@ func test_every_gathering_walk_stays_out_of_buildings() -> void:
 		var back: PackedVector3Array = view.walk_route(data, state.town, spots[i], homes[villager])
 		assert_eq(_walk_problem(view, state, back), "", "%s on the way home" % villager)
 		i += 1
+
+
+func test_a_walk_from_the_dock_never_crosses_the_sea() -> void:
+	# Imogen's #53 audit: the straight line from the dock to the east end
+	# of the bottom row is over the water.
+	var state: GameState = _state()
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	for i: int in 4:
+		for to: Vector3 in [Vector3(11.67, 0.0, 7.88), Vector3(map.width - 0.5, 0.06, map.land_rows - 0.5)]:
+			var route: PackedVector3Array = view.walk_route(data, state.town, view.dock_spot(i), to)
+			assert_eq(_walk_problem(view, state, route), "", "dock spot %d to %s" % [i, to])
+			var back: PackedVector3Array = view.walk_route(data, state.town, to, view.dock_spot(i))
+			assert_eq(_walk_problem(view, state, back), "", "%s back to dock spot %d" % [to, i])
+
+
+func test_a_walled_off_goal_fades_across_the_last_hop() -> void:
+	var state: GameState = _state()
+	# Fill the bottom-left lot round (1, 6), so it can't be reached.
+	for cell: Vector2i in [Vector2i(0, 5), Vector2i(1, 5), Vector2i(2, 5), Vector2i(0, 6), Vector2i(2, 6),
+			Vector2i(0, 7), Vector2i(1, 7), Vector2i(2, 7), Vector2i(3, 5), Vector2i(3, 6), Vector2i(3, 7)]:
+		_place(state, "cottage", cell)
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var to: Vector3 = Vector3(1.5, 0.0, 6.5)
+	var route: PackedVector3Array = view.walk_route(data, state.town, Vector3(6.5, 0.0, 4.5), to)
+	var blocked: int = view.blocked_leg(data, state.town, route)
+	assert_eq(blocked, route.size() - 2, "only the last hop goes through")
+	assert_eq(route[route.size() - 1], to, "and still ends there")
+	assert_eq(TownView.walk_opacity(route, blocked, 0.0), 1.0)
+	assert_eq(TownView.walk_opacity(route, blocked, 1.0), 1.0, "back in view at the end")
+	assert_eq(_unseen_problem(view, state, route, blocked), "")
+
+
+## Like _walk_problem, but a walker who is out of sight may pass anywhere.
+func _unseen_problem(view: TownView, state: GameState, route: PackedVector3Array, blocked: int) -> String:
+	for i: int in 201:
+		var t: float = i / 200.0
+		if TownView.walk_opacity(route, blocked, t) <= 0.0:
+			continue
+		var problem: String = _point_problem(state, TownView.along(route, t))
+		if not problem.is_empty():
+			return "%s, seen at %.2f" % [problem, TownView.walk_opacity(route, blocked, t)]
+	return ""
+
+
+func test_in_random_towns_nobody_is_seen_in_a_wall_or_the_sea() -> void:
+	# Imogen's #53 probe as a test: legal towns, walks between open cells and the dock.
+	var ids: PackedStringArray = data.ids("buildings")
+	var view: TownView = TownView.make(map, Vector2(1920, 1080))
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 53
+	var walks: int = 0
+	var faded: int = 0
+	for town_index: int in 60:
+		var state: GameState = _state()
+		for attempt: int in 40:
+			var building: String = ids[rng.randi_range(0, ids.size() - 1)]
+			var cell: Vector2i = Vector2i(rng.randi_range(0, map.width - 1), rng.randi_range(0, map.land_rows - 1))
+			if state.town.spot_problem(data, map, building, cell).is_empty():
+				state.town.place(building, cell)
+		var open: Array[Vector3] = []
+		for x: int in map.width:
+			for y: int in map.land_rows:
+				if state.town.building_at(data, Vector2i(x, y)).is_empty():
+					open.append(_cell_center(Vector2i(x, y)))
+		for i: int in 4:
+			open.append(view.dock_spot(i))
+		for walk: int in 8:
+			var from: Vector3 = open[rng.randi_range(0, open.size() - 1)]
+			var to: Vector3 = open[rng.randi_range(0, open.size() - 1)]
+			var route: PackedVector3Array = view.walk_route(data, state.town, from, to)
+			var blocked: int = view.blocked_leg(data, state.town, route)
+			var problem: String = _unseen_problem(view, state, route, blocked)
+			walks += 1
+			faded += 1 if blocked >= 0 else 0
+			if not problem.is_empty():
+				fail_test("town %d, %s to %s: %s" % [town_index, from, to, problem])
+				return
+	assert_eq(walks, 480)
+	assert_gt(faded, 0, "some of those walks had a goal walled off")
 
 
 func test_a_point_along_a_route_goes_by_distance() -> void:

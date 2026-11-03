@@ -29,6 +29,9 @@ const PAN_SLACK: float = 1.0
 ## (TownDiorama draws it), so villagers can walk there and nowhere else
 ## in the sea.
 const DOCK_CELLS: int = 5
+## How far a villager walks while fading out of sight, or back in, across
+## a hop that has no way round.
+const FADE_DISTANCE: float = 0.25
 
 var map: TownMap
 var size: Vector2 = Vector2(1920, 1080)
@@ -271,16 +274,18 @@ func villager_spots(data: GameData, state: GameState) -> Dictionary[String, Vect
 
 
 ## The way a villager walks from `from` to `to`: corner points, both ends
-## included, that never cut through a building. Steps cell to cell over
-## open land, paths and the dock (never the sea), goes diagonally only
-## past open corners, then drops every corner a straight line can skip,
-## so open ground is crossed in one stroke. Building edges get a
+## included, that never cut through a building or the sea. Steps cell to
+## cell over open land, paths and the dock, goes diagonally only past open
+## corners, then drops every corner a straight line can skip, so open
+## ground is crossed in one stroke. Buildings and the water's edge get a
 ## villager's half width of room. An end standing in a building (a
-## walled-in doorstep) still gets a route out; if none exists at all,
-## the walk goes straight.
+## walled-in doorstep) still gets a route out. When the goal is walled off
+## altogether (a dense lot can close a pocket), the route goes as near as
+## it can and the last hop is blocked: blocked_leg finds it, and the walk
+## fades the villager out and back in across it (Imogen's #53 audit).
 func walk_route(data: GameData, town: Town, from: Vector3, to: Vector3) -> PackedVector3Array:
 	var straight: PackedVector3Array = [from, to]
-	var boxes: Array[AABB] = _walk_boxes(data, town)
+	var boxes: Array[AABB] = _walk_boxes(data, town, VILLAGER_SIZE.x / 2.0)
 	if _clear_line(from, to, boxes):
 		return straight
 	var grid: AStarGrid2D = AStarGrid2D.new()
@@ -301,11 +306,13 @@ func walk_route(data: GameData, town: Town, from: Vector3, to: Vector3) -> Packe
 	var goal: Vector2i = _walk_cell(grid, to)
 	grid.set_point_solid(start, false)
 	grid.set_point_solid(goal, false)
-	var cells: Array[Vector2i] = grid.get_id_path(start, goal)
+	var cells: Array[Vector2i] = grid.get_id_path(start, goal, true)
 	if cells.is_empty():
 		return straight
+	# Short of the goal when it's walled off: walk every cell reached, then hop.
+	var last: int = cells.size() - 1 if cells[cells.size() - 1] == goal else cells.size()
 	var points: Array[Vector3] = [from]
-	for i: int in range(1, cells.size() - 1):
+	for i: int in range(1, last):
 		points.append(Vector3(cells[i].x + 0.5, (from.y + to.y) / 2.0, cells[i].y + 0.5))
 	points.append(to)
 	# Pull the string tight: from each corner kept, go as far as a clear line reaches.
@@ -320,6 +327,37 @@ func walk_route(data: GameData, town: Town, from: Vector3, to: Vector3) -> Packe
 		out.append(points[reach])
 		at = reach
 	return out
+
+
+## The first leg of `route` that goes through a wall or over the water,
+## or -1 when it's clear all the way. Only a walled-off goal has one.
+func blocked_leg(data: GameData, town: Town, route: PackedVector3Array) -> int:
+	var walls: Array[AABB] = _walk_boxes(data, town, 0.0)
+	for i: int in range(1, route.size()):
+		if not _clear_line(route[i - 1], route[i], walls):
+			return i - 1
+	return -1
+
+
+## How visible a villager is `t` of the way along `route` (0 to 1): fully,
+## except across leg `blocked`, where they fade out over FADE_DISTANCE
+## as it starts and back in as it ends. 1 everywhere when `blocked` is -1.
+static func walk_opacity(route: PackedVector3Array, blocked: int, t: float) -> float:
+	if blocked < 0 or blocked >= route.size() - 1:
+		return 1.0
+	var total: float = 0.0
+	var leg_start: float = 0.0
+	for i: int in range(1, route.size()):
+		if i - 1 == blocked:
+			leg_start = total
+		total += route[i - 1].distance_to(route[i])
+	var leg_end: float = leg_start + route[blocked].distance_to(route[blocked + 1])
+	var walked: float = clampf(t, 0.0, 1.0) * total
+	if walked < leg_start or walked > leg_end:
+		return 1.0
+	var fading_out: float = (leg_start + FADE_DISTANCE - walked) / FADE_DISTANCE
+	var fading_in: float = (walked - (leg_end - FADE_DISTANCE)) / FADE_DISTANCE
+	return clampf(maxf(fading_out, fading_in), 0.0, 1.0)
 
 
 ## The point `t` of the way (0 to 1) along a route, by distance walked.
@@ -338,15 +376,17 @@ static func along(route: PackedVector3Array, t: float) -> Vector3:
 	return route[route.size() - 1]
 
 
-## Each building's footprint, flat and grown by half a villager, for
-## seeing whether a walk would brush it.
-func _walk_boxes(data: GameData, town: Town) -> Array[AABB]:
+## What a walk must keep out of, flat and grown by `room`: each
+## building's walls, and the sea past the dock's planks.
+func _walk_boxes(data: GameData, town: Town, room: float) -> Array[AABB]:
 	var out: Array[AABB] = []
 	for placed: Dictionary in town.placed:
 		var box: AABB = block_box(data, placed)
 		box.position.y = -1.0
 		box.size.y = 2.0
-		out.append(box.grow(VILLAGER_SIZE.x / 2.0))
+		out.append(box.grow(room))
+	var sea: AABB = AABB(Vector3(DOCK_CELLS, -1.0, map.land_rows), Vector3(map.width - DOCK_CELLS, 2.0, map.height - map.land_rows))
+	out.append(sea.grow(room))
 	return out
 
 
