@@ -5,10 +5,11 @@ extends SceneTree
 ##
 ## Options:
 ##   --scenario=NAME   delve (default) or fight
-##   --bot=NAME        greedy (default, the floor) or planner (the ceiling)
+##   --bot=NAME        greedy (default, the floor) or planner (a strong player)
 ##   --enemy=ID        the enemy for --scenario=fight
 ##   --fights=N        fights in a delve (default 6)
 ##   --perks=a,b       perks the kit carries, e.g. nudge,brace
+##   --rest-every=N --rest-heal=H   a rest healing H after every N fights won
 ##   --seeds=N         how many seeds to play (default 10000)
 ##   --first-seed=S    first seed (default 1)
 ##   --out=PATH        also write the JSON report to PATH
@@ -41,7 +42,8 @@ func _initialize() -> void:
 	var scenario: BotScenario = null
 	match str(args.get("scenario", "delve")):
 		"delve":
-			scenario = DelveScenario.new(data, bot, str(args.get("fights", "6")).to_int(), perks)
+			scenario = DelveScenario.new(data, bot, str(args.get("fights", "6")).to_int(), perks,
+				str(args.get("rest-every", "0")).to_int(), str(args.get("rest-heal", "0")).to_int())
 		"fight":
 			var enemy: String = str(args.get("enemy", ""))
 			if not data.has_row("enemies", enemy):

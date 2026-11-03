@@ -53,14 +53,19 @@ func test_planner_finds_the_lethal_turn() -> void:
 
 
 func test_reroll_outcomes_cover_every_roll() -> void:
-	var faces: Array[int] = [1, 2, 3, 4, 5, 6]
+	var d6: Array = [1, 2, 3, 4, 5, 6]
 	for count: int in [1, 2, 3]:
-		var outcomes: Array[Array] = PlannerBot._outcomes(faces, count)
+		var faces: Array[Array] = []
+		for i: int in count:
+			faces.append(d6)
 		var total: int = 0
-		for outcome: Array in outcomes:
+		for outcome: Array in PlannerBot._outcomes(faces):
 			total += outcome[1] as int
 		assert_eq(total, int(pow(6, count)), "%d dice" % count)
-	assert_eq(PlannerBot._outcomes(faces, 3).size(), 56)
+	assert_eq(PlannerBot._outcomes([d6, d6, d6] as Array[Array]).size(), 56)
+	# Different dice (KP-3) are enumerated roll by roll.
+	var mixed: Array[Array] = PlannerBot._outcomes([d6, [2, 2, 4, 4, 6, 6]] as Array[Array])
+	assert_eq(mixed.size(), 36)
 
 
 func test_scenarios_are_deterministic_and_count_per_enemy() -> void:

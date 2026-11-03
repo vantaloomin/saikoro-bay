@@ -2,8 +2,9 @@ class_name DelveScenario
 extends BotScenario
 ## A stand-in delve until M2 brings the map: `fights` fights in a row,
 ## each enemy drawn from the ENEMIES stream, HP carried from fight to
-## fight, no rests or treasure. Fights aren't independent, because HP
-## carries, so this is the number the balance band watches.
+## fight, no treasure. Optional rests heal `rest_heal` after every
+## `rest_every` fights won (0 = no rests). Fights aren't independent,
+## because HP carries, so this is the number the balance band watches.
 ##
 ## Outcome: won = cleared every fight, depth = fights won, turns = total
 ## turns. Counters per enemy: fights:<id>, wins:<id>, hp_lost:<id>.
@@ -13,20 +14,26 @@ var bot: FightBot
 var fights: int = 6
 var loadout_id: String = "fresh"
 var perks: Array[Dictionary] = []
+var rest_every: int = 0
+var rest_heal: int = 0
 
 
-func _init(game_data: GameData, fight_bot: FightBot, fight_count: int = 6, with_perks: Array[Dictionary] = []) -> void:
+func _init(game_data: GameData, fight_bot: FightBot, fight_count: int = 6, with_perks: Array[Dictionary] = [],
+		rest_after: int = 0, rest_amount: int = 0) -> void:
 	data = game_data
 	bot = fight_bot
 	fights = fight_count
 	perks = with_perks
+	rest_every = rest_after
+	rest_heal = rest_amount
 
 
 func name() -> String:
 	var perk_ids: PackedStringArray = []
 	for entry: Dictionary in perks:
 		perk_ids.append(str(entry.get("perk", "")))
-	return "delve:%d:%s%s" % [fights, bot.name(), "" if perk_ids.is_empty() else ":" + "+".join(perk_ids)]
+	var rests: String = "" if rest_every <= 0 else ":rest%d+%d" % [rest_every, rest_heal]
+	return "delve:%d:%s%s%s" % [fights, bot.name(), rests, "" if perk_ids.is_empty() else ":" + "+".join(perk_ids)]
 
 
 func play(rng: RngStreams) -> BotScenario.Outcome:
@@ -47,6 +54,10 @@ func play(rng: RngStreams) -> BotScenario.Outcome:
 		_count(outcome, "wins:" + enemy_id, 1)
 		outcome.depth += 1
 		hp = fight.player_hp
+		if rest_every > 0 and outcome.depth % rest_every == 0 and outcome.depth < fights:
+			var healed: int = mini(rest_heal, fight.player_max_hp - hp)
+			hp += healed
+			_count(outcome, "rest_healed", healed)
 	outcome.won = true
 	return outcome
 

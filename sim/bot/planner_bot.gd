@@ -7,8 +7,9 @@ extends FightBot
 ## result of that reroll (it never sees the real one) and rerolls only if
 ## the average beats the plan in hand.
 ##
-## It can't see future turns, so it isn't perfect, but the gap between it
-## and GreedyBot shows how much skill the fight rewards.
+## It plays like a strong player, not a perfect one: it looks one turn
+## ahead and weighs one keep set per reroll. The gap between it and
+## GreedyBot shows how much skill the fight rewards.
 
 
 func name() -> String:
@@ -19,7 +20,7 @@ func play_turn(fight: Fight) -> void:
 	var plan: Dictionary = best_plan(fight, true)
 	if fight.rerolls_left > 0:
 		var reroll: Dictionary = _reroll_option(fight, plan)
-		if not reroll.is_empty() and (reroll["expected"] as int) > (plan["score"] as int):
+		if not reroll.is_empty() and (reroll["total_score"] as int) > (plan["score"] as int) * (reroll["total_weight"] as int):
 			_apply(fight, reroll["keep_plan"] as Dictionary)
 			fight.reroll(reroll["discard"] as int)
 			plan = best_plan(fight, true)
@@ -76,7 +77,8 @@ func _search(before: Fight, plan: Fight, free: Array[int], index: int, places: A
 
 ## The reroll worth weighing, or {} if there isn't one: keep the plan's
 ## placed dice, discard the lowest leftover, reroll the other leftovers.
-## Returns {"expected", "discard", "keep_plan"}.
+## Returns {"total_score", "total_weight", "discard", "keep_plan"}: the
+## expected score is total_score / total_weight, compared without dividing.
 func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 	var used: Dictionary = {}
 	for place: Variant in plan["places"] as Array:
@@ -105,7 +107,10 @@ func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 
 	var total_weight: int = 0
 	var total_score: int = 0
-	for outcome: Array in _outcomes(rerolled[0].faces, rerolled.size()):
+	var faces: Array[Array] = []
+	for d: Fight.Die in rerolled:
+		faces.append(d.faces)
+	for outcome: Array in _outcomes(faces):
 		var trial: Fight = kept.planning_copy()
 		var values: Array = outcome[0]
 		for i: int in rerolled.size():
@@ -113,8 +118,8 @@ func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 		trial._apply_house_lock()
 		var weight: int = outcome[1]
 		total_weight += weight
-		total_score += weight * (best_plan(trial, false)["score"] as int)
-	return {"expected": total_score / maxi(total_weight, 1), "discard": discard.id, "keep_plan": keep_plan}
+		total_score += weight * (best_plan(trial, true)["score"] as int)
+	return {"total_score": total_score, "total_weight": total_weight, "discard": discard.id, "keep_plan": keep_plan}
 
 
 func _apply(fight: Fight, plan: Dictionary) -> void:
@@ -125,13 +130,34 @@ func _apply(fight: Fight, plan: Dictionary) -> void:
 		fight.place((place as Array)[0] as int, (place as Array)[1] as String)
 
 
-## Every multiset of `count` faces, as [values (ascending), how many ordered
-## rolls give it]. Enumerating multisets instead of ordered rolls keeps
-## three dice at 56 cases instead of 216.
-static func _outcomes(faces: Array[int], count: int) -> Array[Array]:
+## Every result of rerolling dice with these faces (one list per die), as
+## [values, how many ordered rolls give it]. When every die has the same
+## faces, results are multisets assigned to the dice in ascending order,
+## which keeps three dice at 56 cases instead of 216. Dice with different
+## faces (KP-3) are enumerated one ordered roll at a time.
+static func _outcomes(faces: Array[Array]) -> Array[Array]:
 	var out: Array[Array] = []
-	_multisets(faces, count, 0, [], out)
+	var same: bool = true
+	for f: Array in faces:
+		if f != faces[0]:
+			same = false
+	if same and not faces.is_empty():
+		var first: Array[int] = []
+		first.assign(faces[0])
+		_multisets(first, faces.size(), 0, [], out)
+	else:
+		_products(faces, 0, [], out)
 	return out
+
+
+static func _products(faces: Array[Array], index: int, picked: Array, out: Array[Array]) -> void:
+	if index == faces.size():
+		out.append([picked.duplicate(), 1])
+		return
+	for v: Variant in faces[index]:
+		picked.append(v)
+		_products(faces, index + 1, picked, out)
+		picked.pop_back()
 
 
 static func _multisets(faces: Array[int], count: int, start: int, picked: Array, out: Array[Array]) -> void:
