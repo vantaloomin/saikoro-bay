@@ -69,7 +69,9 @@ const PICK_A_SPOT: String = "Pick a spot"
 ## you can see (Mara's #42 review).
 const CHEER: String = "The %s is open."
 const GATHERED: String = "Everyone came out to see the %s."
-const MOVED_IN: String = "The %s moved into the new %s."
+const MOVED_IN: String = "%s moved into the new %s."
+## Under the meter once the last milestone is reached.
+const TOP_MILESTONE: String = "The last milestone, for now"
 const TAB_NOTICE: String = "Notice board"
 const TAB_BUILD: String = "Build"
 ## The kit (specs/bridge.md section 5): what the town gives the next delve.
@@ -253,8 +255,9 @@ static func _is_press(event: InputEvent) -> bool:
 	return event is InputEventJoypadButton and (event as InputEventJoypadButton).pressed
 
 
-## The notice board: newest first after a change. While picking a home it
-## folds to its newest line, so the column keeps room for the pick's card.
+## The notice board: newest first after a change. While picking a home or
+## showing a villager's card it folds to one row of its newest line, so the
+## column keeps room for the card.
 func _show_notice(folded: bool) -> void:
 	var notice: Array[Control] = []
 	var homeless: String = Game.state.homeless_line(Game.data)
@@ -270,6 +273,13 @@ func _show_notice(folded: bool) -> void:
 		# Notes on the board are handwritten (two-halves: Klee One).
 		var note: Label = TownStyle.label(line)
 		note.add_theme_font_override("font", TownStyle.sign_font())
+		if folded:
+			# Folded means one row, however long the note: it trails off and
+			# the whole note shows on hover (Mara's date-flow follow-up).
+			note.autowrap_mode = TextServer.AUTOWRAP_OFF
+			note.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			note.tooltip_text = line
+			note.mouse_filter = Control.MOUSE_FILTER_PASS
 		notice.append(note)
 		if line == homeless and not folded:
 			# The shortcut sits right under the line it answers (VH-4).
@@ -610,7 +620,7 @@ func _place(building: String, cell: Vector2i) -> void:
 		var line: String = ""
 		for villager: String in homeless:
 			if Game.state.town.homes.get(villager, 0) == uid:
-				line = MOVED_IN % [Game.data.row("villagers", villager).get("role", villager),
+				line = MOVED_IN % [Game.data.villager_name(villager),
 					BuildList.card_for(Game.data, Game.state, building)["title"]]
 		_finish_change({"kind": "building", "uid": uid}, line)
 
@@ -924,7 +934,7 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 					lines.append("Nobody lives here yet.")
 				else:
 					# The mood gets its own line, so it never wraps mid-phrase.
-					lines.append("Home of the %s" % data.row("villagers", resident).get("role", resident))
+					lines.append("%s's home" % data.villager_name(resident))
 					lines.append(MOOD_WORDS[state.mood(data, resident)])
 			return {"title": str(row.get("name", building["building"])), "lines": lines, "chip": "", "quote": ""}
 		"villager":
@@ -958,6 +968,9 @@ static func affection_lines(data: GameData, points: int) -> PackedStringArray:
 		# No points: the beads show how far (Mara's date-flow review).
 		var unlocks: String = " · " + str(next["text"]) if not str(next["text"]).is_empty() else ""
 		out.append("Next: %s%s" % [next["name"], unlocks])
+	elif not reached.is_empty():
+		# Full beads alone read as a meter that's stuck (Mara's follow-up).
+		out.append(TOP_MILESTONE)
 	return out
 
 
@@ -1288,8 +1301,8 @@ func _show_confirm() -> void:
 
 func _show_home_pick() -> void:
 	var villager: String = sheet["villager"]
-	var role: String = str(Game.data.row("villagers", villager).get("role", villager))
-	var swap_line: String = "Whoever lives there moves into the %s's home." % role if Game.state.town.homes.has(villager) \
+	var who: String = Game.data.villager_name(villager)
+	var swap_line: String = "Whoever lives there moves into %s's home." % who if Game.state.town.homes.has(villager) \
 		else "Whoever lives there waits on the dock."
 	var children: Array[Control] = [
 		TownStyle.label("Pick one of the framed homes.", TownStyle.BODY),
@@ -1298,7 +1311,7 @@ func _show_home_pick() -> void:
 	var cancel: Button = _button("Cancel", back)
 	cancel.focus_mode = Control.FOCUS_NONE
 	children.append(cancel)
-	_fill(_card, "A new home for the %s" % role, children)
+	_fill(_card, "A new home for %s" % who, children)
 	_card.visible = true
 
 
@@ -1321,8 +1334,11 @@ func _show_card(hit: Dictionary) -> void:
 		chip.add_theme_stylebox_override("panel", chip_style)
 		chip.add_child(TownStyle.label(str(card["chip"]), TownStyle.SMALL))
 		children.append(chip)
+	var quote: Label = null
 	if not str(card["quote"]).is_empty():
-		children.append(TownStyle.label(str(card["quote"]), TownStyle.BODY, TownStyle.DIM))
+		quote = TownStyle.label(str(card["quote"]), TownStyle.BODY, TownStyle.DIM)
+		quote.name = "Quote"
+		children.append(quote)
 	match str(hit.get("kind", "")):
 		"building":
 			var uid: int = hit["uid"]
@@ -1363,6 +1379,20 @@ func _show_card(hit: Dictionary) -> void:
 			if not str(date["why"]).is_empty():
 				children.append(TownStyle.label(str(date["why"]), TownStyle.SMALL, TownStyle.DIM))
 	_fill(_card, str(card["title"]), children)
+	if quote != null:
+		_fit_card.call_deferred(quote)
+
+
+## A tall card (a villager's, on the Deck with the HUD grown) would run into
+## the kit strip, so its quote, the one line that only adds flavour, goes.
+## The wish chip above it says the same thing plainly.
+func _fit_card(quote: Label) -> void:
+	if not is_instance_valid(quote) or not quote.is_visible_in_tree():
+		return
+	var actions_top: float = _scaled_rect(_actions).position.y
+	var bottom: float = _right_column.position.y + (_card.position.y + _card.get_combined_minimum_size().y) * hud_scale
+	if bottom > actions_top - 16.0:
+		quote.visible = false
 
 
 func _has_other_home(villager: String) -> bool:

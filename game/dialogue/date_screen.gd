@@ -158,12 +158,7 @@ func _build() -> void:
 ## The speaker's name for the plate: the villager's name once data has
 ## one, else their role; "" for narration.
 static func speaker_name(data: GameData, id: String) -> String:
-	if id.is_empty():
-		return ""
-	if data.has_row("villagers", id):
-		var row: Dictionary = data.row("villagers", id)
-		return str(row.get("name", row.get("role", id)))
-	return id.capitalize()
+	return "" if id.is_empty() else data.villager_name(id)
 
 
 ## True once the player has left: an advance still awaiting when Leave was
@@ -385,6 +380,8 @@ static func result_lines(data: GameData, state: GameState, date: DateSession, re
 	if not next.is_empty():
 		var unlocks: String = " · " + str(next["text"]) if not str(next["text"]).is_empty() else ""
 		out.append("Next: %s%s" % [next["name"], unlocks])
+	elif not now.is_empty():
+		out.append(TownScreen.TOP_MILESTONE)
 	var actions: int = int(GameState.date_row(data, date.villager).get("actions", 0))
 	if actions > 0:
 		out.append("%d %s spent" % [actions, "action" if actions == 1 else "actions"])
