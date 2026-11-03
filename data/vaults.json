@@ -2,6 +2,6 @@
 	"schema": 1,
 	"note": "Koban's vault (specs/delve-map.md section 6): Beat the House. Each round she rolls house_dice openly, you may raise, then you roll your kit and fill the hand slot. Hands rank three of a kind > run > pair > high die, ties on the sum, and the house wins a full tie. First to rounds_to_win. A raise stakes max(1, amount / raise_divisor) of one haul resource; a won round pays back twice the stake. Placeholder numbers, tuned with the delve bot.",
 	"items": [
-		{ "id": "koban", "slots": ["vault_hand"], "house_dice": ["d6", "d6", "d6"], "rounds_to_win": 2, "rerolls_per_turn": 1, "raise_divisor": 4 }
+		{ "id": "koban", "slots": ["vault_hand"], "house_dice": ["koban_d6", "koban_d6", "koban_d6"], "rounds_to_win": 2, "rerolls_per_turn": 1, "raise_divisor": 4 }
 	]
 }

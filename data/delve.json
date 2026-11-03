@@ -6,7 +6,7 @@
 			"id": "slice",
 			"floors": 3, "rows_per_floor": 3,
 			"width_two_weight": 50, "width_three_weight": 50,
-			"fight_weight": 55, "treasure_weight": 20, "rest_weight": 15,
+			"fight_weight": 55, "treasure_weight": 12, "rest_weight": 12,
 			"max_fight_streak": 3,
 			"reveal_rows": 2,
 			"redraw_attempts": 8,
