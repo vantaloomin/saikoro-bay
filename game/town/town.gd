@@ -220,6 +220,8 @@ func current_tab() -> String:
 
 
 func show_tab(tab: String) -> void:
+	if tab == TAB_NOTICE and current_tab() != TAB_NOTICE:
+		sounds.play("paper")
 	if tab == TAB_BUILD:
 		if current_tab() != TAB_BUILD or sheet.get("kind", "") != "list":
 			open_build_list()
@@ -301,11 +303,12 @@ func _start_music() -> void:
 	music.name = "Music"
 	# Loops by its import settings; tools/make_town_loop.py makes it seamless.
 	music.stream = load(MUSIC_PATH) as AudioStreamOggVorbis
-	music.volume_db = MUSIC_DB if Settings.reduce_motion else -60.0
+	music.bus = &"Music"
+	# Always faded in: a fade isn't motion (Mara's #45 review).
+	music.volume_db = -60.0
 	add_child(music)
 	music.play()
-	if not Settings.reduce_motion:
-		create_tween().tween_property(music, "volume_db", MUSIC_DB, MUSIC_FADE_SECONDS)
+	create_tween().tween_property(music, "volume_db", MUSIC_DB, MUSIC_FADE_SECONDS)
 
 
 func _fade_music() -> void:

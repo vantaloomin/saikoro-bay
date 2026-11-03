@@ -18,6 +18,9 @@ extends Node
 const RATE: int = 22050
 const CUES: Array[String] = ["stamp", "refuse", "paper", "lift", "set_down", "chimes"]
 const HOLD: String = "hold"
+## Which bus each cue plays on: the HUD's own sounds are UI, the town's are
+## SFX (Mara's #45 review: each can be turned down in the pause menu).
+const UI_CUES: Array[String] = ["stamp", "refuse", "paper"]
 
 ## Cue name -> AudioStreamWAV. Built once, shared by every town screen.
 static var _streams: Dictionary[String, AudioStreamWAV] = {}
@@ -32,6 +35,7 @@ func _ready() -> void:
 	for i: int in 4:
 		var player: AudioStreamPlayer = AudioStreamPlayer.new()
 		player.volume_db = -10.0
+		player.bus = &"SFX"
 		add_child(player)
 		_players.append(player)
 
@@ -47,6 +51,7 @@ func play(cue: String) -> void:
 		return
 	var player: AudioStreamPlayer = _players[_next]
 	_next = (_next + 1) % _players.size()
+	player.bus = &"UI" if UI_CUES.has(cue) else &"SFX"
 	player.stream = stream(cue)
 	player.play()
 

@@ -440,3 +440,14 @@ func test_the_hold_tone_follows_the_fill() -> void:
 	assert_lt(hold.tone_level(), rising, "letting go early falls away with the fill")
 	hold.advance(HoldButton.DRAIN_SECONDS)
 	assert_eq(hold.tone_level(), 0.0, "and stops, never plays out")
+
+
+func test_music_and_sounds_each_have_their_own_volume() -> void:
+	var town: TownScreen = _open()
+	assert_eq(town.music.bus, &"Music")
+	assert_eq(town.sounds.get_child(0).get("bus"), &"SFX")
+	town.open_build_list()
+	assert_eq(town.sounds._players[0].bus, &"UI", "the list's rustle is a menu sound")
+	for bus: String in Settings.BUSES:
+		assert_gt(AudioServer.get_bus_index(bus), 0, "the %s bus exists" % bus)
+		assert_not_null(town.get_node("%PauseMenu").find_child(bus + "Volume", true, false), "the pause menu has a %s slider" % bus)

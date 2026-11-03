@@ -30,6 +30,7 @@ func _ready() -> void:
 	button_up.connect(stop_hold)
 	_tone = AudioStreamPlayer.new()
 	_tone.stream = TownSounds.stream(TownSounds.HOLD)
+	_tone.bus = &"UI"
 	add_child(_tone)
 	set_process(false)
 

@@ -2,13 +2,15 @@ class_name PauseMenu
 extends Control
 ## The pause menu (Start or Esc). It uses the neutral third skin from the
 ## two-halves spec, plain ink on off-white, so it belongs to neither half.
-## For now it holds Resume and Quit; settings join it later. Quit lives here,
+## It holds Resume, the three volumes (Music, Sounds, Menus) and Quit;
+## more settings join it later. Quit lives here,
 ## away from the town's only hold-to-commit button (Mara's #41 review).
 
 signal closed
 
 const PAPER: Color = Color(0.97, 0.97, 0.95)
 const INK: Color = Color(0.12, 0.12, 0.12)
+const VOLUME_NAMES: Dictionary[String, String] = {"Music": "Music", "SFX": "Sounds", "UI": "Menus"}
 
 var _resume: Button
 static var _neutral: Theme
@@ -58,6 +60,8 @@ func _ready() -> void:
 	_resume = _button("Resume")
 	_resume.pressed.connect(close)
 	stack.add_child(_resume)
+	for bus: String in Settings.BUSES:
+		stack.add_child(_volume_row(bus))
 	var quit: Button = _button("Quit to desktop")
 	quit.name = "Quit"
 	quit.pressed.connect(func() -> void: get_tree().quit())
@@ -81,6 +85,59 @@ func toggle() -> void:
 		close()
 	else:
 		open()
+
+
+## A volume: its name over a slider, saved as it moves.
+func _volume_row(bus: String) -> Control:
+	var row: VBoxContainer = VBoxContainer.new()
+	row.name = bus + "Volume"
+	var label: Label = Label.new()
+	label.text = VOLUME_NAMES[bus]
+	label.add_theme_font_size_override("font_size", 24)
+	label.add_theme_color_override("font_color", INK)
+	row.add_child(label)
+	var slider: HSlider = HSlider.new()
+	slider.name = "Slider"
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.05
+	slider.value = Settings.volumes.get(bus, 1.0)
+	slider.custom_minimum_size = Vector2(0, 40)
+	_style_slider(slider)
+	slider.value_changed.connect(func(value: float) -> void: Settings.set_volume(bus, value))
+	row.add_child(slider)
+	return row
+
+
+## Plain ink on off-white like the buttons: a grey track, the level filled
+## in ink, a round grabber, and a frame when focused.
+func _style_slider(slider: HSlider) -> void:
+	var track: StyleBoxFlat = StyleBoxFlat.new()
+	track.bg_color = Color(0.82, 0.82, 0.8)
+	track.set_corner_radius_all(5)
+	track.content_margin_top = 5
+	track.content_margin_bottom = 5
+	slider.add_theme_stylebox_override("slider", track)
+	var level: StyleBoxFlat = track.duplicate() as StyleBoxFlat
+	level.bg_color = INK
+	slider.add_theme_stylebox_override("grabber_area", level)
+	slider.add_theme_stylebox_override("grabber_area_highlight", level)
+	var focus: StyleBoxFlat = StyleBoxFlat.new()
+	focus.draw_center = false
+	focus.border_color = INK
+	focus.set_border_width_all(3)
+	focus.set_corner_radius_all(4)
+	focus.set_expand_margin_all(6)
+	slider.add_theme_stylebox_override("focus", focus)
+	var knob: Image = Image.create(28, 28, false, Image.FORMAT_RGBA8)
+	for y: int in 28:
+		for x: int in 28:
+			var d: float = Vector2(x + 0.5 - 14.0, y + 0.5 - 14.0).length()
+			if d <= 13.5:
+				knob.set_pixel(x, y, INK if d > 10.0 else PAPER)
+	var texture: ImageTexture = ImageTexture.create_from_image(knob)
+	for icon: String in ["grabber", "grabber_highlight"]:
+		slider.add_theme_icon_override(icon, texture)
 
 
 func _button(text: String) -> Button:
