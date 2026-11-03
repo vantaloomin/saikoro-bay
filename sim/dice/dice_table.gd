@@ -17,8 +17,9 @@ extends RefCounted
 ## lock is LOCK_HIGHEST_FREE) and the nudge amount, so the table never checks
 ## which enemy or perk asked for them.
 ##
-## Randomness: rolls use the ROLLS stream only. A copy has no streams, so it
-## can't reroll or peek at a future roll.
+## Randomness: each die rolls from its own stream (RngStreams.die_index), so
+## adding or changing a die never shifts another die's rolls. A copy has no
+## streams, so it can't reroll or peek at a future roll.
 
 ## Which die, if any, the owner's lock rule locks after each roll.
 enum LockPolicy { NONE, LOCK_HIGHEST_FREE }
@@ -413,4 +414,4 @@ func copy(into_events: Array[Dictionary], into_moves: Array[Dictionary]) -> Dice
 
 
 func _roll(d: Die) -> int:
-	return d.faces[_rng.index(RngStreams.Stream.ROLLS, d.faces.size())]
+	return d.faces[_rng.die_index(d.id, d.faces.size())]

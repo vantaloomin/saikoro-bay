@@ -173,8 +173,8 @@ func test_reroll_spends_the_discard_and_rerolls_the_free_dice_in_id_order() -> v
 	var expected_rng: RngStreams = RngStreams.new()
 	expected_rng.load_dict(fight.table._rng.to_dict())
 	var expected: Array[int] = []
-	for i: int in 2:
-		expected.append(fight.hand[0].faces[expected_rng.index(RngStreams.Stream.ROLLS, 6)])
+	for die_id: int in [2, 3]:
+		expected.append(fight.hand[die_id].faces[expected_rng.die_index(fight.hand[die_id].id, 6)])
 	assert_true(fight.reroll(0))
 	assert_true(fight.hand[0].discarded)
 	assert_eq(fight.hand[0].value, 3, "the discard isn't rerolled")
