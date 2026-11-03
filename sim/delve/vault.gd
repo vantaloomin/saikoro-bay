@@ -1,0 +1,235 @@
+class_name Vault
+extends RefCounted
+## Koban's vault: Beat the House (specs/delve-map.md section 6 and 8a rule
+## 3). A best-of-3 of poker dice against her open hand, with a wager.
+##
+## Each round:
+##   1. Koban rolls her house dice openly (ENEMIES stream). The vault waits
+##      in WAGER: you may raise() once, staking part of one haul resource.
+##   2. roll() rolls your kit (ROLLS stream) and starts your turn, with the
+##      usual reroll and nudge. Place 3 dice in the hand slot.
+##   3. end_turn() scores both hands: three of a kind > run > pair > high
+##      die, ties on the sum, and the house wins a full tie. A hand slot
+##      that isn't full loses. Win the round and the haul gets back twice
+##      the stake; lose it and the stake is gone.
+## First to rounds_to_win takes the vault: WON or LOST.
+##
+## The vault works on the run's haul (the same object), so every stake
+## leaves it on the way in and only what's won comes back. Banking (and
+## halving after a loss) happens after the last stake has resolved.
+##
+## Every move is logged in `moves`; the seed's streams plus the moves
+## replay the vault, as for a fight.
+
+enum State { WAGER, PLAYER_TURN, WON, LOST }
+
+const NUDGE_PERK: String = "nudge"
+## Hand ranks, low to high.
+const HIGH_DIE: int = 0
+const PAIR: int = 1
+const RUN: int = 2
+const THREE_KIND: int = 3
+const RANK_NAMES: Array[String] = ["high die", "pair", "run", "three of a kind"]
+
+const Die = DiceTable.Die
+const Slot = DiceTable.Slot
+
+var state: State = State.WAGER
+var round_number: int = 0
+var rounds_to_win: int = 2
+var rounds_won: int = 0
+var rounds_lost: int = 0
+## Koban's dice this round, as rolled.
+var house_hand: Array[int] = []
+## This round's stake: {resource id: amount}, or {} before a raise.
+var stake: Dictionary[String, int] = {}
+var raise_divisor: int = 4
+
+## The run's haul (shared): stakes come out of it and winnings go back in.
+var haul: Haul
+var table: DiceTable
+var events: Array[Dictionary] = []
+var moves: Array[Dictionary] = []
+
+var _house_faces: Array[Array] = []
+var _rng: RngStreams
+var _hand_slot: String = ""
+
+
+## Opens the vault on `haul` (the run's own Haul). Returns null if the
+## data is missing.
+static func create(data: GameData, loadout_id: String, vault_id: String, rng: RngStreams,
+		perks: Array[Dictionary], run_haul: Haul) -> Vault:
+	if not data.has_row("loadouts", loadout_id) or not data.has_row("vaults", vault_id) or run_haul == null:
+		return null
+	var vault_row: Dictionary = data.row("vaults", vault_id)
+	var loadout: Dictionary = data.row("loadouts", loadout_id)
+	var vault: Vault = Vault.new()
+	vault.table = DiceTable.create(data, loadout["dice"] as Array, vault_row["slots"] as Array, rng)
+	if vault.table == null:
+		return null
+	for die_id: Variant in vault_row["house_dice"] as Array:
+		if not data.has_row("dice", str(die_id)):
+			return null
+		vault._house_faces.append(data.row("dice", str(die_id))["faces"] as Array)
+	vault._rng = rng
+	vault._hand_slot = str((vault_row["slots"] as Array)[0])
+	vault.haul = run_haul
+	vault.table.events = vault.events
+	vault.table.moves = vault.moves
+	vault.table.rerolls_per_turn = vault_row["rerolls_per_turn"] as int
+	vault.rounds_to_win = vault_row["rounds_to_win"] as int
+	vault.raise_divisor = vault_row["raise_divisor"] as int
+	for entry: Dictionary in perks:
+		if str(entry.get("perk", "")) == NUDGE_PERK and data.has_row("perks", NUDGE_PERK):
+			var nudge_row: Dictionary = data.row("perks", NUDGE_PERK)
+			vault.table.nudge_perk = NUDGE_PERK
+			vault.table.nudge_source = str(entry.get("source", ""))
+			vault.table.nudge_amount = nudge_row["amount"] as int
+			vault.table.nudge_uses_per_turn = nudge_row["uses_per_turn"] as int
+			break
+	vault._start_round()
+	return vault
+
+
+## Poker-dice score for comparing hands: rank first, then the sum. Three
+## dice only; anything else scores -1 (an unfilled hand loses).
+static func hand_score(values: Array[int]) -> int:
+	if values.size() != 3:
+		return -1
+	return hand_rank(values) * 100 + values[0] + values[1] + values[2]
+
+
+static func hand_rank(values: Array[int]) -> int:
+	var sorted: Array[int] = values.duplicate()
+	sorted.sort()
+	if sorted[0] == sorted[2]:
+		return THREE_KIND
+	if sorted[1] == sorted[0] + 1 and sorted[2] == sorted[1] + 1:
+		return RUN
+	if sorted[0] == sorted[1] or sorted[1] == sorted[2]:
+		return PAIR
+	return HIGH_DIE
+
+
+func is_over() -> bool:
+	return state == State.WON or state == State.LOST
+
+
+func hand() -> Slot:
+	return table.slot(_hand_slot)
+
+
+func die(die_id: int) -> Die:
+	return table.die(die_id)
+
+
+## How much a raise on `resource_id` would stake now, or 0 if it can't.
+func raise_amount(resource_id: String) -> int:
+	if state != State.WAGER or not stake.is_empty() or haul.resource(resource_id) < 1:
+		return 0
+	return maxi(1, haul.resource(resource_id) / raise_divisor)
+
+
+## Stakes part of one haul resource on this round. Once a round.
+func raise(resource_id: String) -> bool:
+	var amount: int = raise_amount(resource_id)
+	if amount <= 0 or not haul.take_resource(resource_id, amount):
+		return false
+	stake[resource_id] = amount
+	events.append({"type": "raise", "resource": resource_id, "amount": amount})
+	moves.append({"move": "raise", "resource": resource_id})
+	return true
+
+
+## Ends the wager and rolls your dice.
+func roll() -> bool:
+	if state != State.WAGER:
+		return false
+	moves.append({"move": "roll"})
+	state = State.PLAYER_TURN
+	table.reset_turn()
+	var values: Array[int] = table.roll_hand()
+	events.append({"type": "turn_start", "round": round_number, "values": values})
+	return true
+
+
+func place(die_id: int, slot_id: String) -> bool:
+	return state == State.PLAYER_TURN and table.place(die_id, slot_id)
+
+
+func take_back(die_id: int) -> bool:
+	return state == State.PLAYER_TURN and table.take_back(die_id)
+
+
+func reroll(discard_id: int) -> bool:
+	return state == State.PLAYER_TURN and table.reroll(discard_id)
+
+
+func nudge(die_id: int) -> bool:
+	return state == State.PLAYER_TURN and table.nudge(die_id)
+
+
+## Scores the round, settles the stake, and starts the next round or ends
+## the vault.
+func end_turn() -> bool:
+	if state != State.PLAYER_TURN:
+		return false
+	moves.append({"move": "end_turn"})
+	var yours: Array[int] = table.values_in(hand())
+	var won: bool = hand_score(yours) > hand_score(house_hand)
+	events.append({"type": "round", "round": round_number, "won": won, "yours": yours, "house": house_hand.duplicate()})
+	for id: String in stake:
+		if won:
+			haul.add_resource(id, stake[id] * 2)
+			events.append({"type": "stake", "resource": id, "amount": stake[id] * 2, "won": true})
+		else:
+			events.append({"type": "stake", "resource": id, "amount": stake[id], "won": false})
+	stake = {}
+	if won:
+		rounds_won += 1
+	else:
+		rounds_lost += 1
+	if rounds_won >= rounds_to_win:
+		state = State.WON
+		events.append({"type": "won"})
+	elif rounds_lost >= rounds_to_win:
+		state = State.LOST
+		events.append({"type": "lost"})
+	else:
+		_start_round()
+	return true
+
+
+## Replays a move log. Returns false at the first move the vault refuses.
+func apply_moves(log_moves: Array[Dictionary]) -> bool:
+	for entry: Dictionary in log_moves:
+		var ok: bool = false
+		match str(entry.get("move", "")):
+			"raise":
+				ok = raise(str(entry.get("resource", "")))
+			"roll":
+				ok = roll()
+			"place":
+				ok = place(int(entry.get("die", -1)), str(entry.get("slot", "")))
+			"take_back":
+				ok = take_back(int(entry.get("die", -1)))
+			"reroll":
+				ok = reroll(int(entry.get("die", -1)))
+			"nudge":
+				ok = nudge(int(entry.get("die", -1)))
+			"end_turn":
+				ok = end_turn()
+		if not ok:
+			return false
+	return true
+
+
+func _start_round() -> void:
+	round_number += 1
+	state = State.WAGER
+	house_hand.clear()
+	for faces: Array in _house_faces:
+		house_hand.append(faces[_rng.index(RngStreams.Stream.ENEMIES, faces.size())] as int)
+	events.append({"type": "house_roll", "round": round_number, "values": house_hand.duplicate(),
+		"rank": RANK_NAMES[hand_rank(house_hand)]})

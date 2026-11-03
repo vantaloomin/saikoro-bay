@@ -56,6 +56,11 @@
 			"id": "cage_run", "name": "Run lock", "text": "Three dice in a row, like 3, 4, 5.",
 			"accepts": "run", "min": 1, "max": 6, "min_dice": 3, "max_dice": 3, "persists": true,
 			"effect": "open", "resource": "", "mult": 0, "add": 0, "icon_shape": "steps"
+		},
+		{
+			"id": "vault_hand", "name": "Your hand", "text": "Three dice, scored as poker dice.",
+			"accepts": "any", "min": 1, "max": 6, "min_dice": 3, "max_dice": 3, "persists": false,
+			"effect": "open", "resource": "", "mult": 0, "add": 0, "icon_shape": "fan"
 		}
 	]
 }
