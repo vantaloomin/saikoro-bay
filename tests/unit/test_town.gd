@@ -4,6 +4,11 @@ extends GutTest
 ## is checked with the building lifted, and the town saves as version 3.
 
 const V2_FIXTURE: String = "res://tests/saves/v2_cafe_two_villagers.save"
+## A built-up version 3 town. town_problems locks saving, so an edit to
+## town.json or buildings.json that breaks a stored placement would lock
+## every campaign. This fails first: such an edit ships with a migration
+## that unplaces what no longer fits (Imogen's #37 audit).
+const V3_FIXTURE: String = "res://tests/saves/v3_built_town.save"
 
 var data: GameData
 
@@ -259,6 +264,16 @@ func test_a_v2_save_migrates_to_an_empty_town_with_its_wins_kept() -> void:
 	assert_eq([loaded.delve_count, loaded.resource("driftwood")], [3, 14], "everything else is untouched")
 	assert_eq(loaded.town_problems(data), PackedStringArray())
 	assert_eq(loaded.build(data, "cafe", Vector2i(0, 5)), [] as Array[Dictionary], "the Café can be placed")
+
+
+func test_a_stored_town_still_fits_the_current_data() -> void:
+	var decoded: SaveCodec.DecodeResult = SaveCodec.decode(FileAccess.get_file_as_string(V3_FIXTURE))
+	assert_true(decoded.is_ok())
+	var loaded: GameState = GameState.from_dict(decoded.payload[GameState.PAYLOAD_KEY])
+	assert_not_null(loaded)
+	assert_eq(loaded.town.placed.size(), 7)
+	assert_eq(loaded.town_problems(data), PackedStringArray(),
+		"a data edit broke saved towns: ship a migration that unplaces what no longer fits")
 
 
 func test_the_town_draws_no_rng() -> void:
