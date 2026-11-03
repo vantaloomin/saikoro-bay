@@ -27,6 +27,42 @@ class IntentView:
 	extends Control
 	var current: Dictionary = {}
 	var next: Dictionary = {}
+	## Who chummed the water ("Bait shop"), named after an attack Chum
+	## raised (specs/bridge.md section 5).
+	var chum_source: String = ""
+
+	## What raised this attack: one {"name", "amount"} per source.
+	func raises(intent: Dictionary) -> Array[Dictionary]:
+		var out: Array[Dictionary] = []
+		if int(intent.get("raised", 0)) > 0:
+			out.append({"name": "Rising stakes", "amount": int(intent["raised"])})
+		if int(intent.get("chum", 0)) > 0:
+			out.append({"name": chum_source if not chum_source.is_empty() else "Chum", "amount": int(intent["chum"])})
+		return out
+
+	## The words after the attack's arrow: one source inline, "(+1 · Bait
+	## shop)" or "(+2)" for Rising stakes alone; two folded into one
+	## "(+3)", with breakdown() underneath (Mara's #52 review).
+	func raise_label(intent: Dictionary) -> String:
+		var parts: Array[Dictionary] = raises(intent)
+		if parts.is_empty():
+			return ""
+		if parts.size() == 1:
+			return "+%d" % parts[0]["amount"] if parts[0]["name"] == "Rising stakes" else "+%d · %s" % [parts[0]["amount"], parts[0]["name"]]
+		var total: int = 0
+		for part: Dictionary in parts:
+			total += int(part["amount"])
+		return "+%d" % total
+
+	## "Rising stakes +2 · Bait shop +1", only when two or more sources stack.
+	func breakdown(intent: Dictionary) -> String:
+		var parts: Array[Dictionary] = raises(intent)
+		if parts.size() < 2:
+			return ""
+		var words: PackedStringArray = []
+		for part: Dictionary in parts:
+			words.append("%s +%d" % [part["name"], part["amount"]])
+		return " · ".join(words)
 
 	func _init() -> void:
 		custom_minimum_size = Vector2(420, 150)
@@ -38,32 +74,40 @@ class IntentView:
 			if current.has(kind):
 				BoardStyle.draw_intent_glyph(self, Rect2(x, 10, 72, 72), kind, BoardStyle.INK)
 				draw_string(font, Vector2(x + 80, 70), str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG, BoardStyle.INK)
-				if kind == "attack" and current.has("raised"):
-					# Rising stakes, shown climbing (Mara, #32).
-					_draw_raise(font, Vector2(x + 80 + font.get_string_size(str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG).x + 8, 70),
-						current["raised"] as int, BoardStyle.BODY, BoardStyle.AMBER)
-					x += 90
-				x += 190
+				var after: float = x + 80 + font.get_string_size(str(current[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BIG).x + 8
+				if kind == "attack" and not raises(current).is_empty():
+					# Rising stakes and Chum, shown climbing (Mara, #32), in
+					# the neutral amber: gold is a gain in the delve (#52).
+					var start: float = after
+					after = _draw_raise(font, Vector2(after, 70), 0, BoardStyle.BODY, BoardStyle.AMBER, raise_label(current)) + 8
+					var under: String = breakdown(current)
+					if not under.is_empty():
+						draw_string(font, Vector2(start, 96), under, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL - 6, BoardStyle.AMBER)
+						after = maxf(after, start + font.get_string_size(under, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL - 6).x)
+				x = maxf(x + 190, after + 24)
 		draw_string(font, Vector2(0, 128), "next", HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL, BoardStyle.DIM)
 		x = 60
 		for kind: String in ["attack", "guard"]:
 			if next.has(kind):
 				BoardStyle.draw_intent_glyph(self, Rect2(x, 104, 32, 32), kind, BoardStyle.DIM)
 				draw_string(font, Vector2(x + 36, 130), str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY, BoardStyle.DIM)
-				if kind == "attack" and next.has("raised"):
-					_draw_raise(font, Vector2(x + 36 + font.get_string_size(str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY).x + 6, 130),
-						next["raised"] as int, BoardStyle.SMALL, BoardStyle.DIM)
-					x += 70
-				x += 90
+				var bump: int = int(next.get("raised", 0)) + int(next.get("chum", 0))
+				var after: float = x + 36 + font.get_string_size(str(next[kind]), HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.BODY).x + 6
+				if kind == "attack" and bump > 0:
+					after = _draw_raise(font, Vector2(after, 130), bump, BoardStyle.SMALL, BoardStyle.DIM) + 6
+				x = maxf(x + 90, after + 20)
 
-	## "(+2)" after an attack raised by Rising stakes, with a small up arrow
-	## drawn in front so it reads as climbing, not as the base number.
-	func _draw_raise(font: Font, at: Vector2, amount: int, font_size: int, color: Color) -> void:
+	## "(+2)" after an attack raised by Rising stakes (or "(+1 · Bait shop)"
+	## by Chum, from `label`), with a small up arrow drawn in front so it
+	## reads as climbing, not as the base number. Returns where it ends.
+	func _draw_raise(font: Font, at: Vector2, amount: int, font_size: int, color: Color, label: String = "") -> float:
 		var h: float = font_size * 0.5
 		var tip: Vector2 = at + Vector2(h * 0.5, -font_size * 0.75)
 		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(h * 0.5, h * 0.6), tip + Vector2(-h * 0.5, h * 0.6)]), color)
 		draw_line(tip + Vector2(0, h * 0.5), tip + Vector2(0, h * 1.3), color, 3.0)
-		draw_string(font, at + Vector2(h + 4, 0), "(+%d)" % amount, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+		var text: String = "(%s)" % (label if not label.is_empty() else "+%d" % amount)
+		draw_string(font, at + Vector2(h + 4, 0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
+		return at.x + h + 4 + font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 
 
 var fight: Fight
@@ -411,6 +455,7 @@ func _refresh_all() -> void:
 	_shown_player_hp = fight.player_hp
 	_shown_player_block = fight.player_block
 	_refresh_numbers()
+	_intent.chum_source = _source_name(fight.perk_source(Fight.CHUM_PERK)) if fight.has_perk(Fight.CHUM_PERK) else ""
 	_intent.current = fight.current_intent()
 	_intent.next = fight.next_intent()
 	_intent.queue_redraw()
@@ -457,6 +502,7 @@ func _refresh_all() -> void:
 	_turn = turn_preview()
 	_end_preview.text = end_turn_summary()
 	_end_detail.text = _turn["detail"]
+	_show_kit_note()
 	_refresh_numbers()
 
 
@@ -773,6 +819,9 @@ func _build() -> void:
 	for d: Fight.Die in fight.hand:
 		var view: DieView = DieView.new()
 		view.die_id = d.id
+		view.show_type(data, d.type_id)
+		view.focus_entered.connect(_show_kit_note)
+		view.focus_exited.connect(_show_kit_note)
 		view.custom_minimum_size = Vector2(150, 150)
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))
@@ -858,7 +907,17 @@ static func _accepts_face(row: Dictionary, face: int) -> bool:
 ## The breakdown fades in and out in place: its lines stay reserved, so
 ## the buttons under it never move.
 func _set_detail(shown: bool) -> void:
-	_end_detail.modulate.a = 1.0 if shown else 0.0
+	_end_detail.modulate.a = 1.0 if shown or not DieView.held_note(_dice).is_empty() else 0.0
+
+
+## While a kit die is held or focused, the second line names it (Mara's
+## #52 review: a pad has no hover); otherwise it's the turn's breakdown.
+func _show_kit_note() -> void:
+	if _end_detail == null:
+		return
+	var note: String = DieView.held_note(_dice)
+	_end_detail.text = note if not note.is_empty() else str(_turn.get("detail", ""))
+	_set_detail(_end_turn.has_focus() or _end_turn.is_hovered())
 
 
 func _button(text: String, height: int, primary: bool = false) -> Button:

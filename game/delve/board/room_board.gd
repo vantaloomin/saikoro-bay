@@ -81,6 +81,8 @@ var _hp: Label
 var _hp_bar: HpBar
 var _end_preview: Label
 var _end_detail: Label
+## The turn's detail, which a held or focused kit die's note stands in for.
+var _detail_text: String = ""
 var _nudge: Button
 var _nudge_chip: FaceChip
 var _reroll: Button
@@ -376,7 +378,8 @@ func slot_preview(s: DiceRoom.Slot) -> Dictionary:
 func _effect_text(s: DiceRoom.Slot, amount: int) -> String:
 	match s.row["effect"] as String:
 		"resource":
-			return "+%d %s" % [amount, str(data.row("resources", str(s.row["resource"]))["name"]).to_lower()]
+			var text: String = "+%d %s" % [amount, str(data.row("resources", str(s.row["resource"]))["name"]).to_lower()]
+			return text + (" +%d" % room.chum_amount if chum_pays(s) else "")
 		"heal":
 			# Capped at max HP before it's shown (Mara, #29).
 			var healed: int = mini(amount, room.max_hp - room.hp)
@@ -392,12 +395,52 @@ func _villager_role() -> String:
 	return "villager"
 
 
+## True if Chum would add to what `s` pays: a resource lock in a chummed
+## room whose resource hasn't had its +1 yet.
+func chum_pays(s: DiceRoom.Slot) -> bool:
+	return room.chum_amount > 0 and s.row["effect"] == "resource" and not room.chummed.has(str(s.row["resource"]))
+
+
+## While a kit die is held or focused, the second line names it.
+func _show_kit_note() -> void:
+	if _end_detail == null:
+		return
+	var note: String = DieView.held_note(_dice)
+	_end_detail.text = note if not note.is_empty() else _detail_text
+
+
+## Chum's badge in a treasure room (specs/bridge.md section 5), so the
+## extra resource has a cause: "Bait shop · Chum · +1 of each resource you
+## take here". "" without it.
+func chum_line() -> String:
+	if room.chum_amount <= 0:
+		return ""
+	return "%s · Chum · +%d of each resource you take here" % [_source_name(room.chum_source), room.chum_amount]
+
+
+func _source_name(source: String) -> String:
+	if data.has_row("villagers", source):
+		return str(data.row("villagers", source)["role"])
+	if data.has_row("buildings", source):
+		return str(data.row("buildings", source)["name"])
+	return source.capitalize()
+
+
 func results_text() -> String:
 	var lines: PackedStringArray = []
 	match room.room_id:
 		DelveMap.TREASURE:
 			var gains: PackedStringArray = _gains({}, room.payout)
 			lines.append("You found " + ", ".join(gains).replace("+", "") + "." if not gains.is_empty() else "Nothing this time.")
+			var chummed: Dictionary = {}
+			for event: Dictionary in room.events:
+				if event["type"] == "perk" and event.get("perk", "") == DiceRoom.CHUM_PERK:
+					chummed[str(event["resource"])] = int(chummed.get(str(event["resource"]), 0)) + int(event["amount"])
+			if not chummed.is_empty():
+				var brought: PackedStringArray = []
+				for id: String in chummed:
+					brought.append("%d %s" % [chummed[id], GameState.amount_name(data, id, chummed[id])])
+				lines.append("%s's chum brought %s." % [_source_name(room.chum_source), ", ".join(brought)])
 		DelveMap.REST:
 			lines.append("You healed %d HP." % (room.hp - room.start_hp))
 		_:
@@ -428,6 +471,7 @@ func _refresh() -> void:
 		for placed: int in s.dice:
 			card.placed_values.append(room.die(placed).value)
 		card.opened = s.sealed
+		card.bonus_text = "+%d Chum" % room.chum_amount if chum_pays(s) else ""
 		var p: Dictionary = slot_preview(s)
 		card.preview_text = p["text"]
 		card.preview_tone = p["tone"]
@@ -436,7 +480,8 @@ func _refresh() -> void:
 		card.queue_redraw()
 	var t: Dictionary = turn_preview()
 	_end_preview.text = t["headline"]
-	_end_detail.text = t["detail"]
+	_detail_text = str(t["detail"])
+	_show_kit_note()
 	_hp.text = "HP %d / %d" % [room.hp, room.max_hp]
 	_hp_bar.max_hp = room.max_hp
 	_hp_bar.hp = room.hp
@@ -534,8 +579,14 @@ func _build() -> void:
 	_intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_intro.custom_minimum_size = Vector2(800, 0)
 	head_text.add_child(_intro)
+	if not chum_line().is_empty():
+		var chum: Label = BoardStyle.label(chum_line(), BoardStyle.SMALL, BoardStyle.GOLD)
+		chum.name = "Chum"
+		head_text.add_child(chum)
 	_turns = BoardStyle.label("", BoardStyle.NUMBER, BoardStyle.INK)
 	_turns.add_theme_font_override("font", BoardStyle.strong_font())
+	# Only a rescue counts turns; a treasure room's Chum line takes its room.
+	_turns.visible = chum_line().is_empty()
 	head_text.add_child(_turns)
 	_tide = TideView.new()
 	_tide.visible = room.room_id == DelveMap.RESCUE
@@ -596,6 +647,9 @@ func _build() -> void:
 	for d: DiceRoom.Die in room.hand:
 		var view: DieView = DieView.new()
 		view.die_id = d.id
+		view.show_type(data, d.type_id)
+		view.focus_entered.connect(_show_kit_note)
+		view.focus_exited.connect(_show_kit_note)
 		view.custom_minimum_size = Vector2(150, 150)
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))
