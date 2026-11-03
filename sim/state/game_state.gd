@@ -155,6 +155,8 @@ static func from_dict(data: Dictionary) -> GameState:
 			return null
 		if value > 0:
 			state._resources[id as String] = value
+	# Replayed through meet_twist on purpose: duplicates, "" and "none" are
+	# dropped quietly, and the list comes back sorted.
 	for twist: Variant in twist_data as Array:
 		if not twist is String:
 			return null

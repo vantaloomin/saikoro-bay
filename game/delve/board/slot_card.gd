@@ -103,6 +103,11 @@ func _draw() -> void:
 		var cy: float = ruler_y + cell + 6
 		draw_colored_polygon(PackedVector2Array([Vector2(cx, cy), Vector2(cx - 9, cy + 12), Vector2(cx + 9, cy + 12)]), BoardStyle.INK)
 
+	# A slot the held die can't go in dims its chrome only. Placed dice and
+	# the footer stay bright, so a placed die never reads as locked.
+	if held_fit == -1:
+		draw_rect(r, Color(0, 0, 0, 0.35))
+
 	# Sockets.
 	var socket: float = 88
 	var gap: float = 44 if is_pair else 0
@@ -137,5 +142,3 @@ func _draw() -> void:
 		var top: float = size.y - (20 if one_line else 50)
 		draw_multiline_string(font, Vector2(16, top), text, HORIZONTAL_ALIGNMENT_LEFT, width,
 			BoardStyle.SMALL, 2, tone)
-	if held_fit == -1:
-		draw_rect(r, Color(0, 0, 0, 0.35))
