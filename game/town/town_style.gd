@@ -87,3 +87,20 @@ static func style_button(button: Button, font_size: int = BODY) -> void:
 	for color_name: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
 		button.add_theme_color_override(color_name, INK)
 	button.add_theme_color_override("font_disabled_color", DIM)
+
+
+## A tab in the right column's header: washi with an ink edge when it's
+## the open one, sand when it isn't, so the open tab is a shape too.
+static func style_tab(button: Button) -> void:
+	style_button(button, SMALL)
+	for state: String in ["pressed", "hover_pressed"]:
+		var box: StyleBoxFlat = StyleBoxFlat.new()
+		box.bg_color = WASHI
+		box.border_color = INK
+		box.set_border_width_all(3)
+		box.set_corner_radius_all(12)
+		box.set_content_margin_all(12)
+		button.add_theme_stylebox_override(state, box)
+	for state: String in ["normal", "hover"]:
+		(button.get_theme_stylebox(state) as StyleBoxFlat).set_content_margin_all(12)
+	button.add_theme_color_override("font_hover_pressed_color", INK)

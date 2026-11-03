@@ -30,6 +30,10 @@ var camera: Camera3D
 ## Rebuilt when the layout or the villagers change.
 var _pieces: Node3D
 var _materials: Dictionary[String, StandardMaterial3D] = {}
+## The building being carried, see-through, where it would go.
+var _ghost: Node3D
+## Set while drawing the ghost: every material comes out see-through.
+var _ghost_alpha: float = 0.0
 
 
 ## Builds the fixed parts once: light, sky, ground, sea and scenery.
@@ -45,31 +49,56 @@ func setup(map: TownMap) -> void:
 	_add_scenery(map)
 	_pieces = Node3D.new()
 	add_child(_pieces)
+	_ghost = Node3D.new()
+	add_child(_ghost)
 
 
 func sync_camera(view: TownView) -> void:
 	camera.transform = view.camera_transform()
 
 
-## Redraws the buildings and villagers from the sim.
-func show_town(data: GameData, view: TownView, state: GameState) -> void:
+## Redraws the buildings and villagers from the sim. `lifted_uid` is a
+## building being moved: it's drawn as the ghost instead.
+func show_town(data: GameData, view: TownView, state: GameState, lifted_uid: int = 0) -> void:
 	for child: Node in _pieces.get_children():
 		child.queue_free()
 	for building: Dictionary in state.town.placed:
-		_add_building(data, building)
+		if building["uid"] != lifted_uid:
+			_add_building(data, building, _pieces)
 	var spots: Dictionary[String, Vector3] = view.villager_spots(data, state)
 	for villager: String in spots:
 		_sprite(PixelArt.villager(villager), spots[villager])
 
 
+## Shows `building_id` see-through with its top-left corner at `cell`:
+## fainter where it can't go. The overlay draws its outline and the reason.
+func show_ghost(data: GameData, building_id: String, cell: Vector2i, fits: bool) -> void:
+	hide_ghost()
+	_ghost_alpha = 0.7 if fits else 0.35
+	_add_building(data, {"uid": 0, "building": building_id, "x": cell.x, "y": cell.y}, _ghost)
+	_ghost_alpha = 0.0
+
+
+func has_ghost() -> bool:
+	return _ghost.get_child_count() > 0
+
+
+func hide_ghost() -> void:
+	for child: Node in _ghost.get_children():
+		child.free()
+
+
 # --- Pieces -----------------------------------------------------------------------------
 
 func _material(color: Color, emission: float = 0.0) -> StandardMaterial3D:
-	var key: String = "%s|%s" % [color, emission]
+	var key: String = "%s|%s|%s" % [color, emission, _ghost_alpha]
 	if _materials.has(key):
 		return _materials[key]
 	var material: StandardMaterial3D = StandardMaterial3D.new()
 	material.albedo_color = color
+	if _ghost_alpha > 0.0:
+		material.albedo_color.a = _ghost_alpha
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.roughness = 0.85
 	if emission > 0.0:
 		material.emission_enabled = true
@@ -177,7 +206,7 @@ func _tree(parent: Node3D, at: Vector3) -> void:
 	_mesh(parent, crown, at + Vector3(0, 0.9, 0), PINE)
 
 
-func _add_building(data: GameData, building: Dictionary) -> void:
+func _add_building(data: GameData, building: Dictionary, parent: Node3D) -> void:
 	var kind: String = TownView.kind_of(data, building)
 	var box: AABB = TownView.block_box(data, building)
 	var center: Vector3 = Vector3(box.get_center().x, 0.05, box.get_center().z)
@@ -185,29 +214,29 @@ func _add_building(data: GameData, building: Dictionary) -> void:
 	var body: float = TownView.BODY_HEIGHT.get(kind, 0.7)
 	if kind == "decor":
 		# A lantern post: a pole and a glowing lamp, with a real light.
-		_box(_pieces, Vector3(0.1, body, 0.1), center + Vector3(0, body / 2.0, 0), DARK_WOOD.darkened(0.3))
-		_box(_pieces, Vector3(0.26, 0.3, 0.26), center + Vector3(0, body + 0.12, 0), LAMP, 3.0)
+		_box(parent, Vector3(0.1, body, 0.1), center + Vector3(0, body / 2.0, 0), DARK_WOOD.darkened(0.3))
+		_box(parent, Vector3(0.26, 0.3, 0.26), center + Vector3(0, body + 0.12, 0), LAMP, 3.0)
 		var lamp: OmniLight3D = OmniLight3D.new()
 		lamp.light_color = Color(1.0, 0.7, 0.4)
 		lamp.light_energy = 1.2
 		lamp.omni_range = 2.2
 		lamp.position = center + Vector3(0, body + 0.1, 0)
-		_pieces.add_child(lamp)
+		parent.add_child(lamp)
 		return
-	_box(_pieces, Vector3(foot.x, body, foot.y), center + Vector3(0, body / 2.0, 0), WALL)
+	_box(parent, Vector3(foot.x, body, foot.y), center + Vector3(0, body / 2.0, 0), WALL)
 	# A door and windows on the sea side, so a box reads as a house.
-	_box(_pieces, Vector3(0.22, 0.34, 0.04), center + Vector3(0, 0.17, foot.y / 2.0 + 0.01), DARK_WOOD)
+	_box(parent, Vector3(0.22, 0.34, 0.04), center + Vector3(0, 0.17, foot.y / 2.0 + 0.01), DARK_WOOD)
 	if foot.x > 1.2:
 		for side: float in [-1.0, 1.0]:
-			_box(_pieces, Vector3(0.24, 0.16, 0.04), center + Vector3(side * foot.x * 0.3, body * 0.62, foot.y / 2.0 + 0.01),
+			_box(parent, Vector3(0.24, 0.16, 0.04), center + Vector3(side * foot.x * 0.3, body * 0.62, foot.y / 2.0 + 0.01),
 				LAMP, 0.6)
 	var roof: PrismMesh = PrismMesh.new()
 	var roof_height: float = TownView.ROOF_HEIGHT.get(kind, 0.5)
 	roof.size = Vector3(foot.y + 0.2, roof_height, foot.x + 0.2)
-	var roof_node: MeshInstance3D = _mesh(_pieces, roof, center + Vector3(0, body + roof_height / 2.0, 0), ROOF.get(kind, ROOF["shop"]))
+	var roof_node: MeshInstance3D = _mesh(parent, roof, center + Vector3(0, body + roof_height / 2.0, 0), ROOF.get(kind, ROOF["shop"]))
 	roof_node.rotation_degrees = Vector3(0, 90, 0)
 	if building["building"] == "hot_spring":
-		_box(_pieces, Vector3(1.0, 0.06, 0.6), center + Vector3(0.9, 0.04, foot.y / 2.0 + 0.35),
+		_box(parent, Vector3(1.0, 0.06, 0.6), center + Vector3(0.9, 0.04, foot.y / 2.0 + 0.35),
 			Color(0.55, 0.85, 0.9), 0.4)
 
 

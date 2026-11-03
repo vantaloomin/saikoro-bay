@@ -11,11 +11,17 @@ const GAP: float = 10.0
 var tokens: Array[String] = []
 
 
-## The tokens left to right: "kept", then "fresh", then "spent".
+## The tokens left to right: "kept", then "fresh", then "spent" (and
+## "hatched" for one the stamp would spend).
 static func tokens_for(data: GameData, state: GameState) -> Array[String]:
+	return _tokens(data, state.town.kept, state.town.actions_left)
+
+
+static func _tokens(data: GameData, kept_now: int, left: int) -> Array[String]:
 	var base: int = data.row("town", data.ids("town")[0])["base_actions"]
-	var kept: int = mini(state.town.kept, state.town.actions_left)
-	var fresh: int = mini(state.town.actions_left - kept, base)
+	left = maxi(left, 0)
+	var kept: int = mini(kept_now, left)
+	var fresh: int = mini(left - kept, base)
 	var out: Array[String] = []
 	for i: int in kept:
 		out.append("kept")
@@ -35,8 +41,14 @@ static func describe(state: GameState) -> String:
 	return text
 
 
-func show_state(data: GameData, state: GameState) -> void:
+## `spending` shells about to go (the stamp is up) are drawn hatched.
+func show_state(data: GameData, state: GameState, spending: int = 0) -> void:
 	tokens = tokens_for(data, state)
+	if spending > 0:
+		var after: Array[String] = _tokens(data, state.town.kept, state.town.actions_left - spending)
+		for i: int in tokens.size():
+			if tokens[i] != "spent" and after[i] == "spent":
+				tokens[i] = "hatched"
 	tooltip_text = describe(state)
 	custom_minimum_size = Vector2(tokens.size() * (SHELL * 2.0 + GAP), SHELL * 2.0 + 8.0)
 	queue_redraw()
@@ -56,6 +68,15 @@ func _draw_shell(center: Vector2, token: String) -> void:
 		points.append(center + Vector2(cos(angle), sin(angle)) * SHELL)
 	var outline: PackedVector2Array = points.duplicate()
 	outline.append(points[0])
+	if token == "hatched":
+		# About to be spent: the outline stays, crossed with ink hatching.
+		for step: int in range(-4, 5):
+			var x: float = step * SHELL * 0.3
+			var line: PackedVector2Array = [center + Vector2(x - SHELL, SHELL), center + Vector2(x + SHELL, -SHELL)]
+			for piece: PackedVector2Array in Geometry2D.intersect_polyline_with_polygon(line, points):
+				draw_polyline(piece, TownStyle.INK, 1.5, true)
+		draw_polyline(outline, TownStyle.INK, 2.5)
+		return
 	if token != "spent":
 		draw_colored_polygon(points, TownStyle.SAND if token == "fresh" else TownStyle.WASHI)
 	for step: int in range(2, 12, 3):

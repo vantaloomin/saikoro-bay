@@ -12,8 +12,20 @@ extends Control
 ## names (always shown), building names (on hover, or all of them while Alt
 ## or the left stick click is held), selection brackets in ink, and a leader
 ## line to the card.
+##
+## Two more modes for PR 5b. Carrying a building shows it as a see-through
+## ghost under the pointer, with the lot outlines, the spots that would
+## make someone happier lit, and why it can't go where it is ("On a path");
+## a click on a good spot emits `spot_chosen`. Picking a home for a
+## villager frames every other home; a click on one emits `home_chosen`.
+## Right click, B or Esc emits `cancelled` in either mode.
 
 signal picked(hit: Dictionary)
+signal spot_chosen(cell: Vector2i)
+signal home_chosen(uid: int)
+signal cancelled
+
+enum Mode { LOOK, CARRY, PICK_HOME }
 
 const TILT_SHIFT: Shader = preload("res://game/town/tilt_shift.gdshader")
 const STICK_DEADZONE: float = 0.2
@@ -24,6 +36,12 @@ const KEY_STEP: float = 40.0
 const DRAG_SLOP: float = 6.0
 const WHEEL_ZOOM: float = 1.12
 const TRIGGER_ZOOM: float = 1.8
+const PARTY_SECONDS: float = 1.6
+## Teal for "this would make someone happy": the happy bubble's color.
+const WISH_FILL: Color = Color(0.25, 0.6, 0.5, 0.35)
+const SWAP_MOOD: Dictionary[Town.Mood, String] = {
+	Town.Mood.HAPPY: "happy", Town.Mood.UNHAPPY: "unhappy", Town.Mood.HOMELESS: "on the dock",
+}
 
 var view: TownView
 var diorama: TownDiorama
@@ -33,6 +51,9 @@ var _data: GameData
 var _state: GameState
 var _viewport: SubViewport
 var _screen: TextureRect
+## Marks that lie on the ground while carrying or picking a home: under
+## the bubbles, so a dash never crosses a face (Mara's #42 review).
+var _ground: Control
 var _bubbles: Control
 var _overlay: Control
 ## Where the card's edge is, in board pixels, for the leader line; INF for none.
@@ -47,6 +68,23 @@ var _cursor: Vector2 = Vector2.ZERO
 var _cursor_shown: bool = false
 var _dragging: bool = false
 var _drag_moved: float = 0.0
+var mode: Mode = Mode.LOOK
+## While carrying: the building, the placed one being moved (0 for a new
+## one), its top-left cell under the pointer, and why it can't go there.
+var carry_building: String = ""
+var carry_lifted: int = 0
+var carry_cell: Vector2i = TownView.NO_CELL
+var carry_problem: String = ""
+## A spot already chosen and waiting on the stamp: the ghost stays put.
+var carry_held: bool = false
+## Where the pointer can go to make someone happier (the sim's wish spots,
+## moved from top-left corners to the cell the ghost hangs from).
+var wish_cells: Array[Vector2i] = []
+## While picking a home: whose.
+var home_villager: String = ""
+## A little paper burst over a new landmark: seconds left, and where.
+var _party_left: float = 0.0
+var _party_at: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -68,6 +106,11 @@ func _ready() -> void:
 	lens.shader = TILT_SHIFT
 	_screen.material = lens
 	add_child(_screen)
+	_ground = Control.new()
+	_ground.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_ground.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ground.draw.connect(_draw_ground)
+	add_child(_ground)
 	# Pixel bubbles scale with nearest filtering; text stays smooth.
 	_bubbles = Control.new()
 	_bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -101,7 +144,7 @@ func setup(data: GameData, map: TownMap) -> void:
 ## Redraws the town from the sim, keeping the selection if it still exists.
 func show_state(state: GameState) -> void:
 	_state = state
-	diorama.show_town(_data, view, state)
+	diorama.show_town(_data, view, state, carry_lifted if mode == Mode.CARRY else 0)
 	if not _still_there(selected):
 		selected = {}
 	if not _still_there(hovered):
@@ -117,11 +160,108 @@ func select(hit: Dictionary) -> void:
 	redraw_marks()
 
 
-## The part of the board the HUD leaves clear. Reframes the whole town.
-func set_safe_area(area: Rect2) -> void:
-	view.safe = area
+## Where the HUD's panels sit on the board. Reframes the whole town clear
+## of them.
+func set_hud(rects: Array[Rect2]) -> void:
+	view.obstacles = rects
 	view.frame_town()
 	_view_changed()
+
+
+# --- Carrying and picking a home ---------------------------------------------------------
+
+## Picks up `building_id` to place it, or placed building `lifted_uid` to
+## move it. The ghost follows the pointer (or the cursor) from now on.
+func start_carry(building_id: String, lifted_uid: int = 0) -> void:
+	mode = Mode.CARRY
+	carry_building = building_id
+	carry_lifted = lifted_uid
+	carry_held = false
+	var offset: Vector2i = carry_offset(_data, building_id)
+	wish_cells.clear()
+	for spot: Vector2i in _state.wish_spots(_data, building_id, lifted_uid):
+		wish_cells.append(spot + offset)
+	if lifted_uid != 0:
+		diorama.show_town(_data, view, _state, lifted_uid)
+		var building: Dictionary = _state.town.entry(lifted_uid)
+		_carry_to(Vector2i(building["x"], building["y"]) + offset)
+	else:
+		_carry_to(view.cell_at(_cursor) if _cursor_shown else TownView.NO_CELL)
+	redraw_marks()
+
+
+## Holds the ghost on its spot while the stamp is up, or lets it follow
+## the pointer again.
+func hold_carry(held: bool) -> void:
+	carry_held = held
+	redraw_marks()
+
+
+## Back to looking: the ghost and the marks go, and a lifted building
+## shows where it stands.
+func stop_mode() -> void:
+	var was_lifted: bool = mode == Mode.CARRY and carry_lifted != 0
+	mode = Mode.LOOK
+	carry_building = ""
+	carry_lifted = 0
+	carry_cell = TownView.NO_CELL
+	carry_problem = ""
+	carry_held = false
+	wish_cells.clear()
+	home_villager = ""
+	diorama.hide_ghost()
+	if was_lifted and _state != null:
+		diorama.show_town(_data, view, _state)
+	redraw_marks()
+
+
+func start_home_pick(villager: String) -> void:
+	stop_mode()
+	mode = Mode.PICK_HOME
+	home_villager = villager
+	redraw_marks()
+
+
+## Homes `home_villager` could move into: every home but their own.
+func home_choices() -> Array[int]:
+	var out: Array[int] = []
+	for building: Dictionary in _state.town.placed:
+		if TownView.kind_of(_data, building) == "home" and _state.town.homes.get(home_villager, 0) != building["uid"]:
+			out.append(building["uid"])
+	return out
+
+
+## Where a footprint hangs from the pointer: its middle cell (the left or
+## front one of two), so a big building sits around the pointer.
+static func carry_offset(data: GameData, building_id: String) -> Vector2i:
+	var row: Dictionary = data.row("buildings", building_id)
+	return Vector2i((int(row.get("width", 1)) - 1) / 2, (int(row.get("height", 1)) - 1) / 2)
+
+
+## Moves the ghost to hang from `cell`, and works out whether it fits.
+func _carry_to(cell: Vector2i) -> void:
+	if cell == TownView.NO_CELL:
+		carry_cell = TownView.NO_CELL
+		carry_problem = ""
+		diorama.hide_ghost()
+		return
+	var top_left: Vector2i = cell - carry_offset(_data, carry_building)
+	if top_left == carry_cell and diorama.has_ghost():
+		return
+	carry_cell = top_left
+	carry_problem = _state.town.spot_problem(_data, view.map, carry_building, top_left, carry_lifted)
+	diorama.show_ghost(_data, carry_building, top_left, carry_problem.is_empty())
+
+
+## Paper scraps over a landmark just placed (LM-5); a still frame with
+## reduce motion, since the notice board says it too.
+func celebrate(uid: int) -> void:
+	var building: Dictionary = _state.town.entry(uid)
+	if building.is_empty() or Settings.reduce_motion:
+		return
+	var box: AABB = TownView.block_box(_data, building)
+	_party_at = Vector3(box.get_center().x, box.end.y, box.get_center().z)
+	_party_left = PARTY_SECONDS
 
 
 func _still_there(hit: Dictionary) -> bool:
@@ -147,6 +287,7 @@ func _view_changed() -> void:
 
 
 func redraw_marks() -> void:
+	_ground.queue_redraw()
 	_bubbles.queue_redraw()
 	_overlay.queue_redraw()
 
@@ -187,6 +328,9 @@ func _gui_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_accept"):
 		_pick_at(_cursor)
 		accept_event()
+	elif event.is_action_pressed(&"ui_cancel") and mode != Mode.LOOK:
+		cancelled.emit()
+		accept_event()
 	elif event.is_action_pressed(&"ui_cancel") and not selected.is_empty():
 		_pick_result({})
 		accept_event()
@@ -216,7 +360,10 @@ func _on_mouse_button(button: InputEventMouseButton) -> void:
 			else:
 				_dragging = false
 				if button.button_index == MOUSE_BUTTON_RIGHT and _drag_moved < DRAG_SLOP:
-					_pick_result({})
+					if mode != Mode.LOOK:
+						cancelled.emit()
+					else:
+						_pick_result({})
 		MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
 			if button.pressed:
 				view.zoom_at(button.position, WHEEL_ZOOM if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / WHEEL_ZOOM)
@@ -227,6 +374,9 @@ func _on_mouse_button(button: InputEventMouseButton) -> void:
 func _process(delta: float) -> void:
 	if view == null or _state == null:
 		return
+	if _party_left > 0.0:
+		_party_left = maxf(_party_left - delta, 0.0)
+		_overlay.queue_redraw()
 	var all_names: bool = Input.is_key_pressed(KEY_ALT) or Input.is_joy_button_pressed(0, JOY_BUTTON_LEFT_STICK)
 	if all_names != show_all_names:
 		show_all_names = all_names
@@ -252,6 +402,14 @@ func _keep_selection_in_view() -> void:
 		view.ensure_visible(anchor_of(selected))
 
 
+## Shows the controller cursor at `point` (the middle of the view when
+## carrying starts from a pad), as if it moved there.
+func place_cursor(point: Vector2) -> void:
+	_cursor = point.clamp(Vector2.ZERO, size)
+	_cursor_shown = true
+	_hover_at(_cursor)
+
+
 func _move_cursor(by: Vector2) -> void:
 	_cursor = (_cursor + by).clamp(Vector2.ZERO, size)
 	_cursor_shown = true
@@ -259,6 +417,11 @@ func _move_cursor(by: Vector2) -> void:
 
 
 func _hover_at(point: Vector2) -> void:
+	if mode == Mode.CARRY:
+		if not carry_held:
+			_carry_to(view.cell_at(point))
+		_overlay.queue_redraw()
+		return
 	var hit: Dictionary = view.pick(point, _data, _state)
 	if hit.get("kind", "none") not in ["building", "villager"]:
 		hit = {}
@@ -268,7 +431,20 @@ func _hover_at(point: Vector2) -> void:
 
 
 func _pick_at(point: Vector2) -> void:
-	_pick_result(view.pick(point, _data, _state))
+	match mode:
+		Mode.CARRY:
+			if carry_held:
+				return
+			_carry_to(view.cell_at(point))
+			redraw_marks()
+			if carry_cell != TownView.NO_CELL and carry_problem.is_empty():
+				spot_chosen.emit(carry_cell)
+		Mode.PICK_HOME:
+			var hit: Dictionary = view.pick(point, _data, _state)
+			if hit.get("kind", "") == "building" and home_choices().has(hit["uid"]):
+				home_chosen.emit(hit["uid"])
+		_:
+			_pick_result(view.pick(point, _data, _state))
 
 
 func _pick_result(hit: Dictionary) -> void:
@@ -296,7 +472,7 @@ func anchor_of(hit: Dictionary) -> Vector3:
 func building_names() -> Array[int]:
 	var out: Array[int] = []
 	for building: Dictionary in _state.town.placed:
-		if show_all_names or (hovered.get("kind", "") == "building" and hovered["uid"] == building["uid"]):
+		if show_all_names or (mode == Mode.LOOK and hovered.get("kind", "") == "building" and hovered["uid"] == building["uid"]):
 			out.append(building["uid"])
 	return out
 
@@ -306,25 +482,39 @@ func _scale_at(world: Vector3) -> float:
 	return view.to_screen(world).distance_to(view.to_screen(world + Vector3.UP))
 
 
-func _draw_bubbles() -> void:
-	if _state == null:
-		return
-	var spots: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
+## Where a villager standing at `spot` is drawn on screen.
+func sprite_rect(spot: Vector3) -> Rect2:
+	var feet: Vector2 = view.to_screen(spot)
+	var head: Vector2 = view.to_screen(spot + Vector3(0.0, TownView.VILLAGER_SIZE.y, 0.0))
+	var half: float = (feet.y - head.y) * 0.3
+	return Rect2(Vector2(feet.x - half, head.y), Vector2(half * 2.0, feet.y - head.y))
+
+
+## Where each villager's mood bubble sits on screen.
+func bubble_rects(spots: Dictionary[String, Vector3]) -> Dictionary[String, Rect2]:
+	var out: Dictionary[String, Rect2] = {}
 	for villager: String in spots:
 		var middle: Vector3 = TownView.bubble_point(spots[villager])
 		var side: float = TownView.BUBBLE_SIZE * _scale_at(middle)
-		var at: Vector2 = view.to_screen(middle)
-		_bubbles.draw_texture_rect(_bubble_textures[_state.mood(_data, villager)],
-			Rect2(at - Vector2(side, side) / 2.0, Vector2(side, side)), false)
+		out[villager] = Rect2(view.to_screen(middle) - Vector2(side, side) / 2.0, Vector2(side, side))
+	return out
+
+
+func _draw_bubbles() -> void:
+	if _state == null:
+		return
+	var rects: Dictionary[String, Rect2] = bubble_rects(view.villager_spots(_data, _state))
+	for villager: String in rects:
+		_bubbles.draw_texture_rect(_bubble_textures[_state.mood(_data, villager)], rects[villager], false)
 
 
 func _draw_overlay() -> void:
 	if _state == null:
 		return
 	var spots: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
-	if not hovered.is_empty() and hovered != selected:
-		_draw_brackets(hovered, TownStyle.WASHI, 3.0, false)
-	if not selected.is_empty():
+	if not hovered.is_empty() and hovered != selected and mode == Mode.LOOK:
+		_draw_hover(hovered)
+	if not selected.is_empty() and mode == Mode.LOOK:
 		_draw_brackets(selected, TownStyle.INK, 4.0, true)
 		if leader_target != Vector2.INF:
 			var from: Vector2 = view.to_screen(anchor_of(selected))
@@ -332,41 +522,194 @@ func _draw_overlay() -> void:
 			_overlay.draw_line(from, leader_target, TownStyle.INK, 2.5, true)
 			_overlay.draw_circle(from, 6.0, TownStyle.INK)
 			_overlay.draw_circle(leader_target, 5.0, TownStyle.INK)
-	for tag: Dictionary in villager_tags(spots):
-		_draw_tag_in(tag["text"], tag["rect"], 0.85)
-	for uid: int in building_names():
-		var building: Dictionary = _state.town.entry(uid)
-		var box: AABB = TownView.block_box(_data, building)
-		var roof: Vector3 = Vector3(box.get_center().x, box.end.y, box.get_center().z)
-		_draw_tag(str(_data.row("buildings", building["building"]).get("name", building["building"])),
-			view.to_screen(roof) + Vector2(0, -12), true, 1.0)
+	var tags: Array[Dictionary] = map_tags(spots)
+	for tag: Dictionary in tags:
+		var rect: Rect2 = tag["rect"]
+		var anchor: Vector2 = tag["anchor"]
+		if absf(rect.position.y - anchor.y) > rect.size.y / 2.0:
+			# Pushed off its owner: a tick says whose it is (Mara's #41
+			# review). Ticks go first, so tags cover the ones that cross them.
+			var top: Vector2 = Vector2(clampf(anchor.x, rect.position.x + 8.0, rect.end.x - 8.0), rect.position.y)
+			_overlay.draw_line(anchor, top, TownStyle.WASHI, 4.0, true)
+			_overlay.draw_line(anchor, top, TownStyle.INK, 2.0, true)
+	for tag: Dictionary in tags:
+		_draw_tag_in(tag["text"], tag["rect"], 0.85 if tag["kind"] == "villager" else 1.0)
+	# What the pointer is about to do goes over every name.
+	if mode == Mode.CARRY:
+		_draw_carry_tag()
+	elif mode == Mode.PICK_HOME:
+		_draw_swap_tag()
+	if _party_left > 0.0:
+		_draw_party()
 	if _cursor_shown:
 		_overlay.draw_arc(_cursor, 16.0, 0.0, TAU, 32, TownStyle.WASHI, 6.0)
 		_overlay.draw_arc(_cursor, 16.0, 0.0, TAU, 32, TownStyle.INK, 3.0)
 		_overlay.draw_circle(_cursor, 3.0, TownStyle.INK)
 
 
+## The ground marks while carrying: every lot's outline, the cells that
+## would make someone happier (lit, with a small smile so it isn't color
+## alone) and the ghost's footprint (solid where it fits, dashed where it
+## doesn't). While picking a home, the homes to pick from are framed.
+func _draw_ground() -> void:
+	if _state == null:
+		return
+	if mode == Mode.PICK_HOME:
+		for uid: int in home_choices():
+			var hovering: bool = hovered.get("uid", 0) == uid
+			_draw_brackets({"kind": "building", "uid": uid}, TownStyle.INK, 4.0 if hovering else 3.0, hovering, false, _ground)
+		return
+	if mode != Mode.CARRY:
+		return
+	for lot: Rect2i in view.map.lots:
+		_draw_ground_rect(Rect2(lot.position, lot.size), Color(TownStyle.WASHI, 0.0), Color(TownStyle.WASHI, 0.9), 2.0, true)
+	for cell: Vector2i in wish_cells:
+		_draw_ground_rect(Rect2(cell, Vector2.ONE).grow(-0.06), WISH_FILL, Color(TownStyle.HAPPY, 0.9), 2.0, false)
+		var middle: Vector2 = view.to_screen(Vector3(cell.x + 0.5, 0.0, cell.y + 0.5))
+		var radius: float = 0.14 * _scale_at(Vector3(cell.x + 0.5, 0.0, cell.y + 0.5))
+		_ground.draw_arc(middle, radius, 0.2, PI - 0.2, 12, TownStyle.WASHI, 3.0, true)
+	if carry_cell != TownView.NO_CELL:
+		var foot: Rect2i = Town.footprint(_data, carry_building, carry_cell)
+		var fits: bool = carry_problem.is_empty()
+		_draw_ground_rect(Rect2(foot.position, foot.size), Color(TownStyle.WASHI, 0.25 if fits else 0.0),
+			TownStyle.INK, 3.0, not fits)
+
+
+## The tag under the ghost: why it can't go here, or for a move, "Free"
+## and anyone it would leave unhappy (with the rain cloud), so a free move
+## never hides its cost (Mara's #42 review).
+func _draw_carry_tag() -> void:
+	if carry_cell == TownView.NO_CELL:
+		return
+	var foot: Rect2i = Town.footprint(_data, carry_building, carry_cell)
+	var front: Vector2 = view.to_screen(Vector3(foot.end.x, 0.0, foot.end.y)) + Vector2(0, 10)
+	if not carry_problem.is_empty():
+		_draw_tag(carry_problem, front, false, 1.0)
+	elif carry_lifted != 0:
+		var losses: Array[String] = _state.wish_losses(_data, carry_building, carry_cell, carry_lifted)
+		var words: PackedStringArray = [BuildList.FREE]
+		for villager: String in losses:
+			words.append("%s unhappy" % _data.row("villagers", villager).get("role", villager))
+		_draw_mood_tag(" · ".join(words), front, Town.Mood.UNHAPPY if not losses.is_empty() else Town.Mood.HAPPY,
+			not losses.is_empty())
+
+
+## While picking a home: over the hovered home, how both villagers would
+## feel after the swap.
+func _draw_swap_tag() -> void:
+	if hovered.get("kind", "") != "building" or not home_choices().has(hovered["uid"]):
+		return
+	var moods: Dictionary[String, Town.Mood] = _state.swap_moods(_data, home_villager, hovered["uid"])
+	var words: PackedStringArray = []
+	var any_unhappy: bool = false
+	for villager: String in moods:
+		var role: String = str(_data.row("villagers", villager).get("role", villager))
+		words.append("%s %s" % [role, SWAP_MOOD[moods[villager]]])
+		any_unhappy = any_unhappy or moods[villager] != Town.Mood.HAPPY
+	var box: AABB = TownView.block_box(_data, _state.town.entry(hovered["uid"]))
+	var front: Vector2 = view.to_screen(Vector3(box.end.x, 0.0, box.end.z)) + Vector2(0, 10)
+	_draw_mood_tag(" · ".join(words), front, Town.Mood.UNHAPPY, any_unhappy)
+
+
+## A tag with a mood bubble at its left when `show_icon`.
+func _draw_mood_tag(text: String, at: Vector2, mood: Town.Mood, show_icon: bool) -> void:
+	var rect: Rect2 = _keep_on_screen(_tag_rect(text, at, false))
+	if not show_icon:
+		_draw_tag_in(text, rect, 1.0)
+		return
+	var side: float = rect.size.y
+	rect = _keep_on_screen(Rect2(rect.position - Vector2(side / 2.0, 0), rect.size + Vector2(side, 0)))
+	_draw_tag_in("", rect, 1.0)
+	_overlay.draw_texture_rect(_bubble_textures[mood], Rect2(rect.position + Vector2(6, 2), Vector2(side - 4, side - 4)), false)
+	var text_rect: Rect2 = Rect2(rect.position + Vector2(side, 0), rect.size - Vector2(side, 0))
+	_draw_tag_in(text, text_rect, 0.0)
+
+
+## A rectangle of ground (in cells) as it lies on screen.
+func _draw_ground_rect(rect: Rect2, fill: Color, line: Color, width: float, dashed: bool) -> void:
+	var y: float = 0.03
+	var corners: PackedVector2Array = [
+		view.to_screen(Vector3(rect.position.x, y, rect.position.y)), view.to_screen(Vector3(rect.end.x, y, rect.position.y)),
+		view.to_screen(Vector3(rect.end.x, y, rect.end.y)), view.to_screen(Vector3(rect.position.x, y, rect.end.y)),
+	]
+	if fill.a > 0.0:
+		_ground.draw_colored_polygon(corners, fill)
+	for i: int in 4:
+		var a: Vector2 = corners[i]
+		var b: Vector2 = corners[(i + 1) % 4]
+		if dashed:
+			_ground.draw_dashed_line(a, b, line, width, 10.0, true, true)
+		else:
+			_ground.draw_line(a, b, line, width, true)
+
+
+func _draw_party() -> void:
+	var at: Vector2 = view.to_screen(_party_at)
+	var t: float = 1.0 - _party_left / PARTY_SECONDS
+	var colors: Array[Color] = [TownStyle.WASHI, TownStyle.SAND, TownStyle.SEA, TownStyle.VERMILION]
+	for i: int in 24:
+		var angle: float = TAU * i / 24.0 + i * 0.37
+		var speed: float = 120.0 + (i * 53) % 90
+		var drift: Vector2 = Vector2(cos(angle), sin(angle) - 0.6) * speed * t + Vector2(0, 260.0 * t * t)
+		var scrap: Rect2 = Rect2(at + drift - Vector2(5, 3), Vector2(10, 6))
+		_overlay.draw_rect(scrap, Color(colors[i % colors.size()], 1.0 - t * t))
+
+
 func _tag_font_size() -> int:
 	return roundi(TownStyle.MAP_LABEL * text_scale)
 
 
-## Villager name tags under their feet, nudged down past each other so
-## two neighbors' names never cover one another: [{"text", "rect"}].
-func villager_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
-	var tags: Array[Dictionary] = []
+## The name tags on the map, in drawing order, each {"text", "rect",
+## "anchor", "kind"}: villager names under their feet, then building names
+## (hovered, or all of them) under the building's front corner. They're
+## pushed down past each other by priority (Mara's #41 and #42 reviews):
+## mood bubbles and villager sprites never get covered, villager tags go
+## around them, and building tags go around all of those. Every tag stays
+## on screen.
+func map_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
+	var taken: Array[Rect2] = []
+	for rect: Rect2 in bubble_rects(spots).values():
+		taken.append(rect)
+	for villager: String in spots:
+		taken.append(sprite_rect(spots[villager]))
+	var villagers: Array[Dictionary] = []
 	for villager: String in spots:
 		var role: String = str(_data.row("villagers", villager).get("role", villager))
-		tags.append({"text": role, "rect": _tag_rect(role, view.to_screen(spots[villager]) + Vector2(0, 6), false)})
-	tags.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return (a["rect"] as Rect2).position.y < (b["rect"] as Rect2).position.y)
-	for i: int in tags.size():
-		var rect: Rect2 = tags[i]["rect"]
-		for j: int in i:
-			var placed: Rect2 = tags[j]["rect"]
-			if rect.grow(2.0).intersects(placed):
-				rect.position.y = placed.end.y + 2.0
-		tags[i]["rect"] = rect
-	return tags
+		var feet: Vector2 = view.to_screen(spots[villager])
+		villagers.append({"text": role, "anchor": feet, "kind": "villager",
+			"rect": _tag_rect(role, feet + Vector2(0, 6), false)})
+	var buildings: Array[Dictionary] = []
+	for uid: int in building_names():
+		var building: Dictionary = _state.town.entry(uid)
+		var foot: Rect2i = Town.rect_of(_data, building)
+		var front: Vector2 = view.to_screen(Vector3(foot.end.x - TownView.INSET, 0.0, foot.end.y - TownView.INSET))
+		var name: String = str(_data.row("buildings", building["building"]).get("name", building["building"]))
+		buildings.append({"text": name, "anchor": front, "kind": "building", "rect": _tag_rect(name, front + Vector2(0, 4), false)})
+	var out: Array[Dictionary] = []
+	for group: Array[Dictionary] in [villagers, buildings]:
+		group.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return (a["rect"] as Rect2).position.y < (b["rect"] as Rect2).position.y)
+		for tag: Dictionary in group:
+			var rect: Rect2 = _keep_on_screen(tag["rect"])
+			for attempt: int in 12:
+				var blocker: Rect2 = Rect2()
+				for other: Rect2 in taken:
+					if rect.grow(2.0).intersects(other):
+						blocker = other
+						break
+				if blocker.size == Vector2.ZERO:
+					break
+				rect.position.y = blocker.end.y + 2.0
+			rect = _keep_on_screen(rect)
+			tag["rect"] = rect
+			taken.append(rect)
+			out.append(tag)
+	return out
+
+
+func _keep_on_screen(rect: Rect2) -> Rect2:
+	rect.position = rect.position.clamp(Vector2(4, 4), size - rect.size - Vector2(4, 4))
+	return rect
 
 
 func _tag_rect(text: String, at: Vector2, above: bool) -> Rect2:
@@ -395,7 +738,10 @@ func _draw_tag_in(text: String, box: Rect2, opacity: float) -> void:
 
 ## Corner brackets around a pick: around a building's block, or around a
 ## villager standing up. Ink over a washi edge, so they read on any ground.
-func _draw_brackets(hit: Dictionary, color: Color, width: float, selected_mark: bool) -> void:
+func _draw_brackets(hit: Dictionary, color: Color, width: float, selected_mark: bool, dashed: bool = false,
+		canvas: Control = null) -> void:
+	if canvas == null:
+		canvas = _overlay
 	var corners: PackedVector2Array = []
 	match str(hit.get("kind", "none")):
 		"building":
@@ -422,5 +768,15 @@ func _draw_brackets(hit: Dictionary, color: Color, width: float, selected_mark: 
 		for other: Vector2 in [corners[(i + 1) % 4], corners[(i + 3) % 4]]:
 			var end: Vector2 = corner.lerp(other, 0.28)
 			if selected_mark:
-				_overlay.draw_line(corner, end, TownStyle.WASHI, width + 4.0, true)
-			_overlay.draw_line(corner, end, color, width, true)
+				canvas.draw_line(corner, end, TownStyle.WASHI, width + 4.0, true)
+			if dashed:
+				canvas.draw_dashed_line(corner, end, color, width, 5.0, true, true)
+			else:
+				canvas.draw_line(corner, end, color, width, true)
+
+
+## Hover is lighter than a selection (Mara's #41 review): thin dashed
+## corners at half strength, so a big hovered building never outweighs a
+## small selected villager.
+func _draw_hover(hit: Dictionary) -> void:
+	_draw_brackets(hit, Color(TownStyle.INK, 0.5), 2.0, false, true)

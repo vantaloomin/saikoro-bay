@@ -181,3 +181,64 @@ func test_nobody_is_homeless_beside_an_empty_home() -> void:
 				fail_test("run %d step %d: %s" % [run, step, state.town_problems(data)])
 				return
 	pass_test("40 random towns of 60 steps")
+
+
+func test_wish_spots_light_the_cells_that_make_someone_happier() -> void:
+	var state: GameState = _state(["onsen_keeper"] as Array[String])
+	state.build(data, "cottage", Vector2i(1, 1))
+	var before: Dictionary = state.town.to_dict()
+	var spots: Array[Vector2i] = state.wish_spots(data, "tea_stall")
+	assert_eq(state.town.to_dict(), before, "looking changes nothing")
+	assert_eq(spots.size(), 4, "the four cells around her home: %s" % [spots])
+	for cell: Vector2i in [Vector2i(0, 1), Vector2i(2, 1), Vector2i(1, 0), Vector2i(1, 2)]:
+		assert_has(spots, cell)
+
+
+func test_wish_spots_for_a_new_home_count_who_would_move_in() -> void:
+	var state: GameState = _state(["pearl_diver"] as Array[String])
+	var spots: Array[Vector2i] = state.wish_spots(data, "cottage")
+	assert_gt(spots.size(), 0)
+	for cell: Vector2i in spots:
+		assert_eq(cell.y, GameState.town_map(data).land_rows - 1, "a cottage on the shore, for the pearl diver")
+
+
+func test_wish_spots_for_a_move_lift_the_building() -> void:
+	var state: GameState = _state(["pearl_diver"] as Array[String])
+	state.build(data, "cottage", Vector2i(1, 1))
+	var uid: int = state.town.homes["pearl_diver"]
+	var spots: Array[Vector2i] = state.wish_spots(data, "cottage", uid)
+	assert_has(spots, Vector2i(1, 7), "moving her home to the shore")
+	assert_does_not_have(spots, Vector2i(1, 1), "where it already is changes nothing")
+
+
+func test_a_move_names_who_it_would_leave_unhappy() -> void:
+	var state: GameState = _state(["shipwright"] as Array[String])
+	state.town.homes["shipwright"] = state.town.place("cottage", Vector2i(2, 5))
+	var shed: int = state.town.place("net_shed", Vector2i(2, 6))
+	assert_eq(state.wish_losses(data, "net_shed", Vector2i(5, 5), shed), ["shipwright"] as Array[String])
+	assert_eq(state.wish_losses(data, "net_shed", Vector2i(1, 6), shed), [] as Array[String], "still beside him")
+	assert_eq(state.wish_losses(data, "net_shed", Vector2i(4, 4), shed), [] as Array[String], "no spot, no warning")
+
+
+func test_a_swap_preview_says_how_both_would_feel() -> void:
+	var state: GameState = _state(["pearl_diver", "shipwright"] as Array[String])
+	var sea: int = state.town.place("cottage", Vector2i(0, 7))
+	var inland: int = state.town.place("cottage", Vector2i(1, 1))
+	state.town.homes["shipwright"] = sea
+	state.town.homes["pearl_diver"] = inland
+	var before: Dictionary = state.town.to_dict()
+	assert_eq(state.swap_moods(data, "pearl_diver", sea),
+		{"pearl_diver": Town.Mood.HAPPY, "shipwright": Town.Mood.UNHAPPY} as Dictionary[String, Town.Mood])
+	assert_eq(state.town.to_dict(), before, "a preview changes nothing")
+
+
+func test_previews_never_touch_the_live_town() -> void:
+	var state: GameState = _state(["pearl_diver", "onsen_keeper"] as Array[String])
+	state.town.homes["onsen_keeper"] = state.town.place("cottage", Vector2i(1, 1))
+	var live: Town = state.town
+	var before: Dictionary = live.to_dict()
+	state.wish_spots(data, "tea_stall")
+	state.wish_spots(data, "cottage")
+	state.wish_losses(data, "cottage", Vector2i(5, 5), state.town.homes["onsen_keeper"])
+	assert_same(state.town, live, "the town object is never swapped out (Imogen's #42 audit)")
+	assert_eq(live.to_dict(), before)
