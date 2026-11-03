@@ -4,7 +4,8 @@ extends SceneTree
 ##   godot --headless --path . -s res://tools/run_bot.gd -- [options]
 ##
 ## Options:
-##   --scenario=NAME   delve (default) or fight
+##   --scenario=NAME   map (default: a whole delve on a generated map),
+##                     delve (the M1 stand-in: fights in a row) or fight
 ##   --bot=NAME        greedy (default, the floor) or planner (a strong player)
 ##   --enemy=ID        the enemy for --scenario=fight
 ##   --fights=N        fights in a delve (default 6)
@@ -40,7 +41,9 @@ func _initialize() -> void:
 		perks.append({"perk": perk_id, "source": _villager_for(data, perk_id)})
 
 	var scenario: BotScenario = null
-	match str(args.get("scenario", "delve")):
+	match str(args.get("scenario", "map")):
+		"map":
+			scenario = MapDelveScenario.new(data, bot, perks)
 		"delve":
 			scenario = DelveScenario.new(data, bot, str(args.get("fights", "6")).to_int(), perks,
 				str(args.get("rest-every", "0")).to_int(), str(args.get("rest-heal", "0")).to_int())
@@ -52,7 +55,7 @@ func _initialize() -> void:
 				return
 			scenario = FightScenario.new(data, bot, enemy, perks)
 		_:
-			printerr("Unknown scenario \"%s\". Known: delve, fight" % args.get("scenario"))
+			printerr("Unknown scenario \"%s\". Known: map, delve, fight" % args.get("scenario"))
 			quit(2)
 			return
 	var seeds: int = str(args.get("seeds", "10000")).to_int()
