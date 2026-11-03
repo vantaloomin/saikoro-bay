@@ -185,3 +185,56 @@ func test_the_bot_raises_only_against_a_weak_hand() -> void:
 	strong.house_hand.assign([4, 4, 2] as Array[int])
 	VaultBot.new().play_round(strong)
 	assert_eq(strong.events.filter(func(e: Dictionary) -> bool: return e["type"] == "raise").size(), 0)
+
+
+func test_rank_always_beats_the_sum_even_with_big_faces() -> void:
+	assert_gt(Vault.hand_score([1, 1, 2] as Array[int]), Vault.hand_score([40, 41, 50] as Array[int]),
+		"a pair of 1s beats any high die, whatever the faces")
+
+
+# --- Failing closed (Imogen's #27 audit) ----------------------------------------------
+
+func _without_vaults() -> GameData:
+	var texts: Dictionary[String, String] = {}
+	for table_name: String in GameData.TABLES:
+		texts[table_name] = FileAccess.get_file_as_string("res://data/%s.json" % table_name)
+	texts["vaults"] = JSON.stringify({"schema": 1, "items": []})
+	var broken: GameData = GameData.new()
+	broken.load_texts(texts)
+	return broken
+
+
+func test_the_data_needs_kobans_vault() -> void:
+	assert_has(_without_vaults().errors, "vaults: needs the \"koban\" vault (the delve ends there)")
+
+
+func test_no_delve_starts_without_a_vault_to_end_at() -> void:
+	var broken: GameData = _without_vaults()
+	assert_false(Vault.can_open(broken, "fresh", "koban"))
+	assert_null(Vault.create(broken, "fresh", "koban", RngStreams.new(1), [], Haul.new()))
+	assert_null(DelveRun.create(broken, 1, [], ["pearl_diver"], ["cafe"]))
+
+
+func test_the_last_room_wont_strand_you_at_a_vault_that_cant_open() -> void:
+	var run: DelveRun = DelveRun.create(data, 4, [], ["pearl_diver"], ["cafe"])
+	for guard: int in 200:
+		if run.step == DelveRun.Step.CHOOSE_ROOM:
+			run.choose(run.reachable()[0])
+		elif run.step == DelveRun.Step.LANDING:
+			run.go_deeper()
+		elif run.step == DelveRun.Step.IN_ROOM:
+			var last: bool = run.floor_index == run.map.floors.size() - 1 and run.row == run.map.rows_in_floor(run.floor_index) - 1
+			if run.fight != null:
+				GreedyBot.new().play_fight(run.fight)
+			if run.room != null:
+				RoomBot.new().play_room(run.room)
+			if last and not run.is_over():
+				run._data = _without_vaults()
+				assert_false(run.finish_room(), "refused, not stranded")
+				assert_push_error("can't open the vault")
+				assert_eq(run.step, DelveRun.Step.IN_ROOM)
+				return
+			run.finish_room()
+		if run.is_over():
+			run = DelveRun.create(data, 4 + guard, [], ["pearl_diver"], ["cafe"])
+	fail_test("never reached the last room")

@@ -70,7 +70,8 @@ var _rng: RngStreams
 ## takes ({"perk": id, "source": id}). Returns null if the data is missing.
 static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary],
 		villagers_left: Array[String], landmarks_left: Array[String]) -> DelveRun:
-	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice"):
+	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice") \
+			or not Vault.can_open(data, LOADOUT, VAULT_ID):
 		return null
 	var run: DelveRun = DelveRun.new()
 	run._data = data
@@ -200,6 +201,11 @@ static func is_dice_room(type: String) -> bool:
 ## opened rescue cage adds its villager to the haul.
 func finish_room() -> bool:
 	if step != Step.IN_ROOM:
+		return false
+	var opens_vault: bool = floor_index == map.floors.size() - 1 and row == map.rows_in_floor(floor_index) - 1
+	if opens_vault and not Vault.can_open(_data, LOADOUT, VAULT_ID):
+		# Fail closed: never strand the run at a vault that can't open.
+		push_error("DelveRun: can't open the vault \"%s\"" % VAULT_ID)
 		return false
 	if is_fight_room(room_type):
 		if fight == null or fight.state == Fight.State.PLAYER_TURN:

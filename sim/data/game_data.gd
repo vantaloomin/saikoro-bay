@@ -265,6 +265,8 @@ func _check_rows() -> void:
 	_check_slot_effects("loadouts", ["damage", "block", "heal"])
 	_check_slot_effects("dice_rooms", ["heal", "resource", "open"])
 	_check_slot_effects("vaults", ["open"])
+	if _tables.has("vaults") and not has_row("vaults", DelveRun.VAULT_ID):
+		errors.append("vaults: needs the \"%s\" vault (the delve ends there)" % DelveRun.VAULT_ID)
 	for id: String in ids("vaults"):
 		var vault_row: Dictionary = row("vaults", id)
 		if (vault_row["slots"] as Array).size() != 1 or (vault_row["house_dice"] as Array).size() != 3:

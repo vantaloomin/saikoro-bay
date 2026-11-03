@@ -30,6 +30,8 @@ const PAIR: int = 1
 const RUN: int = 2
 const THREE_KIND: int = 3
 const RANK_NAMES: Array[String] = ["high die", "pair", "run", "three of a kind"]
+## hand_score keeps the rank above bit 24, past any sum of three faces.
+const RANK_SHIFT: int = 24
 
 const Die = DiceTable.Die
 const Slot = DiceTable.Slot
@@ -60,7 +62,7 @@ var _hand_slot: String = ""
 ## data is missing.
 static func create(data: GameData, loadout_id: String, vault_id: String, rng: RngStreams,
 		perks: Array[Dictionary], run_haul: Haul) -> Vault:
-	if not data.has_row("loadouts", loadout_id) or not data.has_row("vaults", vault_id) or run_haul == null:
+	if not can_open(data, loadout_id, vault_id) or run_haul == null:
 		return null
 	var vault_row: Dictionary = data.row("vaults", vault_id)
 	var loadout: Dictionary = data.row("loadouts", loadout_id)
@@ -92,12 +94,28 @@ static func create(data: GameData, loadout_id: String, vault_id: String, rng: Rn
 	return vault
 
 
-## Poker-dice score for comparing hands: rank first, then the sum. Three
+## Whether `data` has everything create() needs, without drawing
+## anything, so the run can refuse to step into a vault that can't open.
+static func can_open(data: GameData, loadout_id: String, vault_id: String) -> bool:
+	if not data.has_row("loadouts", loadout_id) or not data.has_row("vaults", vault_id):
+		return false
+	var vault_row: Dictionary = data.row("vaults", vault_id)
+	for slot_id: Variant in vault_row["slots"] as Array:
+		if not data.has_row("slots", str(slot_id)):
+			return false
+	for die_id: Variant in (vault_row["house_dice"] as Array) + (data.row("loadouts", loadout_id)["dice"] as Array):
+		if not data.has_row("dice", str(die_id)):
+			return false
+	return (vault_row["slots"] as Array).size() == 1
+
+
+## Poker-dice score for comparing hands: rank first, then the sum (the
+## rank sits far above any sum, so big faces can't leak into it). Three
 ## dice only; anything else scores -1 (an unfilled hand loses).
 static func hand_score(values: Array[int]) -> int:
 	if values.size() != 3:
 		return -1
-	return hand_rank(values) * 100 + values[0] + values[1] + values[2]
+	return (hand_rank(values) << RANK_SHIFT) + values[0] + values[1] + values[2]
 
 
 static func hand_rank(values: Array[int]) -> int:
