@@ -13,6 +13,7 @@ func before_each() -> void:
 	Game.store = SaveStore.new(TEST_SAVE)
 	Game.store.erase()
 	Game.state = GameState.new(1234)
+	Game.run = null
 	Game.saving_locked = false
 	SceneFlow.reduce_motion = true
 
@@ -63,13 +64,53 @@ func test_come_up_returns_to_town_and_saves() -> void:
 	assert_eq(loaded.phase, GameState.Phase.TOWN)
 
 
-func test_load_or_new_resumes_the_saved_half() -> void:
+func test_load_or_new_resumes_the_saved_town() -> void:
+	Game.state.add_resource("pearls", 3)
+	Game.save()
+	Game.state = GameState.new(1)
+	assert_eq(Game.load_or_new(), Game.TOWN_SCENE)
+	assert_eq(Game.state.campaign_seed, 1234)
+	assert_eq(Game.state.resource("pearls"), 3)
+
+
+func test_closing_mid_delve_washes_up_with_nothing() -> void:
+	Game.state.add_resource("pearls", 3)
 	Game.state.start_delve()
 	Game.save()
 	Game.state = GameState.new(1)
-	assert_eq(Game.load_or_new(), Game.DELVE_SCENE)
-	assert_eq(Game.state.campaign_seed, 1234)
-	assert_eq(Game.state.delve_count, 1)
+	assert_eq(Game.load_or_new(), Game.TOWN_SCENE, "an abandoned delve lands in town")
+	assert_eq(Game.state.phase, GameState.Phase.TOWN)
+	assert_eq(Game.state.delve_count, 1, "the delve still counts")
+	assert_eq(Game.state.resource("pearls"), 3, "town resources are untouched")
+	assert_eq(Game.state.last_delve["outcome"], Haul.ABANDONED)
+	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq(saved.phase, GameState.Phase.TOWN, "the wash-up is saved at once, so a second reload can't retry")
+
+
+func test_going_down_builds_the_run_from_the_town() -> void:
+	assert_true(Game.go_down())
+	assert_not_null(Game.run)
+	assert_eq(Game.run.delve_seed, Game.state.current_delve_seed())
+	assert_eq(Game.run.map.rescue_villager, "pearl_diver")
+	assert_eq(Game.run.hp, Game.run.max_hp)
+	await wait_for_signal(SceneFlow.transition_finished, 5.0)
+	Game.run.haul.add_resource("driftwood", 5)
+	assert_true(Game.come_up(Haul.WASHED_UP))
+	assert_null(Game.run)
+	assert_eq(Game.state.resource("driftwood"), 2)
+	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq(saved.resource("driftwood"), 2, "banked and saved before the tide moves")
+	assert_eq(saved.phase, GameState.Phase.TOWN)
+
+
+func test_closing_the_window_writes_a_held_save() -> void:
+	Game.go_down()
+	var seq_before: int = SaveStore.new(TEST_SAVE).read().seq
+	assert_eq(Game.save(), ERR_BUSY, "held while the tide moves")
+	Game._notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	assert_false(Game.store.has_pending_write())
+	assert_eq(SaveStore.new(TEST_SAVE).read().seq, seq_before + 1, "written before the window closes")
+	await wait_for_signal(SceneFlow.transition_finished, 5.0)
 
 
 func test_empty_slot_starts_a_new_campaign_in_town() -> void:

@@ -20,6 +20,8 @@ const DEFAULT_SAVE_PATH: String = "user://saves/slot_1.save"
 ## Villagers, perks, rooms... from data/*.json.
 var data: GameData = GameData.load_dir()
 var state: GameState = GameState.new()
+## The delve in progress, built when you go down, or null in town.
+var run: DelveRun
 var store: SaveStore:
 	set(value):
 		if store != null and store.deferred_write_finished.is_connected(_on_deferred_write_finished):
@@ -46,10 +48,10 @@ func _ready() -> void:
 ## Loads the slot, or starts a new campaign if it's empty or unreadable.
 ## Returns the scene the player should land in.
 ##
-## A save still in the DELVE phase means the game closed mid-delve. For now
-## that resumes at the start of the same delve (same seed). Once failure
-## exists (M2), it will count as an abandoned delve that washes up in the
-## barrel, so quitting can't be used to retry a bad delve.
+## A save still in the DELVE phase means the game closed mid-delve. That's
+## an abandoned delve (Imogen's #6 audit): it washes up in the barrel with
+## nothing kept, it's saved at once, and the town shows it. So quitting
+## can't be used to retry a bad delve.
 func load_or_new() -> String:
 	var result: SaveStore.ReadResult = store.read()
 	saving_locked = result.status == SaveCodec.Status.TOO_NEW
@@ -62,6 +64,9 @@ func load_or_new() -> String:
 		state = GameState.new(_new_campaign_seed())
 	else:
 		state = loaded
+		if state.phase == GameState.Phase.DELVE:
+			state.finish_delve(Haul.ABANDONED, Haul.new())
+			save()
 	return scene_for_phase()
 
 
@@ -73,16 +78,22 @@ func scene_for_phase() -> String:
 func go_down() -> bool:
 	if SceneFlow.busy or not state.start_delve():
 		return false
+	run = DelveRun.create(data, state.current_delve_seed(), state.delve_perks(data),
+		state.villagers_left(data), state.landmarks_left(data))
 	save()
 	delve_started.emit(state.delve_count, state.current_delve_seed())
 	SceneFlow.change_half(DELVE_SCENE, TideTransition.Direction.DOWN)
 	return true
 
 
-## Leave the delve for town. Returns false if it's not allowed right now.
-func come_up() -> bool:
-	if SceneFlow.busy or not state.end_delve():
+## Leaves the delve for town, banking the run's haul by `outcome` (a Haul
+## outcome). The save is written before the tide starts moving, so quitting
+## during the animation can't reload as an abandoned delve. Returns false
+## if it's not allowed right now.
+func come_up(outcome: String = Haul.SURFACED) -> bool:
+	if SceneFlow.busy or not state.finish_delve(outcome, run.haul if run != null else Haul.new()):
 		return false
+	run = null
 	save()
 	returned_to_town.emit(state.delve_count)
 	SceneFlow.change_half(TOWN_SCENE, TideTransition.Direction.UP)
@@ -104,6 +115,12 @@ func save() -> Error:
 
 func _build_payload() -> Dictionary:
 	return {GameState.PAYLOAD_KEY: state.to_dict()}
+
+
+## A save held during a transition is written before the window closes.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and store != null and store.has_pending_write():
+		store.blocked = false
 
 
 func _on_transition_started(_direction: TideTransition.Direction) -> void:

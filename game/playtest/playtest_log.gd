@@ -89,6 +89,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _on_delve_started(number: int, seed_value: int) -> void:
 	var fields: Dictionary = {"delve": number, "seed": str(seed_value), "prompted": _prompted_this_visit}
+	# Everything besides the seed that the map was drawn from, for replay.
+	if Game.run != null:
+		fields["map"] = Game.run.map.inputs()
 	if _town_since_ms >= 0:
 		fields["time_in_town_ms"] = Time.get_ticks_msec() - _town_since_ms
 	log_event("delve_start", fields)
@@ -96,7 +99,7 @@ func _on_delve_started(number: int, seed_value: int) -> void:
 
 
 func _on_returned_to_town(number: int) -> void:
-	log_event("delve_end", {"delve": number})
+	log_event("delve_end", {"delve": number, "outcome": str(Game.state.last_delve.get("outcome", ""))})
 	_town_since_ms = Time.get_ticks_msec()
 	_prompted_this_visit = false
 
