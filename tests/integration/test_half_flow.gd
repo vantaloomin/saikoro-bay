@@ -160,3 +160,32 @@ func test_newer_save_locks_saving() -> void:
 	Game.load_or_new()
 	assert_true(Game.saving_locked)
 	assert_eq(Game.save(), ERR_UNAUTHORIZED)
+
+
+func test_a_saved_town_that_breaks_the_data_locks_saving() -> void:
+	var state: GameState = GameState.new(56)
+	state.town.place("pagoda", Vector2i(0, 0))
+	assert_eq(Game.store.write({GameState.PAYLOAD_KEY: state.to_dict()}), OK)
+	var before: PackedByteArray = FileAccess.get_file_as_bytes(TEST_SAVE)
+	Game.load_or_new()
+	assert_push_error("doesn't match this build's data")
+	assert_push_error("decodes but doesn't load")
+	assert_true(Game.saving_locked)
+	assert_eq(Game.save(), ERR_UNAUTHORIZED)
+	assert_eq(FileAccess.get_file_as_bytes(TEST_SAVE), before, "the campaign's bytes survive")
+	for file_name: String in DirAccess.get_files_at(TEST_SAVE.get_base_dir()):
+		if file_name.contains(".unloadable-"):
+			DirAccess.remove_absolute(TEST_SAVE.get_base_dir().path_join(file_name))
+
+
+func test_building_in_town_saves_at_once() -> void:
+	Game.state.town.actions_left = 2
+	Game.state.add_resource("driftwood", 4)
+	assert_eq(Game.build("cottage", Vector2i(0, 0)), [] as Array[Dictionary])
+	var saved: GameState = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq(saved.town.placed.size(), 1)
+	assert_eq([saved.town.actions_left, saved.resource("driftwood")], [1, 0])
+	assert_eq(Game.move_building(1, Vector2i(2, 2)), "")
+	saved = GameState.from_dict(SaveStore.new(TEST_SAVE).read().payload[GameState.PAYLOAD_KEY])
+	assert_eq([saved.town.placed[0]["x"], saved.town.placed[0]["y"]], [2, 2], "a free move is saved too")
+	assert_eq(Game.build("cottage", Vector2i(3, 3))[0]["text"], "Needs 4 more Driftwood (you have 0) · found in fights and small locks below")

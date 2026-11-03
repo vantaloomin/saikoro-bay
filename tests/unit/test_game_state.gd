@@ -110,10 +110,10 @@ func test_from_dict_rejects_bad_data() -> void:
 		var data: Dictionary = good.duplicate(true)
 		data.merge(cases[label] as Dictionary, true)
 		assert_null(GameState.from_dict(data), label)
-	for field: String in ["villagers", "landmarks", "last_delve"]:
+	for field: String in ["villagers", "landmarks", "last_delve", "town"]:
 		var missing: Dictionary = good.duplicate(true)
 		missing.erase(field)
-		assert_null(GameState.from_dict(missing), "a version 2 save needs %s" % field)
+		assert_null(GameState.from_dict(missing), "a version 3 save needs %s" % field)
 
 
 # --- Banking a delve (delve-map spec 8a, rule 1) ----------------------------------
@@ -197,7 +197,7 @@ func test_banked_state_round_trips_through_a_save() -> void:
 
 func test_version_1_saves_upgrade_with_an_empty_town() -> void:
 	var v1: Dictionary = GameState.new(9).to_dict()
-	for field: String in ["villagers", "landmarks", "last_delve"]:
+	for field: String in ["villagers", "landmarks", "last_delve", "town"]:
 		v1.erase(field)
 	v1["phase"] = "DELVE"
 	v1["delve_count"] = 2
@@ -206,7 +206,7 @@ func test_version_1_saves_upgrade_with_an_empty_town() -> void:
 		"sha256": SaveCodec.digest(1, 4, body)}, "", true) + "\n" + body + "\n"
 	var decoded: SaveCodec.DecodeResult = SaveCodec.decode(text)
 	assert_true(decoded.is_ok())
-	assert_eq(decoded.version, 2)
+	assert_eq(decoded.version, SaveCodec.CURRENT_VERSION)
 	var loaded: GameState = GameState.from_dict(decoded.payload[GameState.PAYLOAD_KEY])
 	assert_not_null(loaded)
 	assert_eq(loaded.villagers(), [] as Array[String])

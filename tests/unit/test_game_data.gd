@@ -123,7 +123,7 @@ func test_resource_slots_name_a_real_resource() -> void:
 		{"id": "hits_and_pays", "name": "S", "text": "t", "accepts": "any", "min": 1, "max": 6,
 			"min_dice": 1, "max_dice": 1, "persists": false, "effect": "damage", "resource": "driftwood", "mult": 1, "add": 0, "icon_shape": "x"},
 	]})
-	var resources: String = JSON.stringify({"schema": 1, "items": [{"id": "driftwood", "name": "Driftwood"}]})
+	var resources: String = JSON.stringify({"schema": 1, "items": [{"id": "driftwood", "name": "Driftwood", "found": ""}]})
 	var data: GameData = GameData.new()
 	data.load_texts({"slots": slots, "resources": resources})
 	assert_eq(data.errors, PackedStringArray([

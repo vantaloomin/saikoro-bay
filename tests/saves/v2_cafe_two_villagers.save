@@ -1,0 +1,2 @@
+{"format":"saikoro-bay-save","seq":9,"sha256":"115329f9eb9b2e41f418b173ea894431bc799ac7336643286368563fb986086d","version":2}
+{"game":{"campaign_seed":"777","delve_count":3,"landmarks":["cafe"],"last_delve":{"delve":3,"kept":{"landmark":"cafe","resources":{"driftwood":6},"villagers":[]},"outcome":"cleared"},"phase":"TOWN","resources":{"driftwood":14,"pearls":2},"seen_twists":["spines"],"villagers":["pearl_diver","shipwright"]}}

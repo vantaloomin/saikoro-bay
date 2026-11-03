@@ -64,7 +64,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"chance_percent": "int", "min": "int", "max": "int",
 	},
 	"resources": {
-		"id": "id", "name": "string",
+		"id": "id", "name": "string", "found": "string?",
 	},
 	"landmarks": {
 		"id": "id", "name": "string",
@@ -75,7 +75,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 	},
 	"buildings": {
 		"id": "id", "name": "string", "max_count": "int", "kind": "enum:home|shop|decor|landmark", "width": "int", "height": "int",
-		"cost": "string_list", "text": "string",
+		"cost": "string_list", "actions": "int", "text": "string",
 		"unlock": "enum:always|buildings_placed|villager_in_town|won", "unlock_count": "int", "unlock_villager": "string?",
 	},
 	"dice_rooms": {
@@ -345,6 +345,8 @@ func _check_town() -> void:
 		homes += 1 if building["kind"] == "home" else 0
 		if (building["max_count"] as int) < 1 or (landmark and (building["max_count"] as int) != 1):
 			errors.append("buildings \"%s\": max_count must be at least 1, and exactly 1 for a landmark" % id)
+		if (building["actions"] as int) < 0:
+			errors.append("buildings \"%s\": actions can't be negative" % id)
 		if (building["width"] as int) < 1 or (building["height"] as int) < 1:
 			errors.append("buildings \"%s\": needs width and height of at least 1" % id)
 		elif not map.fits_one_lot(Rect2i(0, 0, building["width"], building["height"])):

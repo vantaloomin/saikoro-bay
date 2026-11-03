@@ -30,6 +30,8 @@ var last_delve: Dictionary = {}
 ## Twists the player has met, so each gets its one-line banner only once
 ## per campaign (dice-fight-rules section 9). Sorted, for a stable save.
 var _seen_twists: Array[String] = []
+## The town's layout, homes and this visit's actions (save version 3).
+var town: Town = Town.new()
 
 
 func _init(seed_value: int = 0) -> void:
@@ -119,6 +121,108 @@ func delve_perks(data: GameData) -> Array[Dictionary]:
 	return out
 
 
+# --- Building (specs/town.md section 3) --------------------------------------------
+
+static func town_map(data: GameData) -> TownMap:
+	return TownMap.from_row(data.row("town", data.ids("town")[0]))
+
+
+## Landmarks won in Koban's vault and not placed yet, in the order won:
+## the tray's "Won · waiting for a spot".
+func landmarks_waiting() -> Array[String]:
+	return _landmarks.filter(func(id: String) -> bool: return town.count(id) == 0)
+
+
+## Why `building_id` can't be built right now, or [] if it can (the spot
+## aside). Each entry is {"kind": Town.Refusal, "text": String}, in the order
+## a card lists them: the unlock (a padlock), the cap, every resource short,
+## then actions. The card shows all of them; the tray shows NO_ACTIONS once.
+func build_refusals(data: GameData, building_id: String) -> Array[Dictionary]:
+	if not data.has_row("buildings", building_id):
+		return [_refusal(Town.Refusal.NOT_YET, "Not a building")]
+	var row: Dictionary = data.row("buildings", building_id)
+	var out: Array[Dictionary] = []
+	var locked: String = _locked_reason(data, row)
+	if not locked.is_empty():
+		out.append(_refusal(Town.Refusal.NOT_YET, locked))
+	var cap: int = row["max_count"]
+	if town.count(building_id) >= cap:
+		var text: String = "You've built all %d" % cap if cap > 1 else "Already built"
+		out.append(_refusal(Town.Refusal.ALL_BUILT, "Already placed" if row["kind"] == "landmark" else text))
+	var cost: Dictionary = TownMap.parse_cost(row["cost"] as Array)
+	for id: String in cost:
+		var have: int = resource(id)
+		if have < (cost[id] as int):
+			var resource_row: Dictionary = data.row("resources", id)
+			var text: String = "Needs %d more %s (you have %d)" % [(cost[id] as int) - have, resource_row.get("name", id), have]
+			if not str(resource_row.get("found", "")).is_empty():
+				text += " · " + str(resource_row["found"])
+			out.append(_refusal(Town.Refusal.SHORT, text))
+	if town.actions_left < (row["actions"] as int):
+		out.append(_refusal(Town.Refusal.NO_ACTIONS, "No actions left"))
+	return out
+
+
+## Builds `building_id` with its top-left corner at `cell`: checks the
+## unlock, the cap, the resources, the actions and the spot, then spends
+## and places, all in this one call (Imogen's single spend path). Returns
+## [] when built (the new building is town.placed.back()), or every reason
+## it wasn't, having changed nothing.
+func build(data: GameData, building_id: String, cell: Vector2i) -> Array[Dictionary]:
+	var refusals: Array[Dictionary] = build_refusals(data, building_id)
+	if refusals.is_empty():
+		var spot: String = town.spot_problem(data, town_map(data), building_id, cell)
+		if not spot.is_empty():
+			refusals.append(_refusal(Town.Refusal.SPOT, spot))
+	if not refusals.is_empty():
+		return refusals
+	var row: Dictionary = data.row("buildings", building_id)
+	var cost: Dictionary = TownMap.parse_cost(row["cost"] as Array)
+	for id: String in cost:
+		spend_resource(id, cost[id])
+	town.actions_left -= row["actions"] as int
+	town.kept = mini(town.kept, town.actions_left)
+	town.place(building_id, cell)
+	return refusals
+
+
+## Moves a placed building for free. Returns "" when it moved, or why not.
+func move_building(data: GameData, uid: int, cell: Vector2i) -> String:
+	return town.move(data, town_map(data), uid, cell)
+
+
+## Unlock rules only ever open (spec section 4): placed buildings and
+## villagers in town only grow, and nothing is demolished.
+func _locked_reason(data: GameData, row: Dictionary) -> String:
+	match row["unlock"]:
+		"buildings_placed":
+			var need: int = row["unlock_count"]
+			if town.placed.size() < need:
+				return "Needs %d buildings placed (you have %d)" % [need, town.placed.size()]
+		"villager_in_town":
+			var villager: String = row["unlock_villager"]
+			if not _villagers.has(villager):
+				return "The %s needs to live in town first" % data.row("villagers", villager).get("role", villager)
+		"won":
+			if not _landmarks.has(row["id"]):
+				return "Win it in Koban's vault"
+	return ""
+
+
+static func _refusal(kind: Town.Refusal, text: String) -> Dictionary:
+	return {"kind": kind, "text": text}
+
+
+## What a loaded state gets wrong against this build's data (the town's
+## layout and actions), or nothing. Game.load_or_new locks saving on any.
+func town_problems(data: GameData) -> PackedStringArray:
+	var out: PackedStringArray = town.problems(data, _villagers)
+	for building: Dictionary in town.placed:
+		if data.has_row("landmarks", building["building"]) and not _landmarks.has(building["building"]):
+			out.append("landmark \"%s\" placed but never won" % building["building"])
+	return out
+
+
 # --- Resources ----------------------------------------------------------------
 
 func resource(id: String) -> int:
@@ -178,6 +282,7 @@ func to_dict() -> Dictionary:
 		"villagers": _villagers.duplicate(),
 		"landmarks": _landmarks.duplicate(),
 		"last_delve": last_delve.duplicate(true),
+		"town": town.to_dict(),
 	}
 
 
@@ -193,11 +298,24 @@ static func migrate_to_v2(payload: Dictionary) -> Dictionary:
 	return payload
 
 
+## Save version 2 -> 3: adds the town. It starts empty with its budget
+## still to set (Imogen's town review): landmarks a v2 save already won
+## stay won and wait in the tray unplaced, and rescued villagers wait at the
+## dock until there's a Cottage.
+static func migrate_to_v3(payload: Dictionary) -> Dictionary:
+	if not payload.get(PAYLOAD_KEY) is Dictionary:
+		return payload
+	(payload[PAYLOAD_KEY] as Dictionary)["town"] = Town.new().to_dict()
+	return payload
+
+
 ## Builds a state from to_dict() output (after a JSON round trip).
 ## Returns null if anything is missing, negative or not a whole number.
 ## "seen_twists" is optional, so saves from before it existed still load.
 ## "villagers", "landmarks" and "last_delve" are required: version 2 saves
 ## always have them, and older saves get them from migrate_to_v2().
+## "town" is required too (version 3, or migrate_to_v3()). Checks against
+## the data, like whether buildings fit the map, are in town_problems().
 static func from_dict(data: Dictionary) -> GameState:
 	var phase_name: Variant = data.get("phase")
 	if not (phase_name is String and Phase.has(phase_name)):
@@ -221,6 +339,9 @@ static func from_dict(data: Dictionary) -> GameState:
 		return null
 	var last: Variant = _read_last_delve(last_data)
 	if last == null:
+		return null
+	var town_state: Town = Town.from_dict(data.get("town"))
+	if town_state == null:
 		return null
 
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
@@ -250,6 +371,7 @@ static func from_dict(data: Dictionary) -> GameState:
 		if not state._landmarks.has(id as String):
 			state._landmarks.append(id as String)
 	state.last_delve = last
+	state.town = town_state
 	return state
 
 
