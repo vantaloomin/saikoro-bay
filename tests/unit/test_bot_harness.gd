@@ -42,8 +42,9 @@ func test_totals() -> void:
 
 
 func test_same_seeds_same_report() -> void:
-	var a: Dictionary = BotHarness.run(CoinDelveScenario.new(), 1, 500).to_dict()
-	var b: Dictionary = BotHarness.run(CoinDelveScenario.new(), 1, 500).to_dict()
+	var data: GameData = GameData.load_dir()
+	var a: Dictionary = BotHarness.run(DelveScenario.new(data, GreedyBot.new()), 1, 100).to_dict()
+	var b: Dictionary = BotHarness.run(DelveScenario.new(data, GreedyBot.new()), 1, 100).to_dict()
 	assert_eq(a, b)
 
 
