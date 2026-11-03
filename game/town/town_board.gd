@@ -6,6 +6,12 @@ extends Control
 ## to zoom; on a controller the left stick moves a free cursor, the right
 ## stick pans and the triggers zoom. Left click or A picks what's under the
 ## pointer and emits `picked`; right click (without a drag) or B clears it.
+##
+## Everything the player has to read sits on an overlay after the lens, so
+## the blur never touches it (Mara's #41 review): mood bubbles, villager
+## names (always shown), building names (on hover, or all of them while Alt
+## or the left stick click is held), selection brackets in ink, and a leader
+## line to the card.
 
 signal picked(hit: Dictionary)
 
@@ -27,7 +33,14 @@ var _data: GameData
 var _state: GameState
 var _viewport: SubViewport
 var _screen: TextureRect
+var _bubbles: Control
 var _overlay: Control
+## Where the card's edge is, in board pixels, for the leader line; INF for none.
+var leader_target: Vector2 = Vector2.INF
+var show_all_names: bool = false
+## Grows the map's name tags with the HUD on small screens.
+var text_scale: float = 1.0
+var _bubble_textures: Dictionary[Town.Mood, ImageTexture] = {}
 var _font: Font = ThemeDB.fallback_font
 var _cursor: Vector2 = Vector2.ZERO
 ## Shown once a controller or the arrow keys move it; the mouse hides it.
@@ -55,11 +68,20 @@ func _ready() -> void:
 	lens.shader = TILT_SHIFT
 	_screen.material = lens
 	add_child(_screen)
+	# Pixel bubbles scale with nearest filtering; text stays smooth.
+	_bubbles = Control.new()
+	_bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_bubbles.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bubbles.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_bubbles.draw.connect(_draw_bubbles)
+	add_child(_bubbles)
 	_overlay = Control.new()
 	_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.draw.connect(_draw_overlay)
 	add_child(_overlay)
+	for mood: Town.Mood in [Town.Mood.HAPPY, Town.Mood.UNHAPPY, Town.Mood.HOMELESS]:
+		_bubble_textures[mood] = ImageTexture.create_from_image(PixelArt.mood(mood))
 	resized.connect(_on_resized)
 
 
@@ -84,15 +106,22 @@ func show_state(state: GameState) -> void:
 		selected = {}
 	if not _still_there(hovered):
 		hovered = {}
-	diorama.frame(_data, state, selected, true)
-	diorama.frame(_data, state, hovered, false)
-	_overlay.queue_redraw()
+	redraw_marks()
 
 
 func select(hit: Dictionary) -> void:
 	selected = hit if hit.get("kind", "none") in ["building", "villager"] else {}
-	if _state != null:
-		diorama.frame(_data, _state, selected, true)
+	if _state != null and not selected.is_empty():
+		view.ensure_visible(anchor_of(selected))
+		_view_changed()
+	redraw_marks()
+
+
+## The part of the board the HUD leaves clear. Reframes the whole town.
+func set_safe_area(area: Rect2) -> void:
+	view.safe = area
+	view.frame_town()
+	_view_changed()
 
 
 func _still_there(hit: Dictionary) -> bool:
@@ -114,6 +143,11 @@ func _on_resized() -> void:
 
 func _view_changed() -> void:
 	diorama.sync_camera(view)
+	redraw_marks()
+
+
+func redraw_marks() -> void:
+	_bubbles.queue_redraw()
 	_overlay.queue_redraw()
 
 
@@ -186,11 +220,18 @@ func _on_mouse_button(button: InputEventMouseButton) -> void:
 		MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
 			if button.pressed:
 				view.zoom_at(button.position, WHEEL_ZOOM if button.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / WHEEL_ZOOM)
+				_keep_selection_in_view()
 				_view_changed()
 
 
 func _process(delta: float) -> void:
-	if view == null or _state == null or not has_focus():
+	if view == null or _state == null:
+		return
+	var all_names: bool = Input.is_key_pressed(KEY_ALT) or Input.is_joy_button_pressed(0, JOY_BUTTON_LEFT_STICK)
+	if all_names != show_all_names:
+		show_all_names = all_names
+		_overlay.queue_redraw()
+	if not has_focus():
 		return
 	var left: Vector2 = Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
 	if left.length() > STICK_DEADZONE:
@@ -202,7 +243,13 @@ func _process(delta: float) -> void:
 	var zoom: float = Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) - Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT)
 	if absf(zoom) > STICK_DEADZONE:
 		view.zoom_at(_cursor if _cursor_shown else size / 2.0, pow(TRIGGER_ZOOM, zoom * delta))
+		_keep_selection_in_view()
 		_view_changed()
+
+
+func _keep_selection_in_view() -> void:
+	if not selected.is_empty():
+		view.ensure_visible(anchor_of(selected))
 
 
 func _move_cursor(by: Vector2) -> void:
@@ -217,7 +264,6 @@ func _hover_at(point: Vector2) -> void:
 		hit = {}
 	if hit != hovered:
 		hovered = hit
-		diorama.frame(_data, _state, hovered, false)
 	_overlay.queue_redraw()
 
 
@@ -228,49 +274,153 @@ func _pick_at(point: Vector2) -> void:
 func _pick_result(hit: Dictionary) -> void:
 	select(hit)
 	picked.emit(hit)
-	_overlay.queue_redraw()
 
 
 # --- Overlay ------------------------------------------------------------------------------
 
-## What the hovered thing is called, so names never need a click.
-func hover_name() -> String:
-	match str(hovered.get("kind", "none")):
+## The point a selection's leader line and keep-in-view aim at: a
+## building's roof, or a villager's middle.
+func anchor_of(hit: Dictionary) -> Vector3:
+	match str(hit.get("kind", "none")):
 		"building":
-			var building: Dictionary = _state.town.entry(hovered["uid"])
-			return str(_data.row("buildings", building["building"]).get("name", building["building"]))
-		"villager":
-			return str(_data.row("villagers", str(hovered["villager"])).get("role", hovered["villager"]))
-	return ""
-
-
-func _hover_anchor() -> Vector3:
-	match str(hovered.get("kind", "none")):
-		"building":
-			var box: AABB = TownView.block_box(_data, _state.town.entry(hovered["uid"]))
+			var box: AABB = TownView.block_box(_data, _state.town.entry(hit["uid"]))
 			return Vector3(box.get_center().x, box.end.y, box.get_center().z)
 		"villager":
-			var spot: Vector3 = view.villager_spots(_data, _state).get(str(hovered["villager"]), Vector3.ZERO)
-			return spot + Vector3(0.0, TownView.VILLAGER_SIZE.y + 0.12 + TownView.BUBBLE_SIZE, 0.0)
+			var spot: Vector3 = view.villager_spots(_data, _state).get(str(hit["villager"]), Vector3.ZERO)
+			return spot + Vector3(0.0, TownView.VILLAGER_SIZE.y / 2.0, 0.0)
 	return Vector3.ZERO
+
+
+## Building names on screen right now: the hovered one, or all of them
+## while the show-all input is held.
+func building_names() -> Array[int]:
+	var out: Array[int] = []
+	for building: Dictionary in _state.town.placed:
+		if show_all_names or (hovered.get("kind", "") == "building" and hovered["uid"] == building["uid"]):
+			out.append(building["uid"])
+	return out
+
+
+## Screen pixels per world unit at a point, for sizing marks with distance.
+func _scale_at(world: Vector3) -> float:
+	return view.to_screen(world).distance_to(view.to_screen(world + Vector3.UP))
+
+
+func _draw_bubbles() -> void:
+	if _state == null:
+		return
+	var spots: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
+	for villager: String in spots:
+		var middle: Vector3 = TownView.bubble_point(spots[villager])
+		var side: float = TownView.BUBBLE_SIZE * _scale_at(middle)
+		var at: Vector2 = view.to_screen(middle)
+		_bubbles.draw_texture_rect(_bubble_textures[_state.mood(_data, villager)],
+			Rect2(at - Vector2(side, side) / 2.0, Vector2(side, side)), false)
 
 
 func _draw_overlay() -> void:
 	if _state == null:
 		return
-	var label: String = hover_name()
-	if not label.is_empty():
-		var at: Vector2 = view.to_screen(_hover_anchor()) + Vector2(0, -18)
-		var text_size: Vector2 = _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, TownStyle.MAP_LABEL)
-		var box: Rect2 = Rect2(at - Vector2(text_size.x / 2.0 + 12, text_size.y + 10), text_size + Vector2(24, 14))
-		var style: StyleBoxFlat = TownStyle.panel()
-		style.set_content_margin_all(0)
-		style.shadow_size = 4
-		style.set_corner_radius_all(10)
-		_overlay.draw_style_box(style, box)
-		_overlay.draw_string(_font, Vector2(box.position.x + 12, box.end.y - 10), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, TownStyle.MAP_LABEL, TownStyle.INK)
+	var spots: Dictionary[String, Vector3] = view.villager_spots(_data, _state)
+	if not hovered.is_empty() and hovered != selected:
+		_draw_brackets(hovered, TownStyle.WASHI, 3.0, false)
+	if not selected.is_empty():
+		_draw_brackets(selected, TownStyle.INK, 4.0, true)
+		if leader_target != Vector2.INF:
+			var from: Vector2 = view.to_screen(anchor_of(selected))
+			_overlay.draw_line(from, leader_target, TownStyle.WASHI, 6.0, true)
+			_overlay.draw_line(from, leader_target, TownStyle.INK, 2.5, true)
+			_overlay.draw_circle(from, 6.0, TownStyle.INK)
+			_overlay.draw_circle(leader_target, 5.0, TownStyle.INK)
+	for tag: Dictionary in villager_tags(spots):
+		_draw_tag_in(tag["text"], tag["rect"], 0.85)
+	for uid: int in building_names():
+		var building: Dictionary = _state.town.entry(uid)
+		var box: AABB = TownView.block_box(_data, building)
+		var roof: Vector3 = Vector3(box.get_center().x, box.end.y, box.get_center().z)
+		_draw_tag(str(_data.row("buildings", building["building"]).get("name", building["building"])),
+			view.to_screen(roof) + Vector2(0, -12), true, 1.0)
 	if _cursor_shown:
 		_overlay.draw_arc(_cursor, 16.0, 0.0, TAU, 32, TownStyle.WASHI, 6.0)
 		_overlay.draw_arc(_cursor, 16.0, 0.0, TAU, 32, TownStyle.INK, 3.0)
 		_overlay.draw_circle(_cursor, 3.0, TownStyle.INK)
+
+
+func _tag_font_size() -> int:
+	return roundi(TownStyle.MAP_LABEL * text_scale)
+
+
+## Villager name tags under their feet, nudged down past each other so
+## two neighbors' names never cover one another: [{"text", "rect"}].
+func villager_tags(spots: Dictionary[String, Vector3]) -> Array[Dictionary]:
+	var tags: Array[Dictionary] = []
+	for villager: String in spots:
+		var role: String = str(_data.row("villagers", villager).get("role", villager))
+		tags.append({"text": role, "rect": _tag_rect(role, view.to_screen(spots[villager]) + Vector2(0, 6), false)})
+	tags.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return (a["rect"] as Rect2).position.y < (b["rect"] as Rect2).position.y)
+	for i: int in tags.size():
+		var rect: Rect2 = tags[i]["rect"]
+		for j: int in i:
+			var placed: Rect2 = tags[j]["rect"]
+			if rect.grow(2.0).intersects(placed):
+				rect.position.y = placed.end.y + 2.0
+		tags[i]["rect"] = rect
+	return tags
+
+
+func _tag_rect(text: String, at: Vector2, above: bool) -> Rect2:
+	var text_size: Vector2 = _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tag_font_size())
+	var box_size: Vector2 = text_size + Vector2(20, 8)
+	var top: float = at.y - box_size.y if above else at.y
+	return Rect2(Vector2(at.x - box_size.x / 2.0, top), box_size)
+
+
+## A small washi name tag, centered on `at`: hanging above it, or sitting
+## below it.
+func _draw_tag(text: String, at: Vector2, above: bool, opacity: float) -> void:
+	_draw_tag_in(text, _tag_rect(text, at, above), opacity)
+
+
+func _draw_tag_in(text: String, box: Rect2, opacity: float) -> void:
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color(TownStyle.WASHI, opacity)
+	style.border_color = Color(TownStyle.LOT_LINE, opacity)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(8)
+	_overlay.draw_style_box(style, box)
+	_overlay.draw_string(_font, Vector2(box.position.x + 10, box.end.y - 4 - _font.get_descent(_tag_font_size()) * 0.5),
+		text, HORIZONTAL_ALIGNMENT_LEFT, -1, _tag_font_size(), TownStyle.INK)
+
+
+## Corner brackets around a pick: around a building's block, or around a
+## villager standing up. Ink over a washi edge, so they read on any ground.
+func _draw_brackets(hit: Dictionary, color: Color, width: float, selected_mark: bool) -> void:
+	var corners: PackedVector2Array = []
+	match str(hit.get("kind", "none")):
+		"building":
+			# Around the whole block as it stands on screen: ground marks
+			# would hide behind its walls.
+			var box: AABB = TownView.block_box(_data, _state.town.entry(hit["uid"]))
+			var bounds: Rect2 = Rect2(view.to_screen(box.position), Vector2.ZERO)
+			for i: int in 8:
+				bounds = bounds.expand(view.to_screen(box.get_endpoint(i)))
+			bounds = bounds.grow(6.0)
+			corners = [bounds.position, Vector2(bounds.end.x, bounds.position.y), bounds.end,
+				Vector2(bounds.position.x, bounds.end.y)]
+		"villager":
+			var spot: Vector3 = view.villager_spots(_data, _state).get(str(hit["villager"]), Vector3.ZERO)
+			var feet: Vector2 = view.to_screen(spot)
+			var head: Vector2 = view.to_screen(spot + Vector3(0.0, TownView.VILLAGER_SIZE.y, 0.0))
+			var half: float = (feet.y - head.y) * 0.4
+			corners = [Vector2(feet.x - half, head.y - 6), Vector2(feet.x + half, head.y - 6),
+				Vector2(feet.x + half, feet.y + 4), Vector2(feet.x - half, feet.y + 4)]
+		_:
+			return
+	for i: int in corners.size():
+		var corner: Vector2 = corners[i]
+		for other: Vector2 in [corners[(i + 1) % 4], corners[(i + 3) % 4]]:
+			var end: Vector2 = corner.lerp(other, 0.28)
+			if selected_mark:
+				_overlay.draw_line(corner, end, TownStyle.WASHI, width + 4.0, true)
+			_overlay.draw_line(corner, end, color, width, true)

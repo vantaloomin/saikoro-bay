@@ -2,8 +2,10 @@ class_name TownDiorama
 extends Node3D
 ## The town as a little 3D diorama (Vanta's HD-2D pick, Nov 3): greybox
 ## blocks for the ground and buildings, flat pixel villagers that face the
-## camera with their mood above them, warm sun and bloom. It only draws:
-## TownView holds the camera and the picking, and the sim holds the town.
+## camera, warm sun and bloom. It only draws: TownView holds the camera and
+## the picking, and the sim holds the town. Mood bubbles, names and
+## selection marks sit on TownBoard's overlay, after the lens, so they stay
+## sharp (Mara's #41 review).
 ## Placeholder shapes and colors until the town art lands.
 
 const WALL: Color = Color(0.95, 0.91, 0.82)
@@ -21,17 +23,13 @@ const DARK_WOOD: Color = Color(0.42, 0.3, 0.2)
 const PINE: Color = Color(0.22, 0.42, 0.3)
 const HILL: Color = Color(0.42, 0.6, 0.4)
 const LAMP: Color = Color(1.0, 0.75, 0.4)
-const HOVER: Color = Color(1.0, 0.98, 0.9)
 ## World units per sprite pixel: a 16 × 24 villager stands one cell tall.
 const PIXEL: float = 0.042
 
 var camera: Camera3D
 ## Rebuilt when the layout or the villagers change.
 var _pieces: Node3D
-var _hover_frame: Node3D
-var _select_frame: Node3D
 var _materials: Dictionary[String, StandardMaterial3D] = {}
-var _spots: Dictionary[String, Vector3] = {}
 
 
 ## Builds the fixed parts once: light, sky, ground, sea and scenery.
@@ -47,10 +45,6 @@ func setup(map: TownMap) -> void:
 	_add_scenery(map)
 	_pieces = Node3D.new()
 	add_child(_pieces)
-	_hover_frame = Node3D.new()
-	add_child(_hover_frame)
-	_select_frame = Node3D.new()
-	add_child(_select_frame)
 
 
 func sync_camera(view: TownView) -> void:
@@ -63,40 +57,9 @@ func show_town(data: GameData, view: TownView, state: GameState) -> void:
 		child.queue_free()
 	for building: Dictionary in state.town.placed:
 		_add_building(data, building)
-	_spots = view.villager_spots(data, state)
-	for villager: String in _spots:
-		_add_villager(villager, _spots[villager], state.mood(data, villager))
-
-
-## Frames a pick result on the ground: thin and pale for hover, thick and
-## vermilion for the selection. Brackets, not only color (two-halves 3).
-func frame(data: GameData, state: GameState, hit: Dictionary, selected: bool) -> void:
-	var holder: Node3D = _select_frame if selected else _hover_frame
-	for child: Node in holder.get_children():
-		child.queue_free()
-	var area: Rect2 = Rect2()
-	match str(hit.get("kind", "none")):
-		"building":
-			area = Rect2(Town.rect_of(data, state.town.entry(hit["uid"])))
-		"villager":
-			if not _spots.has(str(hit["villager"])):
-				return
-			var spot: Vector3 = _spots[str(hit["villager"])]
-			area = Rect2(spot.x - 0.35, spot.z - 0.35, 0.7, 0.7)
-		_:
-			return
-	var color: Color = TownStyle.SELECTED if selected else HOVER
-	var thick: float = 0.09 if selected else 0.05
-	var arm: float = minf(area.size.x, area.size.y) * 0.35
-	var corners: Array[Vector2] = [area.position, Vector2(area.end.x, area.position.y), area.end,
-		Vector2(area.position.x, area.end.y)]
-	for i: int in corners.size():
-		var corner: Vector2 = corners[i]
-		var inward: Vector2 = (area.get_center() - corner).sign()
-		var along_x: Vector3 = Vector3(corner.x + inward.x * arm / 2.0, 0.08, corner.y)
-		var along_z: Vector3 = Vector3(corner.x, 0.08, corner.y + inward.y * arm / 2.0)
-		holder.add_child(_glow_box(Vector3(arm, 0.03, thick), along_x, color))
-		holder.add_child(_glow_box(Vector3(thick, 0.03, arm), along_z, color))
+	var spots: Dictionary[String, Vector3] = view.villager_spots(data, state)
+	for villager: String in spots:
+		_sprite(PixelArt.villager(villager), spots[villager])
 
 
 # --- Pieces -----------------------------------------------------------------------------
@@ -128,21 +91,6 @@ func _mesh(parent: Node3D, mesh: Mesh, at: Vector3, color: Color, emission: floa
 	instance.material_override = _material(color, emission)
 	instance.position = at
 	parent.add_child(instance)
-	return instance
-
-
-## An unshaded bar that ignores the light, for selection frames.
-func _glow_box(box_size: Vector3, at: Vector3, color: Color) -> MeshInstance3D:
-	var mesh: BoxMesh = BoxMesh.new()
-	mesh.size = box_size
-	var material: StandardMaterial3D = StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = color
-	var instance: MeshInstance3D = MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.material_override = material
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	instance.position = at
 	return instance
 
 
@@ -191,7 +139,7 @@ func _add_ground(map: TownMap) -> void:
 			var color: Color = (LOT if lot else PATH).darkened(0.06 * shade(cell))
 			_box(ground, Vector3(1.0, 0.1, 1.0), Vector3(x + 0.5, 0.0 if lot else -0.02, y + 0.5), color)
 	_box(ground, Vector3(width + 0.6, 0.12, 0.45), Vector3(width / 2.0, -0.04, land + 0.1), BEACH)
-	var sea: MeshInstance3D = _box(ground, Vector3(width + 14.0, 0.1, 8.0), Vector3(width / 2.0, -0.22, land + 4.3), SEA)
+	var sea: MeshInstance3D = _box(ground, Vector3(width + 80.0, 0.1, 40.0), Vector3(width / 2.0, -0.22, land + 20.3), SEA)
 	sea.material_override = _material(SEA).duplicate() as StandardMaterial3D
 	(sea.material_override as StandardMaterial3D).roughness = 0.15
 	(sea.material_override as StandardMaterial3D).metallic_specular = 0.9
@@ -275,11 +223,3 @@ func _sprite(image: Image, at: Vector3) -> Sprite3D:
 	sprite.position = at
 	_pieces.add_child(sprite)
 	return sprite
-
-
-func _add_villager(villager: String, spot: Vector3, mood: Town.Mood) -> void:
-	_sprite(PixelArt.villager(villager), spot)
-	var bubble: Sprite3D = _sprite(PixelArt.mood(mood), spot + Vector3(0, TownView.VILLAGER_SIZE.y + 0.12, 0))
-	bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	bubble.shaded = false
-	bubble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

@@ -62,7 +62,7 @@ func test_cards_for_buildings_and_villagers() -> void:
 	var empty: int = state.town.place("cottage", Vector2i(2, 2))
 	var home: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "building", "uid": cottage})
 	assert_eq(home["title"], "Cottage")
-	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver."])
+	assert_eq(Array(home["lines"]), ["A home for one villager.", "Home of the Pearl diver · happy"])
 	assert_eq(Array(TownScreen.card_for(Game.data, state, {"kind": "building", "uid": empty})["lines"])[1],
 		"Nobody lives here yet.")
 	var diver: Dictionary = TownScreen.card_for(Game.data, state, {"kind": "villager", "villager": "pearl_diver"})
@@ -99,4 +99,58 @@ func test_holding_y_holds_go_down() -> void:
 	assert_almost_eq(go_down.progress(), 0.5, 0.01)
 	press.pressed = false
 	town._input(press)
-	assert_eq(go_down.progress(), 0.0, "letting go cancels")
+	assert_false(go_down.is_holding(), "letting go cancels")
+	go_down.advance(HoldButton.DRAIN_SECONDS)
+	assert_eq(go_down.progress(), 0.0, "and the fill drains")
+
+
+func test_esc_and_start_open_the_pause_menu_with_quit_in_it() -> void:
+	var town: TownScreen = _open()
+	var menu: PauseMenu = town.get_node("%PauseMenu") as PauseMenu
+	assert_false(menu.visible)
+	assert_not_null(menu.find_child("Quit", true, false), "Quit lives in the menu")
+	assert_null(town.find_child("Quit", false, false), "not beside Go down")
+	var esc: InputEventAction = InputEventAction.new()
+	esc.action = &"ui_cancel"
+	esc.pressed = true
+	town._unhandled_input(esc)
+	assert_true(menu.visible)
+	var hold: InputEventJoypadButton = InputEventJoypadButton.new()
+	hold.button_index = JOY_BUTTON_Y
+	hold.pressed = true
+	town._input(hold)
+	assert_false((town.get_node("%GoDown") as HoldButton).is_holding(), "no holding Go down behind the menu")
+	town._unhandled_input(esc)
+	assert_false(menu.visible)
+	var start: InputEventJoypadButton = InputEventJoypadButton.new()
+	start.button_index = JOY_BUTTON_START
+	start.pressed = true
+	town._input(start)
+	assert_true(menu.visible)
+
+
+func test_the_hold_hint_follows_the_input() -> void:
+	var town: TownScreen = _open()
+	assert_eq(town.hint_text(), TownScreen.HOLD_HINT_MOUSE)
+	var pad: InputEventJoypadButton = InputEventJoypadButton.new()
+	pad.button_index = JOY_BUTTON_A
+	pad.pressed = true
+	town._input(pad)
+	assert_eq(town.hint_text(), TownScreen.HOLD_HINT_PAD)
+	var click: InputEventMouseButton = InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	town._input(click)
+	assert_eq(town.hint_text(), TownScreen.HOLD_HINT_MOUSE)
+
+
+func test_the_town_is_framed_between_the_hud_columns() -> void:
+	var town: TownScreen = _open()
+	await wait_physics_frames(2)
+	town._fit_hud()
+	var safe: Rect2 = town.safe_area()
+	var ledger: Rect2 = (town.get_node("%Ledger") as Control).get_global_rect()
+	var notice: Rect2 = (town.get_node("%Notice") as Control).get_global_rect()
+	assert_gt(safe.position.x, ledger.end.x - 1.0, "right of the ledger")
+	assert_lt(safe.end.x, notice.position.x + 1.0, "left of the notice board and card")
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	assert_true(safe.grow(1.0).encloses(board.view.town_bounds()))

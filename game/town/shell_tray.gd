@@ -5,8 +5,8 @@ extends Control
 ## shell for each fresh one, and an outline for each one spent. Spending
 ## takes fresh actions first, so the pearl goes last.
 
-const SHELL: float = 30.0
-const GAP: float = 14.0
+const SHELL: float = 25.0
+const GAP: float = 10.0
 
 var tokens: Array[String] = []
 

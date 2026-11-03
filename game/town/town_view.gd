@@ -33,18 +33,19 @@ var target: Vector3 = Vector3.ZERO
 var distance: float = 20.0
 var min_distance: float = 8.0
 var max_distance: float = 30.0
+## The part of the screen the HUD leaves clear; empty means all of it.
+var safe: Rect2 = Rect2()
 
 
-## A view that fits the whole town on a `screen_size` screen, with room for
-## the HUD in the corners.
-static func make(town_map: TownMap, screen_size: Vector2) -> TownView:
+## A view that fits the whole town on a `screen_size` screen. `safe` is
+## the part of the screen the HUD leaves clear (Mara's #41 review: frame the
+## town between the HUD columns); empty means the whole screen.
+static func make(town_map: TownMap, screen_size: Vector2, safe_area: Rect2 = Rect2()) -> TownView:
 	var view: TownView = TownView.new()
 	view.map = town_map
 	view.size = screen_size
-	view.target = view.middle()
-	view.distance = view.fit_distance()
-	view.max_distance = view.distance * 1.25
-	view.min_distance = view.distance * 0.45
+	view.safe = safe_area
+	view.frame_town()
 	return view
 
 
@@ -52,30 +53,56 @@ func middle() -> Vector3:
 	return Vector3(map.width / 2.0, 0.0, map.height / 2.0)
 
 
-## The nearest camera distance at which the land, the shore and the tallest
-## roofs along the back all sit inside the screen, with a margin.
-func fit_distance() -> float:
-	var corners: Array[Vector3] = [
-		Vector3(0, BODY_HEIGHT["landmark"] + ROOF_HEIGHT["landmark"], 0),
-		Vector3(map.width, BODY_HEIGHT["landmark"] + ROOF_HEIGHT["landmark"], 0),
-		Vector3(0, 1.5, 0), Vector3(map.width, 1.5, 0),
+## The part of the screen the town should sit in.
+func safe_rect() -> Rect2:
+	return safe if safe.has_area() else Rect2(Vector2.ZERO, size)
+
+
+## Points that must be on screen: the land's corners, the shore, and the
+## tallest roofs along the back.
+func _outline_points() -> Array[Vector3]:
+	var tall: float = BODY_HEIGHT["landmark"] + ROOF_HEIGHT["landmark"]
+	return [
+		Vector3(0, tall, 0), Vector3(map.width, tall, 0), Vector3(0, 1.5, 0), Vector3(map.width, 1.5, 0),
 		Vector3(0, 0, map.height), Vector3(map.width, 0, map.height),
 	]
-	var keep_out: Rect2 = Rect2(Vector2.ZERO, size).grow_individual(-size.x * 0.02, -size.y * 0.03, -size.x * 0.02, -size.y * 0.03)
-	var saved: float = distance
+
+
+## The screen box around the whole town from here.
+func town_bounds() -> Rect2:
+	var points: Array[Vector3] = _outline_points()
+	var bounds: Rect2 = Rect2(to_screen(points[0]), Vector2.ZERO)
+	for point: Vector3 in points:
+		bounds = bounds.expand(to_screen(point))
+	return bounds
+
+
+## Fits and centers the whole town inside the safe area, and sets the zoom
+## limits around that.
+func frame_town() -> void:
+	var area: Rect2 = safe_rect()
+	var room: Vector2 = area.size * Vector2(0.96, 0.94)
+	target = middle()
 	distance = 6.0
-	while distance < 60.0:
-		var fits: bool = true
-		for corner: Vector3 in corners:
-			if not keep_out.has_point(to_screen(corner)):
-				fits = false
-				break
-		if fits:
+	while distance < 80.0:
+		var bounds: Rect2 = town_bounds()
+		if bounds.size.x <= room.x and bounds.size.y <= room.y:
 			break
 		distance += 0.25
-	var out: float = distance
-	distance = saved
-	return out
+	for i: int in 4:
+		_pan_unclamped(area.get_center() - town_bounds().get_center())
+	max_distance = distance * 1.25
+	min_distance = distance * 0.45
+
+
+## Pans just enough to bring a world point inside the safe area, so a
+## selection never hides under the HUD.
+func ensure_visible(world: Vector3, margin: float = 48.0) -> void:
+	var area: Rect2 = safe_rect().grow(-margin)
+	var at: Vector2 = to_screen(world)
+	var inside: Vector2 = at.clamp(area.position, area.end)
+	if inside != at:
+		pan(inside - at)
 
 
 # --- Camera -------------------------------------------------------------------------------
@@ -126,12 +153,15 @@ func cell_at(point: Vector2) -> Vector2i:
 ## Drags the town by a screen distance, so the ground under the pointer
 ## follows it.
 func pan(by: Vector2) -> void:
+	_pan_unclamped(by)
+	_clamp_target()
+
+
+func _pan_unclamped(by: Vector2) -> void:
 	var from: Variant = ground_at(size / 2.0)
 	var to: Variant = ground_at(size / 2.0 + by)
-	if from == null or to == null:
-		return
-	target += (from as Vector3) - (to as Vector3)
-	_clamp_target()
+	if from != null and to != null:
+		target += (from as Vector3) - (to as Vector3)
 
 
 ## Zooms by `factor` (above 1 is closer) around a screen point, so the
@@ -200,6 +230,11 @@ func villager_spots(data: GameData, state: GameState) -> Dictionary[String, Vect
 	for i: int in homeless.size():
 		out[homeless[i]] = dock_spot(i)
 	return out
+
+
+## Where a villager's mood bubble floats: its middle, above their head.
+static func bubble_point(spot: Vector3) -> Vector3:
+	return spot + Vector3(0.0, VILLAGER_SIZE.y + 0.12 + BUBBLE_SIZE / 2.0, 0.0)
 
 
 ## A villager's box, bubble included.

@@ -137,7 +137,7 @@ func test_shells_show_kept_fresh_and_spent() -> void:
 	assert_eq(ShellTray.describe(state), "2 actions left, 1 kept from your last visit")
 
 
-func test_hold_button_fires_once_when_held_long_enough() -> void:
+func test_hold_button_fills_drains_and_fires_once() -> void:
 	var button: HoldButton = HoldButton.new()
 	add_child_autofree(button)
 	watch_signals(button)
@@ -145,12 +145,31 @@ func test_hold_button_fires_once_when_held_long_enough() -> void:
 	button.advance(HoldButton.HOLD_SECONDS * 0.5)
 	button.stop_hold()
 	assert_signal_not_emitted(button, "held", "letting go early does nothing")
-	assert_eq(button.progress(), 0.0, "and resets the bar")
+	assert_almost_eq(button.progress(), 0.5, 0.01, "the fill stays for a moment")
+	button.advance(HoldButton.DRAIN_SECONDS)
+	assert_eq(button.progress(), 0.0, "then drains away")
 	button.start_hold()
 	button.advance(HoldButton.HOLD_SECONDS)
 	button.advance(HoldButton.HOLD_SECONDS)
 	assert_signal_emit_count(button, "held", 1)
+	assert_false(button.is_holding(), "a finished hold needs a new press")
 	button.disabled = true
 	button.start_hold()
 	button.advance(HoldButton.HOLD_SECONDS)
 	assert_signal_emit_count(button, "held", 1, "a disabled button can't be held")
+
+
+func test_the_town_fits_inside_the_safe_area() -> void:
+	var safe: Rect2 = Rect2(360, 0, 1100, 1080)
+	var view: TownView = TownView.make(map, Vector2(1920, 1080), safe)
+	assert_true(safe.encloses(view.town_bounds()), "%s inside %s" % [view.town_bounds(), safe])
+	assert_almost_eq(view.town_bounds().get_center().x, safe.get_center().x, 4.0, "and centered in it")
+
+
+func test_a_selection_is_kept_out_from_under_the_hud() -> void:
+	var safe: Rect2 = Rect2(360, 0, 1100, 1080)
+	var view: TownView = TownView.make(map, Vector2(1920, 1080), safe)
+	var far_corner: Vector3 = Vector3(map.width - 0.5, 0.0, 0.5)
+	view.zoom_at(view.to_screen(Vector3(1.0, 0.0, map.land_rows - 1.0)), 2.0)
+	view.ensure_visible(far_corner)
+	assert_true(safe.has_point(view.to_screen(far_corner)))

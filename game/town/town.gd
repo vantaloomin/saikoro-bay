@@ -3,11 +3,14 @@ extends Control
 ## The town, above the tide (M3 PR 5a): the diorama fills the screen and
 ## the HUD hugs the corners like things in the world (two-halves section 1):
 ## a ledger of resources, a notice board, the tide-shell action tray, a card
-## for whatever is selected, and "Go down".
+## for whatever is selected, and "Go down". The town is framed in the space
+## between the HUD columns, and the HUD grows on small screens (Mara's #41
+## review).
 ##
 ## "Go down" is a hold, so it needs no confirm, and its words say what's
-## kept and lost (spec section 1). It never glows or nudges: a button that
-## pushes the player would spoil the "second delve unprompted" signal.
+## kept and lost (spec section 1). It only moves when touched: a button that
+## glows or pushes the player would spoil the "second delve unprompted"
+## signal. Quit lives in the pause menu (Start or Esc), away from it.
 
 ## What the notice board says about the last delve. An abandoned delve is
 ## said plainly, so a player who quit mid-delve knows what it cost.
@@ -23,33 +26,56 @@ const MOOD_WORDS: Dictionary[Town.Mood, String] = {
 	Town.Mood.UNHAPPY: "Not happy with their home yet",
 	Town.Mood.HOMELESS: "Has nowhere to live, so they wait on the dock",
 }
-const HOLD_HINT: String = "Hold to go down. On a controller, hold Y."
+## The short form, after a resident's name on a home's card.
+const MOOD_SHORT: Dictionary[Town.Mood, String] = {
+	Town.Mood.HAPPY: "happy", Town.Mood.UNHAPPY: "not happy yet", Town.Mood.HOMELESS: "",
+}
+## The hint under "Go down", by the input last used. The button itself
+## teaches the hold; the hint fades after the first real one.
+const HOLD_HINT_MOUSE: String = "Hold to go down"
+const HOLD_HINT_PAD: String = "Hold"
+## Text below about 20 px is hard to read; past this canvas-to-screen scale
+## the HUD grows to keep body text near 24 px (SA-6, the Deck at 1280 × 800).
+const HUD_TARGET_SCALE: float = 0.92
+const HUD_MAX_GROWTH: float = 1.3
+## Gap between the HUD and the town's safe area.
+const SAFE_GAP: float = 16.0
 
 @onready var _board: TownBoard = %Board
 @onready var _ledger: PanelContainer = %Ledger
+@onready var _right_column: VBoxContainer = $RightColumn
 @onready var _notice: PanelContainer = %Notice
 @onready var _card: PanelContainer = %Card
 @onready var _tray_panel: PanelContainer = %Tray
+@onready var _actions: VBoxContainer = $Actions
 @onready var _go_down: HoldButton = %GoDown
-@onready var _hold_hint: Label = %HoldHint
-@onready var _quit: Button = %Quit
+@onready var _hold_hint: HBoxContainer = %HoldHint
+@onready var _menu_button: Button = %MenuButton
+@onready var _pause_menu: PauseMenu = %PauseMenu
 
 var _shells: ShellTray
+## Whether a controller was the last input, for the hint's wording.
+var using_pad: bool = false
+var hud_scale: float = 1.0
 
 
 func _ready() -> void:
 	for panel: PanelContainer in [_ledger, _notice, _card, _tray_panel]:
 		panel.add_theme_stylebox_override("panel", TownStyle.panel())
 	TownStyle.style_button(_go_down, TownStyle.TITLE)
-	TownStyle.style_button(_quit)
-	_hold_hint.add_theme_font_size_override("font_size", TownStyle.SMALL)
-	_hold_hint.add_theme_color_override("font_color", TownStyle.INK)
-	_hold_hint.text = HOLD_HINT
+	TownStyle.style_button(_menu_button, TownStyle.SMALL)
 	_go_down.held.connect(_on_go_down_held)
-	_quit.pressed.connect(get_tree().quit)
+	_menu_button.pressed.connect(_pause_menu.open)
+	_menu_button.focus_mode = Control.FOCUS_NONE
+	_pause_menu.closed.connect(SceneFlow.focus_default)
 	_board.setup(Game.data, GameState.town_map(Game.data))
 	_board.picked.connect(_on_picked)
+	_card.resized.connect(_aim_leader)
+	_card.visibility_changed.connect(_aim_leader)
+	get_viewport().size_changed.connect(_fit_hud)
+	_show_hint()
 	refresh()
+	_fit_hud.call_deferred()
 	SceneFlow.focus_default()
 
 
@@ -68,24 +94,120 @@ func refresh() -> void:
 	_show_card(_board.selected)
 
 
-## Holding Y anywhere holds "Go down" (two-halves section 3).
 func _input(event: InputEvent) -> void:
+	var pad: bool = event is InputEventJoypadButton or event is InputEventJoypadMotion
+	if pad and (event as InputEventJoypadMotion == null or absf((event as InputEventJoypadMotion).axis_value) > 0.5):
+		_set_pad(true)
+	elif event is InputEventMouseButton or event is InputEventKey:
+		_set_pad(false)
 	var button: InputEventJoypadButton = event as InputEventJoypadButton
-	if button == null or button.button_index != JOY_BUTTON_Y:
+	if button == null or _pause_menu.visible:
 		return
-	if button.pressed:
-		_go_down.start_hold()
-	else:
-		_go_down.stop_hold()
-	get_viewport().set_input_as_handled()
+	# Holding Y anywhere holds "Go down" (two-halves section 3).
+	if button.button_index == JOY_BUTTON_Y:
+		if button.pressed:
+			_go_down.start_hold()
+		else:
+			_go_down.stop_hold()
+		get_viewport().set_input_as_handled()
+	elif button.button_index == JOY_BUTTON_START and button.pressed:
+		_pause_menu.open()
+		get_viewport().set_input_as_handled()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed(&"ui_cancel"):
+		_pause_menu.toggle()
+		get_viewport().set_input_as_handled()
 
 
 func _on_go_down_held() -> void:
-	Game.go_down()
+	if Game.go_down():
+		Settings.set_go_down_learned()
+		_fade_hint()
 
 
 func _on_picked(hit: Dictionary) -> void:
 	_show_card(hit)
+
+
+# --- Hint, HUD size and framing -------------------------------------------------------------
+
+func _set_pad(pad: bool) -> void:
+	if pad != using_pad:
+		using_pad = pad
+		_show_hint()
+
+
+## "Hold to go down" with a mouse; a Y glyph and "Hold" on a controller.
+func _show_hint() -> void:
+	for old: Node in _hold_hint.get_children():
+		old.free()
+	_hold_hint.visible = not Settings.go_down_learned
+	if using_pad:
+		var glyph: PanelContainer = PanelContainer.new()
+		var ring: StyleBoxFlat = StyleBoxFlat.new()
+		ring.bg_color = TownStyle.INK
+		ring.set_corner_radius_all(20)
+		ring.set_content_margin_all(4)
+		ring.content_margin_left = 12
+		ring.content_margin_right = 12
+		glyph.add_theme_stylebox_override("panel", ring)
+		var letter: Label = TownStyle.label("Y", TownStyle.BODY, TownStyle.WASHI)
+		letter.autowrap_mode = TextServer.AUTOWRAP_OFF
+		glyph.add_child(letter)
+		_hold_hint.add_child(glyph)
+	var words: Label = TownStyle.label(hint_text(), TownStyle.BODY)
+	words.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_hold_hint.add_child(words)
+
+
+func hint_text() -> String:
+	return HOLD_HINT_PAD if using_pad else HOLD_HINT_MOUSE
+
+
+func _fade_hint() -> void:
+	if Settings.reduce_motion or not is_inside_tree():
+		_hold_hint.visible = false
+		return
+	create_tween().tween_property(_hold_hint, "modulate:a", 0.0, TownStyle.EASE_SECONDS)
+
+
+## Grows the HUD on small screens, then frames the town in what's left.
+func _fit_hud() -> void:
+	var scale_now: float = get_viewport().get_final_transform().get_scale().x
+	hud_scale = clampf(HUD_TARGET_SCALE / maxf(scale_now, 0.01), 1.0, HUD_MAX_GROWTH)
+	_ledger.pivot_offset = Vector2.ZERO
+	_right_column.pivot_offset = Vector2(_right_column.size.x, 0.0)
+	_tray_panel.pivot_offset = Vector2(0.0, _tray_panel.size.y)
+	_actions.pivot_offset = _actions.size
+	for part: Control in [_ledger, _right_column, _tray_panel, _actions]:
+		part.scale = Vector2(hud_scale, hud_scale)
+	_board.text_scale = hud_scale
+	_board.set_safe_area(safe_area())
+	_aim_leader()
+
+
+## The board's space between the HUD's left and right columns.
+func safe_area() -> Rect2:
+	var left: float = maxf(_scaled_rect(_ledger).end.x, _scaled_rect(_tray_panel).end.x) + SAFE_GAP
+	var right: float = minf(_scaled_rect(_right_column).position.x, _scaled_rect(_actions).position.x) - SAFE_GAP
+	return Rect2(left, 0.0, maxf(right - left, 200.0), _board.size.y)
+
+
+static func _scaled_rect(part: Control) -> Rect2:
+	var top_left: Vector2 = part.position + part.pivot_offset * (Vector2.ONE - part.scale)
+	return Rect2(top_left, part.size * part.scale)
+
+
+## Points the board's leader line at the card's left edge.
+func _aim_leader() -> void:
+	if not _card.visible:
+		_board.leader_target = Vector2.INF
+	else:
+		var card: Rect2 = _card.get_global_rect()
+		_board.leader_target = _board.get_global_transform().affine_inverse() * Vector2(card.position.x, card.position.y + 40.0 * hud_scale)
+	_board.redraw_marks()
 
 
 # --- Words ----------------------------------------------------------------------------------
@@ -127,7 +249,8 @@ static func card_for(data: GameData, state: GameState, hit: Dictionary) -> Dicti
 			if row.get("kind", "") == "home":
 				var resident: String = state.town.resident(hit["uid"])
 				lines.append("Nobody lives here yet." if resident.is_empty()
-					else "Home of the %s." % data.row("villagers", resident).get("role", resident))
+					else "Home of the %s · %s" % [data.row("villagers", resident).get("role", resident),
+						MOOD_SHORT[state.mood(data, resident)]])
 			return {"title": str(row.get("name", building["building"])), "lines": lines, "chip": "", "quote": ""}
 		"villager":
 			var villager: String = str(hit["villager"])
