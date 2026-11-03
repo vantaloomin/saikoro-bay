@@ -42,31 +42,24 @@ func test_costs_parse_as_whole_amounts() -> void:
 
 func test_the_slice_buildings_and_wishes() -> void:
 	assert_eq(data.ids("buildings").size(), 8)
+	assert_eq(data.row("buildings", "cottage")["max_count"], data.ids("villagers").size(), "a Cottage per villager")
 	assert_eq(data.row("buildings", "cafe")["kind"], "landmark")
 	assert_eq(TownMap.parse_cost(data.row("buildings", "tea_stall")["cost"] as Array), {"driftwood": 3, "pearls": 1})
 	assert_eq(data.row("villagers", "pearl_diver")["wish_text"], "Next to the sea")
 	assert_eq(data.row("villagers", "onsen_keeper")["wish_buildings"], ["hot_spring", "tea_stall"])
 
 
-## Every slice building once, plus a Cottage for each villager, fits at once.
+## Every building at its max_count (a Cottage per villager, both landmarks)
+## fits at once.
 func test_the_whole_slice_set_fits_the_map() -> void:
 	var map: TownMap = _map()
 	var sizes: Array[Vector2i] = []
 	for id: String in data.ids("buildings"):
 		var building: Dictionary = data.row("buildings", id)
-		var copies: int = data.ids("villagers").size() if building["kind"] == "home" else 1
-		for i: int in copies:
+		for i: int in building["max_count"] as int:
 			sizes.append(Vector2i(building["width"], building["height"]))
 	sizes.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.x * a.y > b.x * b.y)
 	assert_true(_pack(map, sizes, 0, {}), "%d buildings fit" % sizes.size())
-
-
-func test_a_sea_wish_has_a_lot_beside_the_sea() -> void:
-	var map: TownMap = _map()
-	var shore: int = 0
-	for lot: Rect2i in map.lots:
-		shore += 1 if lot.end.y == map.land_rows else 0
-	assert_gt(shore, 0)
 
 
 func test_bad_town_rows_are_reported() -> void:
@@ -78,6 +71,7 @@ func test_bad_town_rows_are_reported() -> void:
 	items[2]["width"] = 5
 	items[3]["unlock_count"] = 0
 	items[4]["unlock_villager"] = "ghost"
+	items[5]["max_count"] = 0
 	items[6]["cost"] = ["pearls:1"]
 	texts["buildings"] = JSON.stringify(buildings)
 	var villagers: Dictionary = JSON.parse_string(texts["villagers"])
@@ -91,6 +85,7 @@ func test_bad_town_rows_are_reported() -> void:
 		"buildings \"tea_stall\": 5x1 fits in no lot",
 		"buildings \"bait_shop\": buildings_placed needs unlock_count >= 1 and no villager",
 		"buildings \"boat_shed\": villager_in_town needs a real unlock_villager",
+		"buildings \"lantern_post\": max_count must be at least 1, and exactly 1 for a landmark",
 		"buildings \"cafe\": landmarks are free and everything else costs something",
 		"villagers \"pearl_diver\": a sea wish names no buildings, a next_to wish names some",
 	]))
@@ -104,6 +99,13 @@ func test_the_town_map_is_checked() -> void:
 	var bad: GameData = GameData.new()
 	bad.load_texts(texts)
 	assert_eq(bad.errors, PackedStringArray(["town: path columns and rows must rise and stay on the land"]))
+	(town["items"] as Array)[0]["path_columns"] = [4, 8]
+	(town["items"] as Array)[0]["path_rows"] = [4, 7]
+	texts["town"] = JSON.stringify(town)
+	bad = GameData.new()
+	bad.load_texts(texts)
+	assert_eq(bad.errors, PackedStringArray(["villagers \"pearl_diver\": a sea wish needs a lot beside the sea"]),
+		"a path along the shore leaves no lot beside the sea")
 	var second: Dictionary = ((town["items"] as Array)[0] as Dictionary).duplicate()
 	(town["items"] as Array).append(second)
 	(town["items"] as Array)[1]["id"] = "second"

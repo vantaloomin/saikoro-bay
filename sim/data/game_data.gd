@@ -74,7 +74,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 		"path_columns": "int_list", "path_rows": "int_list", "base_actions": "int", "keep_max": "int",
 	},
 	"buildings": {
-		"id": "id", "name": "string", "kind": "enum:home|shop|decor|landmark", "width": "int", "height": "int",
+		"id": "id", "name": "string", "max_count": "int", "kind": "enum:home|shop|decor|landmark", "width": "int", "height": "int",
 		"cost": "string_list", "text": "string",
 		"unlock": "enum:always|buildings_placed|villager_in_town|won", "unlock_count": "int", "unlock_villager": "string?",
 	},
@@ -343,6 +343,8 @@ func _check_town() -> void:
 		var building: Dictionary = row("buildings", id)
 		var landmark: bool = building["kind"] == "landmark"
 		homes += 1 if building["kind"] == "home" else 0
+		if (building["max_count"] as int) < 1 or (landmark and (building["max_count"] as int) != 1):
+			errors.append("buildings \"%s\": max_count must be at least 1, and exactly 1 for a landmark" % id)
 		if (building["width"] as int) < 1 or (building["height"] as int) < 1:
 			errors.append("buildings \"%s\": needs width and height of at least 1" % id)
 		elif not map.fits_one_lot(Rect2i(0, 0, building["width"], building["height"])):
@@ -368,6 +370,9 @@ func _check_town() -> void:
 		var villager: Dictionary = row("villagers", id)
 		if (villager["wish"] == "sea") != (villager["wish_buildings"] as Array).is_empty():
 			errors.append("villagers \"%s\": a sea wish names no buildings, a next_to wish names some" % id)
+		elif villager["wish"] == "sea" and not map.lots.any(
+				func(lot: Rect2i) -> bool: return lot.end.y == map.land_rows):
+			errors.append("villagers \"%s\": a sea wish needs a lot beside the sea" % id)
 
 
 func _check_unlock(id: String, building: Dictionary) -> void:
