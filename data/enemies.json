@@ -15,7 +15,7 @@
 		{
 			"id": "snake_eyes_eel", "name": "Snake-Eyes Eel", "hp": 34,
 			"intents": ["attack:6", "attack:7", "attack:12"],
-			"twist": "snake_eyes", "twist_text": "Snake eyes: each 1 you leave unplaced bites you for 1."
+			"twist": "snake_eyes", "twist_text": "Snake eyes: each unplaced 1 bites for 1."
 		}
 	]
 }

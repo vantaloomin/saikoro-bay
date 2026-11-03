@@ -21,6 +21,9 @@ var campaign_seed: int = 0
 var delve_count: int = 0
 
 var _resources: Dictionary[String, int] = {}
+## Twists the player has met, so each gets its one-line banner only once
+## per campaign (dice-fight-rules section 9). Sorted, for a stable save.
+var _seen_twists: Array[String] = []
 
 
 func _init(seed_value: int = 0) -> void:
@@ -87,6 +90,22 @@ func spend_resource(id: String, amount: int) -> bool:
 	return true
 
 
+# --- Twists --------------------------------------------------------------
+
+func has_seen_twist(twist: String) -> bool:
+	return _seen_twists.has(twist)
+
+
+## Records the first meeting with `twist`. Returns true only that first
+## time, so the caller shows the banner once. "none" and "" are not twists.
+func meet_twist(twist: String) -> bool:
+	if twist.is_empty() or twist == "none" or has_seen_twist(twist):
+		return false
+	_seen_twists.append(twist)
+	_seen_twists.sort()
+	return true
+
+
 # --- Save ---------------------------------------------------------------------
 
 func to_dict() -> Dictionary:
@@ -98,11 +117,13 @@ func to_dict() -> Dictionary:
 		"campaign_seed": str(campaign_seed),
 		"delve_count": delve_count,
 		"resources": resource_data,
+		"seen_twists": _seen_twists.duplicate(),
 	}
 
 
 ## Builds a state from to_dict() output (after a JSON round trip).
 ## Returns null if anything is missing, negative or not a whole number.
+## "seen_twists" is optional, so saves from before it existed still load.
 static func from_dict(data: Dictionary) -> GameState:
 	var phase_name: Variant = data.get("phase")
 	if not (phase_name is String and Phase.has(phase_name)):
@@ -115,6 +136,9 @@ static func from_dict(data: Dictionary) -> GameState:
 	if not SaveCodec.is_int_like(count) or SaveCodec.to_int_or(count, -1) < 0:
 		return null
 	if not resource_data is Dictionary:
+		return null
+	var twist_data: Variant = data.get("seen_twists", [])
+	if not twist_data is Array:
 		return null
 
 	var state: GameState = GameState.new(SaveCodec.to_int_or(seed_value, 0))
@@ -131,4 +155,8 @@ static func from_dict(data: Dictionary) -> GameState:
 			return null
 		if value > 0:
 			state._resources[id as String] = value
+	for twist: Variant in twist_data as Array:
+		if not twist is String:
+			return null
+		state.meet_twist(twist as String)
 	return state

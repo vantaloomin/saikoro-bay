@@ -71,6 +71,7 @@ var _intent: IntentView
 var _twist: Label
 var _message: Label
 var _badge: Label
+var _nudge_chip: FaceChip
 var _slot_cards: Dictionary[String, SlotCard] = {}
 var _dice: Array[DieView] = []
 var _player_hp: Label
@@ -88,6 +89,11 @@ var _results_text: Label
 var _again: Button
 
 
+## Show the one-line banner for this enemy's twist (the first meeting).
+## Set before adding the board to the tree.
+var twist_banner: bool = false
+var _banner: PanelContainer
+
 ## Builds the board for `new_fight`. Call before adding it to the tree.
 func setup(new_fight: Fight, game_data: GameData) -> void:
 	fight = new_fight
@@ -97,6 +103,7 @@ func setup(new_fight: Fight, game_data: GameData) -> void:
 func _ready() -> void:
 	_ensure_actions()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	theme = BoardStyle.theme()
 	_build()
 	_refresh_all()
 	if not _dice.is_empty():
@@ -148,6 +155,20 @@ func _on_die_pressed(die_id: int) -> void:
 	_selected = -1 if _selected == die_id else die_id
 	_selected_at_ms = Time.get_ticks_msec()
 	_refresh_all()
+
+
+## Dragging holds the die, so every slot previews it during the drag.
+func _on_die_drag_started(die_id: int) -> void:
+	if _reroll_mode or _selected == die_id:
+		return
+	_on_die_pressed(die_id)
+
+
+func _on_die_dropped(die_id: int, slot_id: String) -> void:
+	if _reroll_mode or not fight.die(die_id).is_free():
+		return
+	_selected = die_id
+	_on_slot_pressed(slot_id)
 
 
 func _on_slot_pressed(slot_id: String) -> void:
@@ -238,6 +259,7 @@ func _on_end_turn() -> void:
 	if _busy or fight.state != Fight.State.PLAYER_TURN:
 		return
 	_cancel()
+	_banner.visible = false
 	var start: int = fight.events.size()
 	fight.end_turn()
 	var turn_events: Array[Dictionary] = fight.events.slice(start)
@@ -364,7 +386,11 @@ func _refresh_all() -> void:
 		_reroll.text = "Reroll (%d left)" % fight.rerolls_left
 	_nudge.visible = fight.has_perk(Fight.NUDGE_PERK)
 	_nudge.disabled = fight.nudges_left <= 0
-	var nudger: String = _source_name(fight.perk_source(Fight.NUDGE_PERK)) if fight.has_perk(Fight.NUDGE_PERK) else ""
+	var nudge_source: String = fight.perk_source(Fight.NUDGE_PERK)
+	var nudger: String = _source_name(nudge_source) if fight.has_perk(Fight.NUDGE_PERK) else ""
+	_nudge_chip.villager_id = nudge_source
+	_nudge_chip.role = nudger
+	_nudge_chip.dimmed = fight.nudges_left <= 0
 	_nudge.text = "Nudge +1 · %s" % nudger if fight.nudges_left > 0 else "Nudge used · %s" % nudger
 	_turn = turn_preview()
 	_end_preview.text = end_turn_summary()
@@ -400,7 +426,7 @@ func _set_preview(card: SlotCard, s: Fight.Slot) -> void:
 		return
 	if _selected < 0:
 		if s.dice.size() > 0:
-			card.preview_text = "Incomplete: waits for another %d" % fight.die(s.dice[0]).value
+			card.preview_text = "Waits for a %d" % fight.die(s.dice[0]).value
 			card.preview_tone = "wait"
 		return
 	var p: Dictionary = fight.preview(_selected, s.id)
@@ -412,19 +438,21 @@ func _set_preview(card: SlotCard, s: Fight.Slot) -> void:
 		var value: int = fight.die(_selected).value
 		card.preview_tone = "wait"
 		if p["can_complete"]:
-			card.preview_text = "Waits for another %d: %s" % [value, _effect_text(p["effect"] as String, p["amount"] as int, p["blocked"] as int)]
+			card.preview_text = "Waits for a %d · %s" % [value, _effect_text(p["effect"] as String, p["amount"] as int, p["blocked"] as int, true)]
 		else:
-			card.preview_text = "Waits for another %d (none in hand)" % value
+			card.preview_text = "Waits for a %d (none in hand)" % value
 	else:
 		card.preview_text = _effect_text(p["effect"] as String, p["amount"] as int, p["blocked"] as int)
 
 
-func _effect_text(effect: String, amount: int, blocked: int) -> String:
+## `short` abbreviates for a footer that also carries a condition.
+func _effect_text(effect: String, amount: int, blocked: int, short: bool = false) -> String:
 	match effect:
 		"damage":
+			var unit: String = "dmg" if short else "damage"
 			if blocked > 0:
-				return "%d damage (%d into guard)" % [amount, blocked]
-			return "%d damage" % amount
+				return "%d %s (%d into guard)" % [amount, unit, blocked]
+			return "%d %s" % [amount, unit]
 		"block":
 			return "Block %d" % amount
 		"heal":
@@ -575,6 +603,7 @@ func _build() -> void:
 	enemy_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	enemy_inner.add_child(enemy_box)
 	_enemy_name = BoardStyle.label("", BoardStyle.NUMBER, BoardStyle.GOLD)
+	_enemy_name.add_theme_font_override("font", BoardStyle.title_font())
 	enemy_box.add_child(_enemy_name)
 	_enemy_bar = HpBar.new()
 	_enemy_bar.fill = BoardStyle.DANGER
@@ -595,11 +624,20 @@ func _build() -> void:
 	_intent = IntentView.new()
 	enemy_inner.add_child(_intent)
 
+	# First meeting with a twist: one line, gone after the first turn.
+	_banner = PanelContainer.new()
+	_banner.add_theme_stylebox_override("panel", BoardStyle.panel(BoardStyle.AMBER, BoardStyle.FELT))
+	_banner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_banner.visible = twist_banner and not _twist.text.is_empty()
+	_banner.add_child(BoardStyle.label("New twist · " + _twist.text, BoardStyle.BODY, BoardStyle.AMBER))
+
 	var lines: HBoxContainer = HBoxContainer.new()
 	lines.alignment = BoxContainer.ALIGNMENT_CENTER
 	lines.add_theme_constant_override("separation", 40)
-	lines.custom_minimum_size = Vector2(0, 36)
+	# Tall enough for the twist banner, so nothing jumps when it goes.
+	lines.custom_minimum_size = Vector2(0, 68)
 	column.add_child(lines)
+	lines.add_child(_banner)
 	_last_turn = BoardStyle.label("", BoardStyle.SMALL, BoardStyle.DIM)
 	lines.add_child(_last_turn)
 	_message = BoardStyle.label("", BoardStyle.BODY)
@@ -623,6 +661,7 @@ func _build() -> void:
 			card.accepted[face] = _accepts_face(s.row, face + 1)
 		card.pressed.connect(_on_slot_pressed.bind(s.id))
 		card.secondary_pressed.connect(_on_slot_secondary.bind(s.id))
+		card.die_dropped.connect(_on_die_dropped.bind(s.id))
 		slot_row.add_child(card)
 		_slot_cards[s.id] = card
 		order += 1
@@ -660,6 +699,7 @@ func _build() -> void:
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))
 		view.secondary_pressed.connect(_cancel)
+		view.drag_started.connect(_on_die_drag_started.bind(d.id))
 		hand.add_child(view)
 		_dice.append(view)
 
@@ -679,6 +719,12 @@ func _build() -> void:
 	_nudge = _button("Nudge +1", 0)
 	_nudge.pressed.connect(_on_nudge)
 	verb_row.add_child(_nudge)
+	# The chip of the villager who gives Nudge sits at the button's left edge.
+	for state: String in ["normal", "hover", "pressed", "disabled"]:
+		(_nudge.get_theme_stylebox(state) as StyleBoxFlat).content_margin_left = 60
+	_nudge_chip = FaceChip.new()
+	_nudge.add_child(_nudge_chip)
+	_nudge_chip.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_KEEP_SIZE, 10)
 	_reroll = _button("Reroll", 0)
 	_reroll.pressed.connect(_on_reroll)
 	verb_row.add_child(_reroll)
@@ -736,6 +782,7 @@ func _button(text: String, height: int, primary: bool = false) -> Button:
 	var b: Button = Button.new()
 	b.text = text
 	b.add_theme_font_size_override("font_size", BoardStyle.BODY)
+	b.add_theme_font_override("font", BoardStyle.strong_font())
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if height > 0:
 		b.custom_minimum_size = Vector2(0, height)

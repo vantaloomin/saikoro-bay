@@ -30,6 +30,7 @@ func _next_fight() -> void:
 	_status.text = "Delve %d · fight %d · seed %d" % [Game.state.delve_count, _fights, Game.state.current_delve_seed()]
 	_board = BOARD_SCENE.instantiate() as FightBoard
 	_board.setup(fight, Game.data)
+	_board.twist_banner = Game.state.meet_twist(str(Game.data.row("enemies", enemy_id).get("twist", "")))
 	_board.again_requested.connect(_next_fight)
 	_board.leave_requested.connect(_on_surface_pressed)
 	add_child(_board)

@@ -52,6 +52,7 @@ func test_round_trip_through_a_real_save() -> void:
 	state.add_resource("pearls", 12)
 	state.add_resource("koban", 3)
 	state.start_delve()
+	state.meet_twist("snake_eyes")
 	var text: String = SaveCodec.encode({GameState.PAYLOAD_KEY: state.to_dict()})
 	var decoded: SaveCodec.DecodeResult = SaveCodec.decode(text)
 	var loaded: GameState = GameState.from_dict(decoded.payload[GameState.PAYLOAD_KEY])
@@ -62,6 +63,25 @@ func test_round_trip_through_a_real_save() -> void:
 	assert_eq(loaded.resource("pearls"), 12)
 	assert_eq(loaded.resource("koban"), 3)
 	assert_eq(loaded.current_delve_seed(), state.current_delve_seed())
+	assert_true(loaded.has_seen_twist("snake_eyes"))
+	assert_false(loaded.has_seen_twist("house_lock"))
+
+
+func test_each_twist_is_met_once() -> void:
+	var state: GameState = GameState.new(1)
+	assert_true(state.meet_twist("house_lock"))
+	assert_false(state.meet_twist("house_lock"), "the banner shows only the first time")
+	assert_false(state.meet_twist("none"), "the baseline enemy has no twist")
+	assert_false(state.meet_twist(""))
+	assert_true(state.has_seen_twist("house_lock"))
+
+
+func test_saves_from_before_seen_twists_still_load() -> void:
+	var old: Dictionary = GameState.new(5).to_dict()
+	old.erase("seen_twists")
+	var loaded: GameState = GameState.from_dict(old)
+	assert_not_null(loaded)
+	assert_false(loaded.has_seen_twist("snake_eyes"))
 
 
 func test_from_dict_rejects_bad_data() -> void:
@@ -77,6 +97,8 @@ func test_from_dict_rejects_bad_data() -> void:
 		"negative resource": {"resources": {"pearls": -2}},
 		"text resource": {"resources": {"pearls": "lots"}},
 		"resources not a dict": {"resources": [1, 2]},
+		"seen twists not a list": {"seen_twists": "snake_eyes"},
+		"seen twist not text": {"seen_twists": [3]},
 	}
 	for label: String in cases:
 		var data: Dictionary = good.duplicate(true)

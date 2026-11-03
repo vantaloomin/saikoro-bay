@@ -59,7 +59,7 @@ func test_previews_show_on_every_slot_for_the_held_die() -> void:
 	assert_eq(board._slot_cards["high_roller"].held_fit, 1, "a slot it can go in lights up")
 	board._on_die_pressed(1)
 	board._on_die_pressed(2)
-	assert_eq(board._slot_cards["pair_bet"].preview_text, "Waits for another 4: 16 damage")
+	assert_eq(board._slot_cards["pair_bet"].preview_text, "Waits for a 4 · 16 dmg")
 	assert_eq(board._slot_cards["pair_bet"].preview_tone, "wait", "waiting is neutral, not an error")
 
 
@@ -141,3 +141,52 @@ func test_winning_shows_results() -> void:
 	assert_eq(fight.state, Fight.State.WON)
 	assert_true(board._results.visible)
 	assert_string_contains(board._results_text.text, "You beat the Snake-Eyes Eel")
+
+
+func test_dragging_a_die_onto_a_slot_places_it() -> void:
+	var view: DieView = board._dice[1]
+	var payload: Variant = view.drag_payload()
+	assert_eq(payload, {"die": 1})
+	assert_eq(board._selected, 1, "dragging holds the die so slots preview it")
+	var card: SlotCard = board._slot_cards["high_roller"]
+	assert_true(card._can_drop_data(Vector2.ZERO, payload))
+	card._drop_data(Vector2.ZERO, payload)
+	assert_eq(fight.slot("high_roller").dice, [1] as Array[int])
+
+
+func test_a_bad_drag_explains_itself_and_places_nothing() -> void:
+	var payload: Variant = board._dice[0].drag_payload()
+	board._slot_cards["high_roller"]._drop_data(Vector2.ZERO, payload)
+	assert_true(fight.slot("high_roller").dice.is_empty())
+	assert_eq(board._slot_cards["high_roller"].preview_text, "Needs 5 to 6.")
+
+
+func test_a_placed_die_cannot_be_dragged() -> void:
+	board._on_die_pressed(1)
+	board._on_slot_pressed("high_roller")
+	assert_null(board._dice[1].drag_payload())
+
+
+func test_nudge_shows_the_face_of_the_villager_who_gives_it() -> void:
+	assert_eq(board._nudge_chip.villager_id, "pearl_diver")
+	assert_eq(board._nudge_chip.initials(), "PD")
+	assert_string_contains(board._nudge.text, "Pearl diver")
+
+
+func test_the_board_uses_the_delve_type() -> void:
+	var font: FontVariation = board.theme.default_font as FontVariation
+	assert_not_null(font)
+	assert_string_contains(font.base_font.resource_path, "BarlowCondensed")
+	assert_eq(board._enemy_name.get_theme_font("font").resource_path, BoardStyle.TITLE_FONT_PATH)
+
+
+func test_twist_banner_shows_on_first_meeting_until_the_first_turn() -> void:
+	assert_false(board._banner.visible, "off unless the delve asks for it")
+	var other: FightBoard = BOARD.instantiate() as FightBoard
+	other.setup(Fight.create(data, "fresh", "snake_eyes_eel", RngStreams.new(3)), data)
+	other.twist_banner = true
+	add_child_autofree(other)
+	assert_true(other._banner.visible)
+	assert_string_contains((other._banner.get_child(0) as Label).text, "New twist · Snake eyes")
+	await other._on_end_turn()
+	assert_false(other._banner.visible)

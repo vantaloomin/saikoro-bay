@@ -86,3 +86,9 @@
 # work without fetching LFS objects.
 addons/**/*.ttf  -filter -diff -merge binary
 addons/**/*.otf  -filter -diff -merge binary
+
+# Game fonts are small Latin subsets and stay in plain Git, like the
+# placeholder images and audio, so CI and exports never need LFS. Full
+# CJK fonts (several MB) go back to LFS when they arrive.
+content/sfw/fonts/*.ttf  -filter -diff -merge binary
+content/sfw/fonts/*.otf  -filter -diff -merge binary

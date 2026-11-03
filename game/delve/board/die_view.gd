@@ -7,6 +7,8 @@ extends Button
 
 ## Right-click or the controller's B button on this die.
 signal secondary_pressed
+## The player started dragging this die (mouse or touch).
+signal drag_started
 
 var die_id: int = -1
 var value: int = 1:
@@ -50,6 +52,30 @@ func _init() -> void:
 	focus_exited.connect(queue_redraw)
 	mouse_entered.connect(queue_redraw)
 	mouse_exited.connect(queue_redraw)
+
+
+## Drag a free die onto a slot; it's the same move as click, then click.
+func _get_drag_data(_at: Vector2) -> Variant:
+	var payload: Variant = drag_payload()
+	if payload == null:
+		return null
+	var ghost: DieView = DieView.new()
+	ghost.value = value
+	ghost.modulate.a = 0.85
+	ghost.position = -ghost.custom_minimum_size / 2.0
+	var holder: Control = Control.new()
+	holder.add_child(ghost)
+	set_drag_preview(holder)
+	return payload
+
+
+## What a drag of this die carries, or null when it can't be dragged.
+## Starting one holds the die (drag_started).
+func drag_payload() -> Variant:
+	if placed or discarded or locked or disabled:
+		return null
+	drag_started.emit()
+	return {"die": die_id}
 
 
 func _gui_input(event: InputEvent) -> void:

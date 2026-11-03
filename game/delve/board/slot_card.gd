@@ -6,6 +6,9 @@ extends Button
 
 ## Right-click or B on the card: take back its last die.
 signal secondary_pressed
+## A die was dragged onto this slot. Every die drop is taken, so the board
+## can explain a refusal instead of the drop silently doing nothing.
+signal die_dropped(die_id: int)
 
 var slot_id: String = ""
 var order: int = 1
@@ -41,6 +44,14 @@ func _init() -> void:
 	focus_exited.connect(queue_redraw)
 	mouse_entered.connect(queue_redraw)
 	mouse_exited.connect(queue_redraw)
+
+
+func _can_drop_data(_at: Vector2, data: Variant) -> bool:
+	return data is Dictionary and (data as Dictionary).has("die")
+
+
+func _drop_data(_at: Vector2, data: Variant) -> void:
+	die_dropped.emit((data as Dictionary)["die"] as int)
 
 
 func _gui_input(event: InputEvent) -> void:
