@@ -55,7 +55,9 @@ func _ready() -> void:
 ## an abandoned delve (Imogen's #6 audit): it washes up in the barrel with
 ## nothing kept, it's saved at once, and the town shows it. So quitting
 ## can't be used to retry a bad delve.
-func load_or_new() -> String:
+func load_or_new(fake_town: bool = FakeTown.requested()) -> String:
+	if fake_town:
+		return _start_fake_town()
 	var result: SaveStore.ReadResult = store.read()
 	saving_locked = result.status == SaveCodec.Status.TOO_NEW
 	save_problem = "Saving is off: your save is from a newer version of the game." if saving_locked else ""
@@ -87,6 +89,21 @@ func load_or_new() -> String:
 			save()
 		elif state.arrive(data):
 			save()
+	return scene_for_phase()
+
+
+## The M3 exit check's town (FakeTown): its own slot, fresh every launch.
+func _start_fake_town() -> String:
+	store = SaveStore.new(FakeTown.SAVE_PATH)
+	saving_locked = false
+	state = FakeTown.build(data)
+	if state == null:
+		push_error("FakeTown: a sim move refused; starting a plain new campaign.")
+		state = GameState.new(_new_campaign_seed())
+		state.arrive(data)
+	save()
+	# After the save, which clears save_problem when it works.
+	save_problem = FakeTown.NOTICE
 	return scene_for_phase()
 
 

@@ -750,8 +750,12 @@ func _ledger_rows(spending: String = "") -> Array[Control]:
 	var rows: Array[Control] = []
 	for id: String in Game.data.ids("resources"):
 		var row: HBoxContainer = HBoxContainer.new()
+		row.add_theme_constant_override("separation", 16)
 		var name_label: Label = TownStyle.label(str(Game.data.row("resources", id).get("name", id)))
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# The sheet widens instead: "Driftwood 20 → 16" broke the name in two
+		# (the M3 exit frames).
+		name_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		row.add_child(name_label)
 		var have: int = Game.state.resource(id)
 		var amount: Label = TownStyle.label(str(have) if not cost.has(id) else "%d → %d" % [have, have - int(cost[id])])
