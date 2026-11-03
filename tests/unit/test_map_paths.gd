@@ -26,7 +26,7 @@ func _rows(spec: Array) -> Array:
 
 func test_paths_start_at_the_rooms_you_can_walk_into() -> void:
 	for s: int in range(1, 30):
-		var run: DelveRun = DelveRun.create(data, s, [], VILLAGERS, LANDMARKS, 0)
+		var run: DelveRun = DelveRun.create(data, s, Kit.fresh(data), VILLAGERS, LANDMARKS, 0)
 		var rows: Array = RunView.new(run).rows()
 		var paths: Array[Array] = MapPaths.all_paths(rows)
 		assert_gt(paths.size(), 0)
@@ -40,7 +40,7 @@ func test_paths_start_at_the_rooms_you_can_walk_into() -> void:
 
 
 func test_no_paths_once_you_are_in_a_room() -> void:
-	var run: DelveRun = DelveRun.create(data, 3, [], VILLAGERS, LANDMARKS, 0)
+	var run: DelveRun = DelveRun.create(data, 3, Kit.fresh(data), VILLAGERS, LANDMARKS, 0)
 	run.choose(run.reachable()[0])
 	assert_eq(MapPaths.all_paths(RunView.new(run).rows()), [] as Array[Array])
 
@@ -88,13 +88,13 @@ func test_differing_paths_name_the_safest_and_the_riskiest() -> void:
 
 func test_rooms_seen_only_with_foresight_are_marked() -> void:
 	var perks: Array[Dictionary] = [{"perk": "foresight", "source": "shrine_keeper"}]
-	var run: DelveRun = DelveRun.create(data, 9, perks, VILLAGERS, LANDMARKS, 0)
+	var run: DelveRun = DelveRun.create(data, 9, Kit.fresh(data, perks), VILLAGERS, LANDMARKS, 0)
 	run.choose(run.reachable()[0])
 	var rows: Array = RunView.new(run).rows()
 	for r: int in rows.size():
 		for room: Dictionary in rows[r] as Array:
 			assert_eq(room.get("foresight", false), r == run.row + run.reveal_rows, "row %d" % r)
-	var plain: DelveRun = DelveRun.create(data, 9, [], VILLAGERS, LANDMARKS, 0)
+	var plain: DelveRun = DelveRun.create(data, 9, Kit.fresh(data), VILLAGERS, LANDMARKS, 0)
 	for row_rooms: Array in RunView.new(plain).rows():
 		for room: Dictionary in row_rooms:
 			assert_false(room.has("foresight"))

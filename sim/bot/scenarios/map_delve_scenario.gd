@@ -44,7 +44,7 @@ func play(rng: RngStreams) -> BotScenario.Outcome:
 	villagers.assign(data.ids("villagers"))
 	var landmarks: Array[String] = []
 	landmarks.assign(data.ids("landmarks"))
-	var run: DelveRun = DelveRun.create(data, seed_value, perks, villagers, landmarks, 0)
+	var run: DelveRun = DelveRun.create(data, seed_value, Kit.fresh(data, perks), villagers, landmarks, 0)
 	var view: RunView = RunView.new(run)
 	for guard: int in 100:
 		match run.step:

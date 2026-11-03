@@ -180,16 +180,6 @@ func landmarks_left(data: GameData) -> Array[String]:
 	return out
 
 
-## The perks the next delve brings: one per villager in town, from
-## data/villagers.json, sourced to that villager for the board's badges.
-func delve_perks(data: GameData) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	for id: String in _villagers:
-		if data.has_row("villagers", id):
-			out.append({"perk": data.row("villagers", id)["perk"], "source": id})
-	return out
-
-
 # --- Building (specs/town.md section 3) --------------------------------------------
 
 static func town_map(data: GameData) -> TownMap:

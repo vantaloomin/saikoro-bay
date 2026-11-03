@@ -27,7 +27,7 @@ const SCHEMA: int = 1
 const TABLES: Dictionary[String, Dictionary] = {
 	"perks": {
 		"id": "id", "name": "string", "kind": "string", "text": "string",
-		"amount": "int", "uses_per_turn": "int",
+		"amount": "int", "uses_per_turn": "int", "happy_amount": "int", "happy_uses_per_turn": "int",
 	},
 	"villagers": {
 		"id": "id", "role": "string", "personality": "string?", "bet_lost": "string?",

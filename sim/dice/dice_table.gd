@@ -128,19 +128,24 @@ var moves: Array[Dictionary] = []
 var _rng: RngStreams
 
 
-## A table with the loadout's dice and slots. Returns null if `data` lacks
-## any of them.
+## A table with the given dice and slots. Each die is a dice row id, or a
+## kit's {"type", "faces"} for a die whose faces changed (Kit.die_specs).
+## Returns null if `data` lacks any of them.
 static func create(data: GameData, dice_ids: Array, slot_ids: Array, rng: RngStreams) -> DiceTable:
 	var table: DiceTable = DiceTable.new()
 	table._rng = rng
 	var index: int = 0
-	for type_id: Variant in dice_ids:
-		if not data.has_row("dice", str(type_id)):
+	for spec: Variant in dice_ids:
+		var type_id: String = str((spec as Dictionary).get("type", "")) if spec is Dictionary else str(spec)
+		if not data.has_row("dice", type_id):
 			return null
 		var d: Die = Die.new()
 		d.id = index
-		d.type_id = type_id as String
-		d.faces.assign(data.row("dice", type_id as String)["faces"] as Array)
+		d.type_id = type_id
+		var faces: Variant = (spec as Dictionary).get("faces") if spec is Dictionary else data.row("dice", type_id)["faces"]
+		if not faces is Array or (faces as Array).is_empty():
+			return null
+		d.faces.assign(faces as Array)
 		d.faces.make_read_only()
 		table.hand.append(d)
 		index += 1

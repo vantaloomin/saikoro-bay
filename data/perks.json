@@ -1,6 +1,6 @@
 {
 	"schema": 1,
-	"note": "Placeholder numbers. Tuned with the bot from M1 onward.",
+	"note": "Placeholder numbers. Tuned with the bot from M1 onward. happy_amount and happy_uses_per_turn are what a happy villager adds (specs/bridge.md section 4).",
 	"items": [
 		{
 			"id": "nudge",
@@ -8,7 +8,9 @@
 			"kind": "die_change",
 			"text": "Once per turn, raise one die by 1.",
 			"amount": 1,
-			"uses_per_turn": 1
+			"uses_per_turn": 1,
+			"happy_amount": 0,
+			"happy_uses_per_turn": 1
 		},
 		{
 			"id": "brace",
@@ -16,7 +18,9 @@
 			"kind": "defend",
 			"text": "Start every turn with 2 block.",
 			"amount": 2,
-			"uses_per_turn": 0
+			"uses_per_turn": 0,
+			"happy_amount": 1,
+			"happy_uses_per_turn": 0
 		},
 		{
 			"id": "mend",
@@ -24,7 +28,9 @@
 			"kind": "sustain",
 			"text": "Heal 5 after winning a fight.",
 			"amount": 5,
-			"uses_per_turn": 0
+			"uses_per_turn": 0,
+			"happy_amount": 1,
+			"happy_uses_per_turn": 0
 		},
 		{
 			"id": "foresight",
@@ -32,7 +38,9 @@
 			"kind": "map",
 			"text": "See one extra room ahead on the delve map.",
 			"amount": 1,
-			"uses_per_turn": 0
+			"uses_per_turn": 0,
+			"happy_amount": 1,
+			"happy_uses_per_turn": 0
 		}
 	]
 }

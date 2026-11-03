@@ -109,14 +109,14 @@ func test_impossible_budgets_are_caught_on_load() -> void:
 func test_a_retry_keeps_the_map_but_rolls_afresh() -> void:
 	var state: GameState = _arrived()
 	state.start_delve(data)
-	var first: DelveRun = DelveRun.create(data, state.current_delve_seed(), [], state.villagers_left(data),
+	var first: DelveRun = DelveRun.create(data, state.current_delve_seed(), Kit.fresh(data), state.villagers_left(data),
 		state.landmarks_left(data), state.delve_attempt)
 	_come_up(state, Haul.ABANDONED)
 	assert_eq(state.delve_attempt, 1)
 	var saved: GameState = GameState.from_dict(JSON.parse_string(JSON.stringify(state.to_dict())))
 	assert_eq(saved.delve_attempt, 1, "the attempt is saved")
 	state.start_delve(data)
-	var retry: DelveRun = DelveRun.create(data, state.current_delve_seed(), [], state.villagers_left(data),
+	var retry: DelveRun = DelveRun.create(data, state.current_delve_seed(), Kit.fresh(data), state.villagers_left(data),
 		state.landmarks_left(data), state.delve_attempt)
 	assert_eq(retry.map.describe(), first.map.describe(), "the same map")
 	assert_eq(retry.map.inputs(), first.map.inputs())
@@ -132,10 +132,10 @@ func test_a_retry_keeps_the_map_but_rolls_afresh() -> void:
 
 
 func test_a_retry_replays_from_its_attempt() -> void:
-	var run: DelveRun = DelveRun.create(data, 99, [], ["pearl_diver"] as Array[String], ["cafe"] as Array[String], 2)
+	var run: DelveRun = DelveRun.create(data, 99, Kit.fresh(data), ["pearl_diver"] as Array[String], ["cafe"] as Array[String], 2)
 	assert_eq(run.attempt, 2)
 	assert_true(run.choose(run.reachable()[0]))
-	var again: DelveRun = DelveRun.replay(data, 99, [], ["pearl_diver"] as Array[String], ["cafe"] as Array[String],
+	var again: DelveRun = DelveRun.replay(data, 99, Kit.fresh(data), ["pearl_diver"] as Array[String], ["cafe"] as Array[String],
 		run.choices, 2)
 	assert_not_null(again)
 	assert_eq(again._rng.to_dict(), run._rng.to_dict(), "same seed, same attempt, same streams")

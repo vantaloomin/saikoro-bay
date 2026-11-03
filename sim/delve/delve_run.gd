@@ -18,8 +18,10 @@ extends RefCounted
 ## are seeded from the delve seed and the attempt (run_seed): ENEMIES picks
 ## who's in a fight room when you walk in, ROLLS rolls the dice, and LOOT
 ## pays out when a room is cleared. `choices` records every choice and each
-## room's moves, so the seed, the attempt, the perks, the pools and the
-## choices replay a whole delve (replay()).
+## room's moves, so the seed, the attempt, the kit, the pools and the
+## choices replay a whole delve (replay()). Every die rolls from its own
+## stream (RngStreams.die_index), and fights, rooms and the vault take their
+## dice and perks from the kit (Imogen's bridge spec review).
 ##
 ## Treasure, rest and rescue rooms are DiceRooms: what they pay goes into
 ## the haul, rest heals, and opening the rescue cage adds the villager. The
@@ -66,41 +68,45 @@ var delve_seed: int = 0
 ## A retry keeps the map but rolls everything else afresh, so quitting can't
 ## show you the rolls or Koban's hands ahead (Imogen's #39 audit).
 var attempt: int = 0
+## What this delve took down (Kit). Never saved: Game builds it at Go down.
+var kit: Kit
+## The kit's resolved perks, as Fight, DiceRoom and Vault take them.
 var perks: Array[Dictionary] = []
 var _data: GameData
 var _rng: RngStreams
 
 
-## Starts a delve with full HP and an empty haul. `perks` is the list Fight
-## takes ({"perk": id, "source": id}). Returns null if the data is missing.
-static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary],
+## Starts a delve with full HP and an empty haul, taking `with_kit` down.
+## Returns null if the data or the kit is missing.
+static func create(data: GameData, seed_value: int, with_kit: Kit,
 		villagers_left: Array[String], landmarks_left: Array[String], attempt_number: int) -> DelveRun:
-	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice") \
+	if with_kit == null or not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice") \
 			or not Vault.can_open(data, LOADOUT, VAULT_ID):
 		return null
 	var run: DelveRun = DelveRun.new()
 	run._data = data
 	run.delve_seed = seed_value
 	run.attempt = attempt_number
-	run.perks = with_perks.duplicate(true)
+	run.kit = with_kit
+	run.perks = with_kit.perks.duplicate(true)
 	run._rng = RngStreams.new(run_seed(seed_value, attempt_number))
 	run.map = DelveMap.generate(data, seed_value, villagers_left, landmarks_left)
 	run.max_hp = data.row("loadouts", LOADOUT)["hp"] as int
 	run.hp = run.max_hp
 	run.reveal_rows = data.row("delve", "slice")["reveal_rows"] as int
-	for entry: Dictionary in with_perks:
-		if str(entry.get("perk", "")) == FORESIGHT_PERK and not run.foresight:
-			run.foresight = true
-			run.reveal_rows += 1
+	if with_kit.has_perk(FORESIGHT_PERK):
+		# One more row revealed, two when the shrine keeper is happy.
+		run.foresight = true
+		run.reveal_rows += int(with_kit.perk(FORESIGHT_PERK)["amount"])
 	return run
 
 
 ## Rebuilds a delve from its inputs and log. Returns null if any logged
 ## move is refused (a log that doesn't match the seed, data or pools).
-static func replay(data: GameData, seed_value: int, with_perks: Array[Dictionary],
+static func replay(data: GameData, seed_value: int, with_kit: Kit,
 		villagers_left: Array[String], landmarks_left: Array[String], moves: Array[Dictionary],
 		attempt_number: int) -> DelveRun:
-	var run: DelveRun = create(data, seed_value, with_perks, villagers_left, landmarks_left, attempt_number)
+	var run: DelveRun = create(data, seed_value, with_kit, villagers_left, landmarks_left, attempt_number)
 	if run == null:
 		return null
 	for entry: Dictionary in moves:
@@ -179,7 +185,7 @@ func choose(next_col: int) -> bool:
 			push_error("DelveRun: no %s enemy for a %s room" % [tier, next_type])
 			return false
 		var enemy_id: String = pool[_rng.index(RngStreams.Stream.ENEMIES, pool.size())]
-		next_fight = Fight.create(_data, LOADOUT, enemy_id, _rng, perks, hp)
+		next_fight = Fight.create(_data, LOADOUT, enemy_id, _rng, perks, hp, kit.die_specs())
 		if next_fight == null:
 			push_error("DelveRun: can't build a fight against \"%s\" at %d HP" % [enemy_id, hp])
 			return false
@@ -187,7 +193,7 @@ func choose(next_col: int) -> bool:
 		entry["enemy"] = enemy_id
 	var next_room: DiceRoom = null
 	if is_dice_room(next_type):
-		next_room = DiceRoom.create(_data, LOADOUT, next_type, _rng, perks, hp)
+		next_room = DiceRoom.create(_data, LOADOUT, next_type, _rng, perks, hp, kit.die_specs())
 		if next_room == null:
 			push_error("DelveRun: can't build a %s room at %d HP" % [next_type, hp])
 			return false
@@ -258,7 +264,7 @@ func finish_room() -> bool:
 		step = Step.LANDING
 	else:
 		step = Step.VAULT
-		vault = Vault.create(_data, LOADOUT, VAULT_ID, _rng, perks, haul)
+		vault = Vault.create(_data, LOADOUT, VAULT_ID, _rng, perks, haul, kit.die_specs())
 		if vault == null:
 			push_error("DelveRun: can't open the vault \"%s\"" % VAULT_ID)
 	return true

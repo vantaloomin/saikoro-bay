@@ -34,13 +34,13 @@ func test_missing_row_is_empty() -> void:
 
 func test_bad_rows_are_reported() -> void:
 	var perks: String = JSON.stringify({"schema": 1, "items": [
-		{"id": "ok", "name": "Ok", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
-		{"id": "ok", "name": "Dup", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
-		{"id": "Bad Id", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
-		{"id": "frac", "name": "N", "kind": "x", "text": "t", "amount": 1.5, "uses_per_turn": 0},
-		{"id": "typo", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "amout": 2},
+		{"id": "ok", "name": "Ok", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "ok", "name": "Dup", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "Bad Id", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "frac", "name": "N", "kind": "x", "text": "t", "amount": 1.5, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "typo", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "amout": 2},
 		{"id": "missing", "name": "N", "kind": "x", "text": "t", "amount": 1},
-		{"id": "blank", "name": "", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
+		{"id": "blank", "name": "", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
 	]})
 	var villagers: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",

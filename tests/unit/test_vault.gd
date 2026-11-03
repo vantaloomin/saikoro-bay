@@ -329,11 +329,11 @@ func test_no_delve_starts_without_a_vault_to_end_at() -> void:
 	var broken: GameData = _without_vaults()
 	assert_false(Vault.can_open(broken, "fresh", "koban"))
 	assert_null(Vault.create(broken, "fresh", "koban", RngStreams.new(1), [], Haul.new()))
-	assert_null(DelveRun.create(broken, 1, [], ["pearl_diver"], ["cafe"], 0))
+	assert_null(DelveRun.create(broken, 1, Kit.fresh(data), ["pearl_diver"], ["cafe"], 0))
 
 
 func test_the_last_room_wont_strand_you_at_a_vault_that_cant_open() -> void:
-	var run: DelveRun = DelveRun.create(data, 4, [], ["pearl_diver"], ["cafe"], 0)
+	var run: DelveRun = DelveRun.create(data, 4, Kit.fresh(data), ["pearl_diver"], ["cafe"], 0)
 	for guard: int in 200:
 		if run.step == DelveRun.Step.CHOOSE_ROOM:
 			run.choose(run.reachable()[0])
@@ -353,5 +353,5 @@ func test_the_last_room_wont_strand_you_at_a_vault_that_cant_open() -> void:
 				return
 			run.finish_room()
 		if run.is_over():
-			run = DelveRun.create(data, 4 + guard, [], ["pearl_diver"], ["cafe"], 0)
+			run = DelveRun.create(data, 4 + guard, Kit.fresh(data), ["pearl_diver"], ["cafe"], 0)
 	fail_test("never reached the last room")

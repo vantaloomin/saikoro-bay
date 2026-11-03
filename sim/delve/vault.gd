@@ -80,13 +80,14 @@ var _preview_spent: bool = false
 ## Opens the vault on `haul` (the run's own Haul). Returns null if the
 ## data is missing.
 static func create(data: GameData, loadout_id: String, vault_id: String, rng: RngStreams,
-		perks: Array[Dictionary], run_haul: Haul) -> Vault:
+		perks: Array[Dictionary], run_haul: Haul, dice: Array = []) -> Vault:
 	if not can_open(data, loadout_id, vault_id) or run_haul == null:
 		return null
 	var vault_row: Dictionary = data.row("vaults", vault_id)
 	var loadout: Dictionary = data.row("loadouts", loadout_id)
 	var vault: Vault = Vault.new()
-	vault.table = DiceTable.create(data, loadout["dice"] as Array, vault_row["slots"] as Array, rng)
+	vault.table = DiceTable.create(data, dice if not dice.is_empty() else loadout["dice"] as Array,
+		vault_row["slots"] as Array, rng)
 	if vault.table == null:
 		return null
 	for die_id: Variant in vault_row["house_dice"] as Array:
@@ -107,8 +108,8 @@ static func create(data: GameData, loadout_id: String, vault_id: String, rng: Rn
 			var nudge_row: Dictionary = data.row("perks", NUDGE_PERK)
 			vault.table.nudge_perk = NUDGE_PERK
 			vault.table.nudge_source = str(entry.get("source", ""))
-			vault.table.nudge_amount = nudge_row["amount"] as int
-			vault.table.nudge_uses_per_turn = nudge_row["uses_per_turn"] as int
+			vault.table.nudge_amount = int(entry.get("amount", nudge_row["amount"]))
+			vault.table.nudge_uses_per_turn = int(entry.get("uses_per_turn", nudge_row["uses_per_turn"]))
 			break
 	vault._start_round()
 	return vault

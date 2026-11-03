@@ -121,17 +121,20 @@ var _perks: Dictionary[String, Perk] = {}
 
 ## Builds a fight, or returns null if an id doesn't exist in `data` or the
 ## player comes in at 0 HP. `perks` is a list of
-## {"perk": id, "source": villager_or_building_id}.
+## {"perk": id, "source": villager_or_building_id}, optionally with the
+## kit's resolved "amount" and "uses_per_turn" (Kit.perks).
 ## `hp` carries the player's HP in from earlier fights (-1 = full).
+## `dice` is the kit's dice (Kit.die_specs); empty means the loadout's.
 static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: RngStreams,
-		perks: Array[Dictionary] = [], hp: int = -1) -> Fight:
+		perks: Array[Dictionary] = [], hp: int = -1, dice: Array = []) -> Fight:
 	if not data.has_row("loadouts", loadout_id) or not data.has_row("enemies", enemy_ref):
 		return null
 	if hp == 0:
 		return null
 	var fight: Fight = Fight.new()
 	var loadout: Dictionary = data.row("loadouts", loadout_id)
-	fight.table = DiceTable.create(data, loadout["dice"] as Array, loadout["slots"] as Array, rng)
+	fight.table = DiceTable.create(data, dice if not dice.is_empty() else loadout["dice"] as Array,
+		loadout["slots"] as Array, rng)
 	if fight.table == null:
 		return null
 	fight.table.events = fight.events
@@ -165,8 +168,8 @@ static func create(data: GameData, loadout_id: String, enemy_ref: String, rng: R
 		var perk: Perk = Perk.new()
 		perk.id = perk_id
 		perk.source = str(entry.get("source", ""))
-		perk.amount = perk_row["amount"] as int
-		perk.uses_per_turn = perk_row["uses_per_turn"] as int
+		perk.amount = int(entry.get("amount", perk_row["amount"]))
+		perk.uses_per_turn = int(entry.get("uses_per_turn", perk_row["uses_per_turn"]))
 		fight._perks[perk_id] = perk
 	if fight.has_perk(NUDGE_PERK):
 		var nudge_perk: Perk = fight._perks[NUDGE_PERK]

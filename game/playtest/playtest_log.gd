@@ -104,6 +104,8 @@ func _on_delve_started(number: int, seed_value: int) -> void:
 		fields["attempt"] = Game.run.attempt
 		# How the dice draw (RngStreams.ROLLER), so old logs still replay.
 		fields["roller"] = RngStreams.ROLLER
+		# A replay input: replays rebuild it with Kit.from_dict, never Kit.build.
+		fields["kit"] = Game.run.kit.to_dict()
 	if _town_since_ms >= 0:
 		fields["time_in_town_ms"] = Time.get_ticks_msec() - _town_since_ms
 	log_event("delve_start", fields)

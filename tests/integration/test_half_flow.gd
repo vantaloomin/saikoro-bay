@@ -29,6 +29,16 @@ func after_each() -> void:
 	SceneFlow.reduce_motion = false
 
 
+func test_go_down_takes_the_town_s_kit() -> void:
+	Game.state._villagers.append("shipwright")
+	assert_true(Game.go_down())
+	assert_not_null(Game.run.kit)
+	assert_eq(Game.run.kit.perk("brace")["source"], "shipwright", "the town is the loadout")
+	assert_eq(Game.run.perks, Game.run.kit.perks)
+	var saved: Dictionary = SaveStore.new(TEST_SAVE).read().payload
+	assert_false(JSON.stringify(saved).contains("\"faces\""), "the kit is never saved (Imogen's bridge review)")
+
+
 func test_go_down_saves_then_transitions_once() -> void:
 	assert_true(Game.go_down())
 	assert_true(SceneFlow.busy)

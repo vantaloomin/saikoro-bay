@@ -14,7 +14,7 @@ func before_all() -> void:
 
 
 func _run(seed_value: int = 11, perks: Array[Dictionary] = []) -> DelveRun:
-	var run: DelveRun = DelveRun.create(data, seed_value, perks, VILLAGERS, LANDMARKS, 0)
+	var run: DelveRun = DelveRun.create(data, seed_value, Kit.fresh(data, perks), VILLAGERS, LANDMARKS, 0)
 	assert_not_null(run)
 	return run
 
@@ -139,7 +139,7 @@ func test_data_needs_an_enemy_of_every_tier() -> void:
 
 
 func test_a_fight_room_without_a_fight_is_refused_not_paid() -> void:
-	var run: DelveRun = DelveRun.create(_without_the_elite(), 11, [], VILLAGERS, LANDMARKS, 0)
+	var run: DelveRun = DelveRun.create(_without_the_elite(), 11, Kit.fresh(data), VILLAGERS, LANDMARKS, 0)
 	run.map.room(0, 0, 0).type = DelveMap.ELITE
 	assert_false(run.choose(0), "no elite to fight: the room isn't entered")
 	assert_push_error("no elite enemy")
@@ -243,7 +243,7 @@ func test_a_whole_delve_replays_through_the_vault() -> void:
 			continue
 		VaultBot.new().play_vault(run.vault)
 		assert_true(run.finish_vault())
-		var again: DelveRun = DelveRun.replay(data, s, [], VILLAGERS, LANDMARKS, run.choices, 0)
+		var again: DelveRun = DelveRun.replay(data, s, Kit.fresh(data), VILLAGERS, LANDMARKS, run.choices, 0)
 		assert_not_null(again, "seed %d replays" % s)
 		assert_eq(again.step, run.step)
 		assert_eq(again.haul.to_dict(), run.haul.to_dict())
@@ -386,7 +386,7 @@ func test_a_delve_replays_from_its_choices() -> void:
 		if run.step == DelveRun.Step.LANDING:
 			run.go_deeper()
 			_play(run)
-		var again: DelveRun = DelveRun.replay(data, s, [], VILLAGERS, LANDMARKS, run.choices, 0)
+		var again: DelveRun = DelveRun.replay(data, s, Kit.fresh(data), VILLAGERS, LANDMARKS, run.choices, 0)
 		assert_not_null(again, "seed %d replays" % s)
 		assert_eq(again.step, run.step)
 		assert_eq(again.hp, run.hp)
@@ -396,7 +396,7 @@ func test_a_delve_replays_from_its_choices() -> void:
 
 func test_a_log_that_doesnt_match_is_refused() -> void:
 	var bad: Array[Dictionary] = [{"choose": 0}, {"choose": 1}]
-	assert_null(DelveRun.replay(data, 1, [], VILLAGERS, LANDMARKS, bad, 0))
+	assert_null(DelveRun.replay(data, 1, Kit.fresh(data), VILLAGERS, LANDMARKS, bad, 0))
 
 
 # --- The view --------------------------------------------------------------------
