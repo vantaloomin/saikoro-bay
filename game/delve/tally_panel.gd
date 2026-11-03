@@ -28,6 +28,7 @@ var settlement: Dictionary = {}
 var continue_button: Button
 var _shown_at: int = 0
 var _rows: Array[Control] = []
+var _name_width: float = 0.0
 
 
 ## What the barrel took from one resource, beside what you kept: hatched
@@ -142,7 +143,14 @@ func _ready() -> void:
 	var column: VBoxContainer = VBoxContainer.new()
 	column.add_theme_constant_override("separation", 14)
 	panel.add_child(column)
-	for line: Dictionary in lines(data, settlement):
+	var shown: Array[Dictionary] = lines(data, settlement)
+	# The barrel chips stack in their own column, after the longest name
+	# (Mara's #58 review).
+	for line: Dictionary in shown:
+		if line["kind"] == "resource":
+			_name_width = maxf(_name_width, BoardStyle.strong_font().get_string_size(str(line["name"]),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.NUMBER).x)
+	for line: Dictionary in shown:
 		var row: Control = _row(line)
 		column.add_child(row)
 		_rows.append(row)
@@ -235,6 +243,7 @@ func _resource_row(line: Dictionary) -> Control:
 	row.add_child(amount)
 	var noun: Label = BoardStyle.label(str(line["name"]), BoardStyle.NUMBER, BoardStyle.INK)
 	noun.add_theme_font_override("font", font)
+	noun.custom_minimum_size.x = _name_width
 	row.add_child(noun)
 	if not str(line["barrel"]).is_empty():
 		row.add_child(Barrel.new(str(line["barrel"])))
