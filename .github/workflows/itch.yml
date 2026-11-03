@@ -4,17 +4,16 @@ name: Publish to itch.io
 # variables > Actions):
 #   secret   BUTLER_API_KEY  an itch.io API key (itch.io > Settings > API keys)
 #   variable ITCH_PROJECT    the itch page as user/game, e.g. vantaloomin/saikoro-bay
-# Without them the job is skipped. Uploads the Windows builds from the CI
-# run of the chosen commit to the "windows" and "windows-sfw" channels.
+# Without them the job is skipped. Uploads the SFW Windows build from the
+# CI run of the chosen commit to the "windows-sfw" channel.
+#
+# SFW only: adult art never enters git, so CI's full build has no adult
+# content and pushing it would overwrite the real full build on the
+# "windows" channel, which is uploaded from the maintainer's machine
+# (Imogen's #56 audit).
 
 on:
   workflow_dispatch:
-    inputs:
-      channels:
-        description: Which builds to push
-        type: choice
-        options: [both, sfw-only, full-only]
-        default: both
 
 permissions:
   contents: read
@@ -49,12 +48,10 @@ jobs:
           fi
           echo "id=$run_id" >> "$GITHUB_OUTPUT"
 
-      - name: Download builds
+      - name: Download the SFW build
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh run download "${{ steps.run.outputs.id }}" --repo "$GITHUB_REPOSITORY" \
-            --name "saikoro-bay-windows-$GITHUB_SHA" --dir build/full
           gh run download "${{ steps.run.outputs.id }}" --repo "$GITHUB_REPOSITORY" \
             --name "saikoro-bay-windows-sfw-$GITHUB_SHA" --dir build/sfw
 
@@ -68,9 +65,4 @@ jobs:
       - name: Push
         run: |
           version="$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
-          if [ "${{ inputs.channels }}" != "sfw-only" ]; then
-            butler push build/full "$ITCH_PROJECT:windows" --userversion "$version"
-          fi
-          if [ "${{ inputs.channels }}" != "full-only" ]; then
-            butler push build/sfw "$ITCH_PROJECT:windows-sfw" --userversion "$version"
-          fi
+          butler push build/sfw "$ITCH_PROJECT:windows-sfw" --userversion "$version"
