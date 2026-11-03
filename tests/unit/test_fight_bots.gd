@@ -34,10 +34,10 @@ func test_bots_finish_fights_with_legal_moves_only() -> void:
 
 func test_planning_never_moves_the_dice_streams() -> void:
 	var fight: Fight = _fight("hermit_croupier", 3, [{"perk": "nudge", "source": "pearl_diver"}])
-	var before: Dictionary = fight._rng.to_dict()
+	var before: Dictionary = fight.table._rng.to_dict()
 	var events: int = fight.events.size()
 	PlannerBot.new().best_plan(fight, true)
-	assert_eq(fight._rng.to_dict(), before)
+	assert_eq(fight.table._rng.to_dict(), before)
 	assert_eq(fight.events.size(), events, "planning doesn't touch the real fight")
 	assert_true(fight.moves.is_empty())
 

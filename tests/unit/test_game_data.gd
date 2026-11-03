@@ -74,7 +74,7 @@ func test_lists_and_enums_are_checked() -> void:
 	]})
 	var slots: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "s", "name": "S", "text": "t", "accepts": "anything", "min": 1, "max": 6,
-			"dice_needed": 1, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
+			"min_dice": 1, "max_dice": 1, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
 	]})
 	var loadouts: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "kit", "hp": 30, "dice": ["d6", "d8"], "slots": [], "rerolls_per_turn": 1, "unused_die_block": 1},
@@ -87,3 +87,15 @@ func test_lists_and_enums_are_checked() -> void:
 	assert_typeof(data.row("dice", "d6")["faces"][0], TYPE_INT)
 	assert_string_contains(all, "\"accepts\" must be one of any, range")
 	assert_string_contains(all, "points to missing dice \"d8\"")
+
+
+func test_slots_need_min_dice_at_most_max_dice() -> void:
+	var slots: String = JSON.stringify({"schema": 1, "items": [
+		{"id": "upside_down", "name": "S", "text": "t", "accepts": "any", "min": 1, "max": 6,
+			"min_dice": 3, "max_dice": 2, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
+		{"id": "fine", "name": "S", "text": "t", "accepts": "any", "min": 1, "max": 6,
+			"min_dice": 1, "max_dice": 3, "effect": "damage", "mult": 1, "add": 0, "icon_shape": "x"},
+	]})
+	var data: GameData = GameData.new()
+	data.load_texts({"slots": slots})
+	assert_eq(data.errors, PackedStringArray(["slots \"upside_down\": needs 1 <= min_dice <= max_dice, got 3 and 2"]))

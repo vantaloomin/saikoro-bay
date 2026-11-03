@@ -41,7 +41,7 @@ const TABLES: Dictionary[String, Dictionary] = {
 	"slots": {
 		"id": "id", "name": "string", "text": "string",
 		"accepts": "enum:any|range|even|odd|exact|pair",
-		"min": "int", "max": "int", "dice_needed": "int",
+		"min": "int", "max": "int", "min_dice": "int", "max_dice": "int",
 		"effect": "enum:damage|block|heal", "mult": "int", "add": "int",
 		"icon_shape": "string",
 	},
@@ -95,6 +95,7 @@ func load_texts(texts: Dictionary[String, String]) -> void:
 	for table: String in texts:
 		_load_table(table, texts[table])
 	_check_refs()
+	_check_rows()
 
 
 func is_valid() -> bool:
@@ -222,6 +223,15 @@ func _read_row(where: String, item: Dictionary, fields: Dictionary) -> Variant:
 					ok = false
 		clean[field] = value
 	return clean if ok else null
+
+
+## Rules between fields of one row that a field type can't say.
+func _check_rows() -> void:
+	for id: String in ids("slots"):
+		var slot_row: Dictionary = row("slots", id)
+		if (slot_row["min_dice"] as int) < 1 or (slot_row["min_dice"] as int) > (slot_row["max_dice"] as int):
+			errors.append("slots \"%s\": needs 1 <= min_dice <= max_dice, got %d and %d" % [
+				id, slot_row["min_dice"], slot_row["max_dice"]])
 
 
 func _check_refs() -> void:

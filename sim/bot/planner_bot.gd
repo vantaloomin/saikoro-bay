@@ -115,7 +115,7 @@ func _reroll_option(fight: Fight, plan: Dictionary) -> Dictionary:
 		var values: Array = outcome[0]
 		for i: int in rerolled.size():
 			trial.hand[rerolled[i].id].value = values[i] as int
-		trial._apply_house_lock()
+		trial.table.apply_lock()
 		var weight: int = outcome[1]
 		total_weight += weight
 		total_score += weight * (best_plan(trial, true)["score"] as int)
