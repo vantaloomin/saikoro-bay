@@ -94,7 +94,7 @@ shrine_keeper: Visit me. Bring fried tofu. That isn't a stereotype. It's a stand
 ~ scene_invite
 
 shrine_keeper: Come to my door tonight, when the lantern's lit. [#face=flustered]
-shrine_keeper: Bring a brush. I'll explain when you get there. It's the most personal thing a fox can ask, so don't be late. [#face=happy]
+shrine_keeper: Come alone. I want to show you something nobody in this town has seen. Don't be late. [#face=happy]
 => END
 
 ~ date
