@@ -75,6 +75,7 @@ func test_delves_record_prompt_and_town_time() -> void:
 	assert_eq(events[4]["seed"], str(Game.state.delve_seed(2)))
 	assert_eq((events[2]["map"] as Dictionary)["seed"], str(Game.state.delve_seed(1)), "the map's replay inputs")
 	assert_eq(events[2]["roller"], float(RngStreams.ROLLER), "which way the dice drew, for replay")
+	assert_not_null(Kit.from_dict(Game.data, events[2]["kit"]), "the kit taken down is logged, strictly replayable")
 	assert_eq((events[2]["map"] as Dictionary)["villagers_left"], ["pearl_diver", "shipwright", "onsen_keeper", "shrine_keeper"])
 	assert_eq(events[3]["outcome"], "surfaced")
 	assert_eq(events[0]["campaign_seed"], "77")

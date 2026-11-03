@@ -184,7 +184,9 @@ func test_town_villagers_bring_their_perks_and_leave_the_pools() -> void:
 	var data: GameData = GameData.load_dir()
 	var state: GameState = _in_delve()
 	state.finish_delve(game_data, Haul.SURFACED, _haul())
-	assert_eq(state.delve_perks(data), [{"perk": "nudge", "source": "pearl_diver"}] as Array[Dictionary])
+	var kit: Kit = Kit.build(data, state)
+	assert_eq(kit.perks.map(func(entry: Dictionary) -> Array: return [entry["perk"], entry["source"], entry["happy"]]),
+		[["nudge", "pearl_diver", false]], "no home yet, so no happy bonus")
 	assert_eq(state.villagers_left(data), ["shipwright", "onsen_keeper", "shrine_keeper"] as Array[String])
 	assert_eq(state.landmarks_left(data), ["hot_spring"] as Array[String])
 

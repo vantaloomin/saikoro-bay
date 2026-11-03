@@ -59,15 +59,17 @@ var _preview_spent: bool = false
 
 
 ## Builds the room with the loadout's dice, or returns null if the data is
-## missing or the player comes in at 0 HP. `perks` is the list Fight takes.
+## missing or the player comes in at 0 HP. `perks` is the list Fight takes,
+## and `dice` the kit's dice (empty means the loadout's).
 static func create(data: GameData, loadout_id: String, room_ref: String, rng: RngStreams,
-		perks: Array[Dictionary], hp_in: int) -> DiceRoom:
+		perks: Array[Dictionary], hp_in: int, dice: Array = []) -> DiceRoom:
 	if not data.has_row("loadouts", loadout_id) or not data.has_row("dice_rooms", room_ref) or hp_in <= 0:
 		return null
 	var room_row: Dictionary = data.row("dice_rooms", room_ref)
 	var loadout: Dictionary = data.row("loadouts", loadout_id)
 	var room: DiceRoom = DiceRoom.new()
-	room.table = DiceTable.create(data, loadout["dice"] as Array, room_row["slots"] as Array, rng)
+	room.table = DiceTable.create(data, dice if not dice.is_empty() else loadout["dice"] as Array,
+		room_row["slots"] as Array, rng)
 	if room.table == null:
 		return null
 	room.room_id = room_ref
@@ -84,8 +86,8 @@ static func create(data: GameData, loadout_id: String, room_ref: String, rng: Rn
 			var nudge_row: Dictionary = data.row("perks", NUDGE_PERK)
 			room.table.nudge_perk = NUDGE_PERK
 			room.table.nudge_source = str(entry.get("source", ""))
-			room.table.nudge_amount = nudge_row["amount"] as int
-			room.table.nudge_uses_per_turn = nudge_row["uses_per_turn"] as int
+			room.table.nudge_amount = int(entry.get("amount", nudge_row["amount"]))
+			room.table.nudge_uses_per_turn = int(entry.get("uses_per_turn", nudge_row["uses_per_turn"]))
 			break
 	room.start_hp = room.hp
 	room.start_rng = rng.to_dict()

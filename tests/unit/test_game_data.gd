@@ -34,16 +34,20 @@ func test_missing_row_is_empty() -> void:
 
 func test_bad_rows_are_reported() -> void:
 	var perks: String = JSON.stringify({"schema": 1, "items": [
-		{"id": "ok", "name": "Ok", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
-		{"id": "ok", "name": "Dup", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
-		{"id": "Bad Id", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
-		{"id": "frac", "name": "N", "kind": "x", "text": "t", "amount": 1.5, "uses_per_turn": 0},
-		{"id": "typo", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "amout": 2},
+		{"id": "ok", "name": "Ok", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "ok", "name": "Dup", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "Bad Id", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "frac", "name": "N", "kind": "x", "text": "t", "amount": 1.5, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
+		{"id": "typo", "name": "N", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0, "amout": 2},
 		{"id": "missing", "name": "N", "kind": "x", "text": "t", "amount": 1},
-		{"id": "blank", "name": "", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0},
+		{"id": "blank", "name": "", "kind": "x", "text": "t", "amount": 1, "uses_per_turn": 0, "happy_amount": 0, "happy_uses_per_turn": 0},
 	]})
 	var villagers: String = JSON.stringify({"schema": 1, "items": [
 		{"id": "v", "role": "R", "personality": "", "bet_lost": "", "perk": "ghost",
+			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
+		{"id": "w", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
+			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
+		{"id": "x", "role": "R", "personality": "", "bet_lost": "", "perk": "ok",
 			"wish": "sea", "wish_buildings": [], "wish_text": "Next to the sea", "wish_line": ""},
 	]})
 	var data: GameData = GameData.new()
@@ -56,6 +60,7 @@ func test_bad_rows_are_reported() -> void:
 	assert_string_contains(all, "missing \"uses_per_turn\"")
 	assert_string_contains(all, "\"name\" must be some text")
 	assert_string_contains(all, "points to missing perks \"ghost\"")
+	assert_string_contains(all, "villagers \"x\": perk \"ok\" is already w's", "one villager per perk")
 	assert_eq(data.ids("perks"), PackedStringArray(["ok"]), "only the good row loads")
 
 

@@ -175,9 +175,14 @@ func swap_home(villager: String, uid: int) -> String:
 
 ## "Go down" (TC-7). Returns false if it's not allowed right now.
 func go_down() -> bool:
-	if SceneFlow.busy or not state.start_delve(data):
+	if SceneFlow.busy:
 		return false
-	run = DelveRun.create(data, state.current_delve_seed(), state.delve_perks(data),
+	# Built once, from the town as it stands, and never saved (Imogen's
+	# bridge review): a reload rebuilds the delve, and the log keeps the kit.
+	var kit: Kit = Kit.build(data, state)
+	if kit == null or not state.start_delve(data):
+		return false
+	run = DelveRun.create(data, state.current_delve_seed(), kit,
 		state.villagers_left(data), state.landmarks_left(data), state.delve_attempt)
 	save()
 	delve_started.emit(state.delve_count, state.current_delve_seed())

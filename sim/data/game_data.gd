@@ -27,7 +27,7 @@ const SCHEMA: int = 1
 const TABLES: Dictionary[String, Dictionary] = {
 	"perks": {
 		"id": "id", "name": "string", "kind": "string", "text": "string",
-		"amount": "int", "uses_per_turn": "int",
+		"amount": "int", "uses_per_turn": "int", "happy_amount": "int", "happy_uses_per_turn": "int",
 	},
 	"villagers": {
 		"id": "id", "role": "string", "personality": "string?", "bet_lost": "string?",
@@ -272,6 +272,13 @@ func _check_rows() -> void:
 			errors.append("slots \"%s\": only a resource slot names a resource" % id)
 	# A slot's effect has to mean something where it's used: fights deal
 	# damage, block and heal; dice rooms heal, pay and open.
+	# One villager per perk: a kit holds each perk once (Imogen's #49 audit).
+	var perk_owner: Dictionary[String, String] = {}
+	for id: String in ids("villagers"):
+		var perk_id: String = str(row("villagers", id)["perk"])
+		if perk_owner.has(perk_id):
+			errors.append("villagers \"%s\": perk \"%s\" is already %s's" % [id, perk_id, perk_owner[perk_id]])
+		perk_owner[perk_id] = id
 	_check_slot_effects("loadouts", ["damage", "block", "heal"])
 	_check_slot_effects("dice_rooms", ["heal", "resource", "open"])
 	_check_slot_effects("vaults", ["open"])
