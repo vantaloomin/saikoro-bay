@@ -49,6 +49,10 @@ var house_hand: Array[int] = []
 ## This round's stake: {resource id: amount}, or {} before a raise.
 var stake: Dictionary[String, int] = {}
 var raise_divisor: int = 4
+## Nudges a whole vault allows (Koban's table, Koban's rules): 1, not one a
+## round. Fights keep their nudge every turn.
+var nudges_per_vault: int = 1
+var nudges_used: int = 0
 
 ## The run's haul (shared): stakes come out of it and winnings go back in.
 var haul: Haul
@@ -174,6 +178,7 @@ func roll() -> bool:
 	moves.append({"move": "roll"})
 	state = State.PLAYER_TURN
 	table.reset_turn()
+	table.nudges_left = mini(table.nudges_left, maxi(0, nudges_per_vault - nudges_used))
 	var values: Array[int] = table.roll_hand()
 	events.append({"type": "turn_start", "round": round_number, "values": values})
 	return true
@@ -206,7 +211,10 @@ func reroll(discard_id: int) -> bool:
 
 
 func nudge(die_id: int) -> bool:
-	return state == State.PLAYER_TURN and table.nudge(die_id)
+	if state != State.PLAYER_TURN or not table.nudge(die_id):
+		return false
+	nudges_used += 1
+	return true
 
 
 ## Scores the round, settles the stake, and starts the next round or ends
@@ -261,6 +269,8 @@ func planning_copy() -> Vault:
 	copy.house_hand = house_hand.duplicate()
 	copy.stake = stake.duplicate()
 	copy.raise_divisor = raise_divisor
+	copy.nudges_per_vault = nudges_per_vault
+	copy.nudges_used = nudges_used
 	copy.haul = haul.copy()
 	copy.table = table.copy(copy.events, copy.moves)
 	copy._hand_slot = _hand_slot

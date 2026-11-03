@@ -22,8 +22,8 @@
 			"id": "mend",
 			"name": "Mend",
 			"kind": "sustain",
-			"text": "Heal 3 after winning a fight.",
-			"amount": 3,
+			"text": "Heal 5 after winning a fight.",
+			"amount": 5,
 			"uses_per_turn": 0
 		},
 		{

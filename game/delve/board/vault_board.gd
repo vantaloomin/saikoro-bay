@@ -454,7 +454,7 @@ func _on_nudge() -> void:
 		_say("Pick a die to nudge.", false)
 		return
 	if not vault.nudge(target):
-		_say("Nudge: once a turn, on an unplaced die below 6.", true)
+		_say("Nudge: once in Koban's vault, on an unplaced die below 6.", true)
 		return
 	_refresh()
 

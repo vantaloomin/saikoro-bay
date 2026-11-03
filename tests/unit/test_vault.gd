@@ -164,6 +164,26 @@ func test_a_vault_replays_from_its_seed_and_moves() -> void:
 	assert_eq(haul.to_dict(), vault.haul.to_dict())
 
 
+func test_a_vault_allows_one_nudge_in_all() -> void:
+	var vault: Vault = _vault(_haul(), 5, NUDGE)
+	vault.roll()
+	for i: int in 4:
+		vault.table.hand[i].value = 2
+	assert_true(vault.nudge(0))
+	assert_false(vault.nudge(1), "one nudge, not one a round")
+	var copy: Vault = vault.planning_copy()
+	assert_eq(copy.nudges_used, 1, "the copy knows it's spent")
+	for die_id: int in [0, 1, 2]:
+		vault.place(die_id, vault.hand().id)
+	vault.end_turn()
+	if vault.is_over():
+		return
+	vault.roll()
+	assert_eq(vault.table.nudges_left, 0, "the next round has none")
+	vault.table.hand[0].value = 2
+	assert_false(vault.nudge(0))
+
+
 # --- Planning copies (Imogen, #27) ------------------------------------------------------
 
 func test_a_planning_copy_previews_a_round_on_its_own_haul() -> void:
