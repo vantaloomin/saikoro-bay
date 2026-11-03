@@ -211,3 +211,29 @@ func test_losing_the_vault_names_the_barrel_and_what_you_keep() -> void:
 	assert_eq(board.vault.state, Vault.State.LOST)
 	assert_string_contains(board._panel_text.text, "Koban wins. You wash up in the barrel and keep half: 10 driftwood, 6 pearls.")
 	assert_eq(board._continue.text, "Continue")
+
+
+func test_a_raise_that_cant_be_made_never_rolls() -> void:
+	var haul: Haul = _haul()
+	var board: VaultBoard = _board(haul)
+	board._on_raise_toggled("pearls")
+	haul.take_resource("pearls", 12)
+	board._on_verb()
+	assert_eq(board.vault.state, Vault.State.WAGER, "no roll without the promised stake")
+	assert_eq(board._raise_pick, "")
+	assert_string_starts_with(board._message.text, "That raise can't be made now.")
+
+
+func test_finished_fires_once() -> void:
+	var board: VaultBoard = _board()
+	var count: Array[int] = [0]
+	board.finished.connect(func() -> void: count[0] += 1)
+	for r: int in 2:
+		board.vault.house_hand.assign([1, 2, 4] as Array[int])
+		_roll(board, [5, 5, 5, 1])
+		for i: int in 3:
+			_place(board, i)
+		board._on_verb()
+		_past_guard(board)
+	board._continue.pressed.emit()
+	assert_eq(count[0], 1)

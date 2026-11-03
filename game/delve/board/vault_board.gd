@@ -127,6 +127,7 @@ var _panel_text: Label
 var _continue: Button
 var _sounds: BoardSounds
 var _panel_shown_at: int = 0
+var _finished: bool = false
 
 
 func setup(new_vault: Vault, game_data: GameData, prize_name: String = "") -> void:
@@ -497,7 +498,12 @@ func _on_verb() -> void:
 		return
 	if vault.state == Vault.State.WAGER:
 		if not _raise_pick.is_empty():
-			vault.raise(_raise_pick)
+			# Never roll without the stake the preview promised (Imogen, #31).
+			if not vault.raise(_raise_pick):
+				_raise_pick = ""
+				_say("That raise can't be made now. Pick again, or roll with no raise.", true)
+				_refresh()
+				return
 			PlaytestLog.log_event("vault_raise", {"round": vault.round_number, "stake": vault.stake.duplicate()})
 		_raise_pick = ""
 		vault.roll()
@@ -524,7 +530,9 @@ func _on_continue() -> void:
 	if Time.get_ticks_msec() < _panel_shown_at + RESULT_GUARD_MS:
 		return
 	if vault.is_over():
-		finished.emit()
+		if not _finished:
+			_finished = true
+			finished.emit()
 		return
 	_panel.visible = false
 	_round_event = {}

@@ -147,9 +147,12 @@ func _show_vault(run: DelveRun) -> void:
 
 
 func _on_vault_over() -> void:
-	if _vault_board != null:
-		_vault_board.queue_free()
-		_vault_board = null
+	# Once only: a second emit (a double Continue) would find the run gone
+	# after come_up() (Imogen, #31).
+	if _vault_board == null or Game.run == null or Game.run.vault == null:
+		return
+	_vault_board.queue_free()
+	_vault_board = null
 	var played: Vault = Game.run.vault
 	PlaytestLog.log_event("vault_played", {"won": played.state == Vault.State.WON,
 		"rounds_won": played.rounds_won, "rounds_lost": played.rounds_lost})

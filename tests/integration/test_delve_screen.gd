@@ -234,5 +234,7 @@ func test_kobans_vault_plays_on_the_vault_board() -> void:
 		VaultBot.new().play_vault(run.vault)
 		board.finished.emit()
 		assert_true(run.step in [DelveRun.Step.CLEARED, DelveRun.Step.WASHED_UP], "the vault's end ends the delve")
+		screen.call("_on_vault_over")
+		assert_true(run.step in [DelveRun.Step.CLEARED, DelveRun.Step.WASHED_UP], "a second end is ignored")
 		return
 	fail_test("no run reached the vault")
