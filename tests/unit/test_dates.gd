@@ -104,6 +104,22 @@ func test_finishing_spends_the_action_and_keeps_the_points_once() -> void:
 	assert_eq(session.gained(), 1, "a finished session no longer moves")
 
 
+func test_a_session_is_stale_when_the_date_count_moved() -> void:
+	var state: GameState = _town()
+	var session: DateSession = state.begin_date(data, "pearl_diver", "cafe", 0)
+	state._dates_done["pearl_diver"] = 1  # affection unchanged, count moved
+	assert_eq(_texts(state.finish_date(data, session)), ["This date is out of date"] as Array[String])
+	assert_eq(state.town.actions_left, 3, "nothing spent")
+
+
+func test_begin_date_seals_what_the_script_reads() -> void:
+	var state: GameState = _town()
+	var session: DateSession = state.begin_date(data, "pearl_diver", "cafe", 0)
+	session.spot = "hot_spring"
+	session.dates_done = 5
+	assert_eq([session.spot, session.dates_done], ["cafe", 0])
+
+
 func test_affection_only_rises_and_a_date_is_capped() -> void:
 	var state: GameState = _town()
 	var session: DateSession = state.begin_date(data, "pearl_diver", "cafe", 0)

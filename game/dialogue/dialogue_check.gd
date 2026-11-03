@@ -7,7 +7,9 @@ extends RefCounted
 ##   - expressions use only `names` (for dates, DateSession.NAMES): no
 ##     autoloads, no "using", no function calls, so a script can't reach
 ##     the save or Game around the date session;
-##   - affection is only ever raised ("+="), never set or lowered;
+##   - the only write is "affection +=" (no other name, no "=" or "-=");
+##   - no inline [set], [do] or [if] in text, which run unchecked;
+##   - no content_level: these scripts ship in the SFW build;
 ##   - every speaker is a villager id or one of EXTRA_SPEAKERS, so names
 ##     can change in data without touching scripts;
 ##   - every [#face=...] tag names one of FACES, the expression ids the
@@ -27,39 +29,75 @@ const MAX_STEPS: int = 400
 ## way out again).
 const MAX_WALKS: int = 2000
 
+static var _INLINE: RegEx = RegEx.create_from_string("\\[\\s*/?\\s*(set|do!?|if|elif|else)\\b")
+
 const _NAME_TOKENS: Array[String] = ["variable", "function", "dictionary_reference", "dictionary_nested_reference"]
 
 
 ## Problems with `resource`'s compiled lines, or [] if it follows the static
 ## rules. `speakers` are the allowed speaker ids.
+##
+## Every comparison here goes through str(), never a bare ==, so no token
+## can raise a runtime error and turn the check into "no problems" (Imogen's
+## PR 1 audit, finding 1). The test also fails on any engine error.
 static func static_problems(resource: DialogueResource, names: Array[String], speakers: Array[String]) -> PackedStringArray:
 	var out: PackedStringArray = []
 	var where: String = resource.resource_path.get_file()
 	if not resource.using_states.is_empty():
 		out.append("%s: \"using %s\" reaches outside the date" % [where, ", ".join(resource.using_states)])
 	for id: Variant in resource.lines:
-		var line: Dictionary = resource.lines[id]
-		var character: String = str(line.get("character", ""))
+		var line: Variant = resource.lines[id]
+		if not line is Dictionary:
+			out.append("%s line %s: not a compiled line" % [where, id])
+			continue
+		var line_dict: Dictionary = line
+		var character: String = str(line_dict.get("character", ""))
 		if not character.is_empty() and not speakers.has(character) and not EXTRA_SPEAKERS.has(character):
 			out.append("%s line %s: unknown speaker \"%s\" (use a villager id)" % [where, id, character])
-		for tag: Variant in line.get("tags", []) as Array:
+		# Dialogue Manager reads [set], [do] and [if] inside text only when
+		# the line plays, so this check can't see their names: none at all.
+		if _INLINE.search(str(line_dict.get("text", ""))) != null:
+			out.append("%s line %s: inline [set], [do] and [if] run unchecked; use a set line or an if block" % [where, id])
+		for tag: Variant in line_dict.get("tags", []) as Array:
 			var face: String = str(tag).trim_prefix("face=")
 			if str(tag).begins_with("face=") and not FACES.has(face):
 				out.append("%s line %s: face \"%s\" isn't one of %s" % [where, id, face, ", ".join(FACES)])
-		for token: Dictionary in _tokens(line):
+		for token: Dictionary in _tokens(line_dict):
 			var kind: String = str(token.get("type", ""))
 			var value: String = str(token.get("function", token.get("variable", token.get("value", ""))))
 			if kind == "function":
 				out.append("%s line %s: calls %s(), and scripts can't call functions" % [where, id, value])
+			elif _NAME_TOKENS.has(kind) and value == "content_level":
+				out.append("%s line %s: content_level isn't for res://dialogue scripts, which ship in the SFW build" % [where, id])
 			elif _NAME_TOKENS.has(kind) and not names.has(value):
 				out.append("%s line %s: uses \"%s\", which isn't one of %s" % [where, id, value, ", ".join(names)])
-		var mutation: Array = (line.get("mutation", {}) as Dictionary).get("expression", []) as Array
-		for index: int in mutation.size() - 1:
-			var token: Variant = mutation[index]
-			var after: Variant = mutation[index + 1]
-			if token is Dictionary and after is Dictionary and (token as Dictionary).get("value") == "affection" \
-					and (after as Dictionary).get("type") == "assignment" and (after as Dictionary).get("value") != "+=":
-				out.append("%s line %s: affection only goes up (use \"+=\")" % [where, id])
+		# The only write a script may make is "affection +=", in a line's
+		# mutation, an inline [set ...] or a multi-assignment alike.
+		for expression: Array in _expressions(line_dict):
+			for index: int in expression.size():
+				var token: Variant = expression[index]
+				if not (token is Dictionary and str((token as Dictionary).get("type", "")) == "assignment"):
+					continue
+				var target: Variant = expression[index - 1] if index > 0 else null
+				var ok: bool = str((token as Dictionary).get("value", "")) == "+=" and target is Dictionary \
+					and str((target as Dictionary).get("type", "")) == "variable" and str((target as Dictionary).get("value", "")) == "affection"
+				if not ok:
+					out.append("%s line %s: the only write a script may make is \"affection += n\"" % [where, id])
+	return out
+
+
+## Every expression (a list of tokens) inside a compiled line.
+static func _expressions(value: Variant) -> Array[Array]:
+	var out: Array[Array] = []
+	if value is Array:
+		var list: Array = value
+		if list.any(func(item: Variant) -> bool: return item is Dictionary and (item as Dictionary).has("type") and (item as Dictionary).has("i")):
+			out.append(list)
+		for item: Variant in list:
+			out.append_array(_expressions(item))
+	elif value is Dictionary:
+		for key: Variant in value as Dictionary:
+			out.append_array(_expressions((value as Dictionary)[key]))
 	return out
 
 
@@ -68,7 +106,7 @@ static func _tokens(value: Variant) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if value is Dictionary:
 		var dict: Dictionary = value
-		if dict.has("type") and _NAME_TOKENS.has(str(dict["type"])) or str(dict.get("type", "")) == "assignment":
+		if _NAME_TOKENS.has(str(dict.get("type", ""))):
 			out.append(dict)
 		for key: Variant in dict:
 			out.append_array(_tokens(dict[key]))

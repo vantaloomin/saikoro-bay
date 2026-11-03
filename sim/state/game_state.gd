@@ -507,6 +507,7 @@ func begin_date(data: GameData, villager: String, spot: String, content_level: i
 	session.content_level = ContentLevel.from_value(content_level)
 	session.start_affection = affection(villager)
 	session.max_gain = date["max_gain"]
+	session.seal()
 	return session
 
 
@@ -522,7 +523,8 @@ func finish_date(data: GameData, session: DateSession) -> Array[Dictionary]:
 	if not refusals.is_empty():
 		return refusals
 	var date: Dictionary = date_row(data, session.villager)
-	if date["id"] != session.date_id or session.start_affection != affection(session.villager):
+	if date["id"] != session.date_id or session.start_affection != affection(session.villager) \
+			or session.dates_done != dates_done(session.villager):
 		return [_refusal(Town.Refusal.NOT_YET, "This date is out of date")]
 	var points: int = mini(session.gained() + (date["finish_gain"] as int)
 		+ (data.row("date_spots", session.spot)["bonus"] as int), date["max_gain"] as int)
