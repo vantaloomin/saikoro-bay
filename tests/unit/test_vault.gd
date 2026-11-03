@@ -54,7 +54,7 @@ func test_hands_rank_like_poker_dice() -> void:
 	assert_gt(Vault.hand_score([1, 1, 1] as Array[int]), Vault.hand_score([4, 5, 6] as Array[int]), "three of a kind beats a run")
 	assert_gt(Vault.hand_score([1, 2, 3] as Array[int]), Vault.hand_score([6, 6, 5] as Array[int]), "a run beats a pair")
 	assert_gt(Vault.hand_score([2, 2, 1] as Array[int]), Vault.hand_score([6, 5, 3] as Array[int]), "a pair beats a high die")
-	assert_gt(Vault.hand_score([4, 4, 6] as Array[int]), Vault.hand_score([5, 5, 2] as Array[int]), "ties break on the sum")
+	assert_gt(Vault.hand_score([5, 5, 2] as Array[int]), Vault.hand_score([4, 4, 6] as Array[int]), "the higher pair wins, whatever the sum")
 	assert_eq(Vault.hand_score([6, 6] as Array[int]), -1, "a hand needs 3 dice")
 
 
@@ -269,6 +269,39 @@ func test_the_bot_raises_only_against_a_weak_hand() -> void:
 	strong.house_hand.assign([4, 4, 2] as Array[int])
 	VaultBot.new().play_round(strong)
 	assert_eq(strong.events.filter(func(e: Dictionary) -> bool: return e["type"] == "raise").size(), 0)
+
+
+## Vanta's tie-break (poker order), Imogen's table: every rank against
+## every other, then each tie-break step within a rank, and a full tie.
+func test_hands_compare_in_poker_order() -> void:
+	var by_rank: Array = [[6, 4, 2], [2, 2, 1], [1, 2, 3], [1, 1, 1]]
+	var best: Array = [[6, 5, 3], [6, 6, 5], [4, 5, 6], [6, 6, 6]]
+	for low: int in 4:
+		for high: int in range(low + 1, 4):
+			var weak: Array[int] = []
+			weak.assign(best[low])
+			var strong: Array[int] = []
+			strong.assign(by_rank[high])
+			assert_gt(Vault.hand_score(strong), Vault.hand_score(weak), "rank %d beats rank %d" % [high, low])
+	var steps: Array = [
+		[[5, 5, 5], [4, 4, 4], "the higher triple"],
+		[[3, 4, 5], [2, 3, 4], "the higher run"],
+		[[5, 5, 1], [4, 4, 6], "the higher pair, whatever the odd die"],
+		[[4, 4, 5], [4, 4, 3], "same pair: the higher odd die"],
+		[[6, 1, 2], [5, 4, 2], "the higher high die, whatever the rest"],
+		[[6, 4, 1], [6, 3, 2], "same high die: the next die"],
+		[[6, 4, 3], [6, 4, 1], "same top two: the sum"],
+	]
+	for step: Array in steps:
+		var a: Array[int] = []
+		a.assign(step[0])
+		var b: Array[int] = []
+		b.assign(step[1])
+		assert_gt(Vault.hand_score(a), Vault.hand_score(b), step[2])
+	assert_eq(Vault.hand_score([4, 6, 4] as Array[int]), Vault.hand_score([6, 4, 4] as Array[int]), "a full tie scores the same, so Koban wins it")
+	assert_eq(Vault.hand_parts([4, 6, 4] as Array[int]), [Vault.PAIR, 4, 6] as Array[int])
+	assert_gt(Vault.hand_score([255, 255, 254] as Array[int]), Vault.hand_score([255, 255, 253] as Array[int]), "the biggest faces still fit their fields")
+	assert_gt(Vault.hand_score([2, 1, 1] as Array[int]), Vault.hand_score([255, 254, 252] as Array[int]))
 
 
 func test_rank_always_beats_the_sum_even_with_big_faces() -> void:

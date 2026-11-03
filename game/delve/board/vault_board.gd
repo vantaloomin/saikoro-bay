@@ -209,13 +209,41 @@ static func compare_text(yours: Array[int], house: Array[int]) -> String:
 		var verb: String = "beat" if Vault.hand_rank(first) == Vault.THREE_KIND else "beats"
 		var line: String = "Your %s %s her %s." if mine > hers else "Her %s %s your %s."
 		return line % [_bare(first), verb, _bare(second)]
+	# Same rank: poker order, as Vault.hand_score compares (Vanta's call).
+	var my_parts: Array[int] = Vault.hand_parts(yours)
+	var her_parts: Array[int] = Vault.hand_parts(house)
+	var you_win: bool = Vault.hand_score(yours) > Vault.hand_score(house)
+	if my_parts[1] != her_parts[1]:
+		var winner: String = _group_words(yours if you_win else house)
+		var loser: String = _group_words(house if you_win else yours)
+		var verb: String = "beat" if mine == Vault.THREE_KIND else "beats"
+		var line: String = "Same rank. Your %s %s her %s." if you_win else "Same rank. Her %s %s your %s."
+		return line % [winner, verb, loser]
+	if my_parts[2] != her_parts[2]:
+		var lead: String = "Same pair" if mine == Vault.PAIR else "Same high die"
+		var what: String = "odd die" if mine == Vault.PAIR else "next die"
+		if you_win:
+			return "%s. Your %s %d beats her %d." % [lead, what, my_parts[2], her_parts[2]]
+		return "%s. Her %s %d beats your %d." % [lead, what, her_parts[2], my_parts[2]]
 	var my_total: int = _total(yours)
 	var her_total: int = _total(house)
 	if my_total > her_total:
-		return "Same rank. Your total of %d beats her %d." % [my_total, her_total]
+		return "Same top dice. Your total of %d beats her %d." % [my_total, her_total]
 	if my_total < her_total:
-		return "Same rank. Her total of %d beats your %d." % [her_total, my_total]
-	return "Same rank, same total of %d. A full tie goes to Koban." % my_total
+		return "Same top dice. Her total of %d beats your %d." % [her_total, my_total]
+	return "Same hand. A full tie goes to Koban."
+
+
+## The part of a hand that decides it within its rank: "three 5s", "run of
+## 3-4-5", "pair of 4s", "high die 6".
+static func _group_words(values: Array[int]) -> String:
+	var parts: Array[int] = Vault.hand_parts(values)
+	match parts[0]:
+		Vault.PAIR:
+			return "pair of %ds" % parts[1]
+		Vault.HIGH_DIE:
+			return "high die %d" % parts[1]
+	return _bare(values)
 
 
 ## describe_hand without its article, for "your run of 2-3-4".
@@ -817,12 +845,12 @@ func _build() -> void:
 		inner.add_child(you_tag)
 		_ladder_you.append(you_tag)
 		# On the row itself when both hands share it: her house edge (Mara, #31).
-		var tie: Label = BoardStyle.label("Same rank · higher total wins · ties go to Koban", BoardStyle.SMALL, BoardStyle.AMBER)
+		var tie: Label = BoardStyle.label("Same rank · higher hand wins · ties go to Koban", BoardStyle.SMALL, BoardStyle.AMBER)
 		tie.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tie.visible = false
 		stack.add_child(tie)
 		_ladder_tie.append(tie)
-	_ladder_footer = BoardStyle.label("Same rank: the higher total wins. A full tie goes to Koban.", BoardStyle.SMALL, BoardStyle.DIM)
+	_ladder_footer = BoardStyle.label("Same rank: the higher triple, run, pair or high die wins, then the next die. A full tie goes to Koban.", BoardStyle.SMALL, BoardStyle.DIM)
 	ladder.add_child(_ladder_footer)
 
 	var s: DiceTable.Slot = vault.hand()

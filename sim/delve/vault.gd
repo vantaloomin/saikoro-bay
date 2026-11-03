@@ -9,7 +9,9 @@ extends RefCounted
 ##   2. roll() rolls your kit (ROLLS stream) and starts your turn, with the
 ##      usual reroll and nudge. Place 3 dice in the hand slot.
 ##   3. end_turn() scores both hands: three of a kind > run > pair > high
-##      die, ties on the sum, and the house wins a full tie. A hand slot
+##      die. Within a rank the higher triple, run, pair or high die wins,
+##      then the odd die (or the next die), then the sum, and the house
+##      wins a full tie (poker order, Vanta's call). A hand slot
 ##      that isn't full loses. Win the round and the haul gets back twice
 ##      the stake; lose it and the stake is gone.
 ## First to rounds_to_win takes the vault: WON or LOST.
@@ -33,8 +35,14 @@ const PAIR: int = 1
 const RUN: int = 2
 const THREE_KIND: int = 3
 const RANK_NAMES: Array[String] = ["high die", "pair", "run", "three of a kind"]
-## hand_score keeps the rank above bit 24, past any sum of three faces.
-const RANK_SHIFT: int = 24
+## hand_score packs, high bits to low: the rank, the group (the triple's
+## face, a run's top die, the pair's face, or the high die), the kicker
+## (the odd die beside a pair, or a high die's second die), then the sum.
+## Faces fit in 8 bits (GameData checks MAX_FACE) and the sum in 10.
+const MAX_FACE: int = 255
+const KICKER_SHIFT: int = 10
+const GROUP_SHIFT: int = 18
+const RANK_SHIFT: int = 26
 
 const Die = DiceTable.Die
 const Slot = DiceTable.Slot
@@ -121,13 +129,33 @@ static func can_open(data: GameData, loadout_id: String, vault_id: String) -> bo
 	return (vault_row["slots"] as Array).size() == 1
 
 
-## Poker-dice score for comparing hands: rank first, then the sum (the
-## rank sits far above any sum, so big faces can't leak into it). Three
-## dice only; anything else scores -1 (an unfilled hand loses).
+## Poker-dice score for comparing hands, in poker order: rank, then group,
+## then kicker, then the sum (hand_parts), each in its own bits so a big
+## face can't leak into the field above. Three dice only; anything else
+## scores -1 (an unfilled hand loses).
 static func hand_score(values: Array[int]) -> int:
 	if values.size() != 3:
 		return -1
-	return (hand_rank(values) << RANK_SHIFT) + values[0] + values[1] + values[2]
+	var parts: Array[int] = hand_parts(values)
+	return (parts[0] << RANK_SHIFT) | (parts[1] << GROUP_SHIFT) | (parts[2] << KICKER_SHIFT) \
+		| (values[0] + values[1] + values[2])
+
+
+## [rank, group, kicker] for three dice: three 5s are [THREE_KIND, 5, 0],
+## a run of 3-4-5 [RUN, 5, 0], a pair of 4s and a 6 [PAIR, 4, 6], and high
+## die 6-4-2 [HIGH_DIE, 6, 4].
+static func hand_parts(values: Array[int]) -> Array[int]:
+	var sorted: Array[int] = values.duplicate()
+	sorted.sort()
+	var rank: int = hand_rank(sorted)
+	match rank:
+		THREE_KIND:
+			return [rank, sorted[0], 0]
+		RUN:
+			return [rank, sorted[2], 0]
+		PAIR:
+			return [rank, sorted[1], sorted[2] if sorted[0] == sorted[1] else sorted[0]]
+	return [rank, sorted[2], sorted[1]]
 
 
 static func hand_rank(values: Array[int]) -> int:

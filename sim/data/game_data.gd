@@ -290,6 +290,14 @@ func _check_rows() -> void:
 			errors.append("vaults \"%s\": rounds_to_win and raise_divisor need to be at least 1" % id)
 		if (vault_row["nudges_per_vault"] as int) < 0:
 			errors.append("vaults \"%s\": nudges_per_vault can't be negative" % id)
+		# Vault.hand_score packs faces into 8 bits each (Imogen's tie-break rule).
+		var vault_dice: Array = (vault_row["house_dice"] as Array).duplicate()
+		if has_row("loadouts", DelveRun.LOADOUT):
+			vault_dice.append_array(row("loadouts", DelveRun.LOADOUT)["dice"] as Array)
+		for die_id: Variant in vault_dice:
+			if has_row("dice", str(die_id)) and (row("dice", str(die_id))["faces"] as Array).any(
+					func(face: Variant) -> bool: return int(face) < 0 or int(face) > Vault.MAX_FACE):
+				errors.append("vaults \"%s\": die \"%s\" has a face outside 0-%d" % [id, die_id, Vault.MAX_FACE])
 	_check_town()
 	for id: String in ids("dice_rooms"):
 		var room_row: Dictionary = row("dice_rooms", id)
