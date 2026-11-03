@@ -11,9 +11,20 @@ const PAPER: Color = Color(0.97, 0.97, 0.95)
 const INK: Color = Color(0.12, 0.12, 0.12)
 
 var _resume: Button
+static var _neutral: Theme
+
+
+## The neutral skin's theme: the engine's plain font, so the menu never
+## takes on the type of the half it opens over.
+static func neutral_theme() -> Theme:
+	if _neutral == null:
+		_neutral = Theme.new()
+		_neutral.default_font = ThemeDB.fallback_font
+	return _neutral
 
 
 func _ready() -> void:
+	theme = neutral_theme()
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
