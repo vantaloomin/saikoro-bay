@@ -1,6 +1,6 @@
 {
 	"schema": 1,
-	"note": "Action card slots (DR-1, DR-3). Effect amount = die total x mult + add. A slot takes up to max_dice dice and fires with at least min_dice. accepts: pair and three_kind match the first die, run needs consecutive numbers, sum_at_least takes any die and needs a total of at least min. A persists slot that is complete at the end of a turn keeps its dice (they leave the hand) and takes no more. Effects: damage, block and heal by the amount; resource pays the amount of `resource` into the haul; open does nothing but count as open (a rescue cage lock). `resource` is empty unless the effect is resource. Placeholder numbers, tuned with the bot.",
+	"note": "Action card slots (DR-1, DR-3). Effect amount = die total x mult + add. A slot takes up to max_dice dice and fires with at least min_dice. accepts: pair and three_kind match the first die, run needs consecutive numbers, sum_at_least takes any die and needs a total of at least min. A persists slot that is complete at the end of a turn stays open for the rest of the room and takes no more dice; its dice go back to the hand and roll again. Effects: damage, block and heal by the amount; resource pays the amount of `resource` into the haul; open does nothing but count as open (a rescue cage lock). `resource` is empty unless the effect is resource. Placeholder numbers, tuned with the bot.",
 	"items": [
 		{
 			"id": "strike", "name": "Strike", "text": "Deal damage equal to the die.",

@@ -109,7 +109,7 @@ func slot(slot_id: String) -> Slot:
 
 ## A slot that has opened and stays open (sealed), or is complete now.
 func is_open(s: Slot) -> bool:
-	return s.sealed or s.is_complete()
+	return s.is_complete()
 
 
 func open_count() -> int:

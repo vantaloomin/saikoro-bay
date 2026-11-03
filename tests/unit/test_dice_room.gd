@@ -131,6 +131,58 @@ func test_the_tide_can_wash_you_up() -> void:
 	assert_false(room.end_turn())
 
 
+func test_open_locks_stay_open_and_give_their_dice_back() -> void:
+	var room: DiceRoom = _room("rescue", 20)
+	_set_hand(room, [5, 5, 3, 1])
+	room.place(0, "cage_pair")
+	room.place(1, "cage_pair")
+	room.place(2, "cage_sum")
+	room.end_turn()
+	assert_eq(room.open_count(), 1, "the pair opened; the half-filled sum didn't")
+	assert_eq(room.hp, 18)
+	assert_eq(room.hand.filter(func(d: DiceRoom.Die) -> bool: return d.is_free()).size(), 4, "all four dice roll again")
+	_set_hand(room, [2, 3, 4, 6])
+	for die_id: int in [0, 1, 2]:
+		assert_true(room.place(die_id, "cage_run"))
+	assert_eq(room.place_refusal(3, "cage_pair"), "This lock is already open.")
+	room.end_turn()
+	assert_eq(room.open_count(), 2)
+	assert_eq(room.hp, 16)
+	_set_hand(room, [6, 5, 1, 1])
+	room.place(0, "cage_sum")
+	room.place(1, "cage_sum")
+	room.end_turn()
+	assert_true(room.succeeded, "all three open: the villager is free")
+	assert_eq(room.state, DiceRoom.State.DONE)
+	assert_eq(room.hp, 16, "no tide on the turn the cage opens")
+	assert_eq(_events_of(room, "opened").size(), 1)
+
+
+func test_two_locks_can_open_in_one_turn() -> void:
+	var room: DiceRoom = _room("rescue", 20)
+	_set_hand(room, [5, 5, 6, 4])
+	room.place(0, "cage_pair")
+	room.place(1, "cage_pair")
+	room.place(2, "cage_sum")
+	room.place(3, "cage_sum")
+	room.end_turn()
+	assert_eq(room.open_count(), 2)
+	assert_eq(_events_of(room, "open").size(), 2)
+	room.events.clear()
+	room.end_turn()
+	assert_eq(_events_of(room, "open"), [] as Array[Dictionary], "an open lock opens once")
+
+
+func test_the_bot_opens_the_cage_often_enough() -> void:
+	var opened: int = 0
+	for s: int in range(1, 41):
+		var room: DiceRoom = _room("rescue", 20, [], s)
+		RoomBot.new().play_room(room)
+		if room.succeeded:
+			opened += 1
+	assert_between(opened, 8, 28, "about 40%% without Nudge (got %d of 40)" % opened)
+
+
 # --- Nudge, replay, copies --------------------------------------------------------------
 
 func test_nudge_works_in_rooms_too() -> void:
