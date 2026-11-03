@@ -82,6 +82,7 @@ var _intro_panel: PanelContainer
 var _between_panel: PanelContainer
 var _question_panel: PanelContainer
 var _question_label: Label
+var _view_answers: Array[Button] = []
 var _order_label: Label
 var _results_panel: PanelContainer
 var _results_label: Label
@@ -143,7 +144,15 @@ func _finish_task(skipped: bool) -> void:
 		_clear_town()
 		_question = 0
 		_question_label.text = QUESTIONS[0]
+		_order_answers()
 		_show_only(_question_panel)
+
+
+## Every other tester sees the two views' answers the other way round, so
+## first-option bias evens out (Mara, #35). "No difference" stays last.
+func _order_answers() -> void:
+	var first: Button = _view_answers[_testers % 2]
+	first.get_parent().move_child(first, 2)
 
 
 ## One answer to the current exit question. Public so the tests can drive it.
@@ -171,6 +180,7 @@ func _clear_town() -> void:
 static func results_text(results: Array[Dictionary], answers: Dictionary[String, String]) -> String:
 	var lines: PackedStringArray = []
 	var totals: Dictionary[String, Vector2] = {}
+	var skips: Dictionary[String, int] = {}
 	for row: Dictionary in results:
 		var view: String = "%s (town %s)" % [row["view"], row["layout"]]
 		var notes: String = (" (skipped)" if row["skipped"] else "") \
@@ -178,12 +188,20 @@ static func results_text(results: Array[Dictionary], answers: Dictionary[String,
 		lines.append("%s · task %d: %.1f s, %d misclick%s%s" % [
 			view, int(row["task"]), float(row["seconds"]), int(row["misclicks"]),
 			"" if int(row["misclicks"]) == 1 else "s", notes])
+		# A skip is a give-up, not a quick run: it stays out of the totals,
+		# which would otherwise reward the view people gave up on (Mara, #35).
 		var total: Vector2 = totals.get(view, Vector2.ZERO)
-		totals[view] = total + Vector2(int(row["misclicks"]), float(row["seconds"]))
+		if row["skipped"]:
+			skips[view] = skips.get(view, 0) + 1
+		else:
+			total += Vector2(int(row["misclicks"]), float(row["seconds"]))
+		totals[view] = total
 	lines.append("")
 	for view: String in totals:
 		var misses: int = int(totals[view].x)
-		lines.append("%s in all: %d misclick%s, %.1f s" % [view, misses, "" if misses == 1 else "s", totals[view].y])
+		var skipped: String = " · %d skipped" % skips[view] if skips.has(view) else ""
+		lines.append("%s in all: %d misclick%s, %.1f s%s" % [
+			view, misses, "" if misses == 1 else "s", totals[view].y, skipped])
 	lines.append("")
 	for question: String in answers:
 		lines.append("%s %s" % [question, answers[question]])
@@ -478,6 +496,8 @@ func _build_ui() -> void:
 		var pick_answer: Button = _button(choice)
 		pick_answer.pressed.connect(answer.bind(choice))
 		question_box.add_child(pick_answer)
+		if choice != ANSWERS[-1]:
+			_view_answers.append(pick_answer)
 
 	_results_panel = _centered_panel()
 	var results_box: VBoxContainer = _results_panel.get_child(0) as VBoxContainer

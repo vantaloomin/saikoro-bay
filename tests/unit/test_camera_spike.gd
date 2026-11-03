@@ -167,6 +167,40 @@ func _visible_lot_cell(town: SpikeTown) -> Vector2i:
 	return SpikeTown.NO_CELL
 
 
+func test_skips_stay_out_of_the_totals() -> void:
+	var answers: Dictionary[String, String] = {}
+	var rows: Array[Dictionary] = [
+		{"view": "At an angle", "layout": "A", "task": 1, "seconds": 10.0, "misclicks": 2, "skipped": false, "input": "mouse"},
+		{"view": "At an angle", "layout": "A", "task": 2, "seconds": 4.0, "misclicks": 3, "skipped": true, "input": "mouse"},
+		{"view": "Straight down", "layout": "B", "task": 1, "seconds": 6.0, "misclicks": 0, "skipped": false, "input": "controller"},
+	]
+	var text: String = CameraSpike.results_text(rows, answers)
+	assert_string_contains(text, "At an angle (town A) in all: 2 misclicks, 10.0 s · 1 skipped")
+	assert_string_contains(text, "Straight down (town B) in all: 0 misclicks, 6.0 s\n")
+	assert_string_contains(text, "task 1: 6.0 s, 0 misclicks (controller)")
+
+
+func test_the_view_answers_swap_between_testers() -> void:
+	var spike: CameraSpike = autofree(CameraSpike.new())
+	add_child(spike)
+	var firsts: Array[String] = []
+	for tester: int in 2:
+		spike.start(0)
+		spike.begin()
+		for half: int in 2:
+			if half == 1:
+				spike.call("_begin_run", 1)
+			for i: int in 3:
+				spike.call("_finish_task", true)
+		var buttons: Array[Node] = (spike.get("_question_panel") as Control).get_child(0).get_children().filter(
+			func(node: Node) -> bool: return node is Button)
+		firsts.append((buttons[0] as Button).text)
+		assert_eq((buttons[2] as Button).text, "No difference")
+		for q: int in 3:
+			spike.answer("No difference")
+	assert_ne(firsts[0], firsts[1])
+
+
 func _home_of(town: SpikeTown, villager: String) -> Dictionary:
 	for row: Dictionary in town.standing():
 		if row["villager"] == villager:
