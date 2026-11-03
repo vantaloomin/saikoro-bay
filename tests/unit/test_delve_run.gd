@@ -188,6 +188,69 @@ func test_landings_come_after_each_floor_and_the_vault_after_the_last() -> void:
 	assert_gt(reached.get(DelveRun.Step.LANDING, 0), 0)
 
 
+func _at_the_vault() -> DelveRun:
+	for s: int in range(1, 80):
+		var run: DelveRun = _run(s)
+		_play(run)
+		if run.step == DelveRun.Step.VAULT:
+			return run
+	fail_test("no seed reaches the vault")
+	return null
+
+
+func test_the_vault_opens_at_the_bottom() -> void:
+	var run: DelveRun = _at_the_vault()
+	assert_not_null(run.vault)
+	assert_true(is_same(run.vault.haul, run.haul), "stakes come out of the run's own haul")
+	assert_eq(run.vault.state, Vault.State.WAGER)
+	assert_false(run.finish_vault(), "not until Koban's game is over")
+	assert_eq(run.outcome(), "")
+
+
+func test_beating_koban_clears_the_delve_with_the_prize() -> void:
+	var run: DelveRun = _at_the_vault()
+	for round_index: int in 2:
+		run.vault.roll()
+		run.vault.house_hand.assign([1, 2, 4] as Array[int])
+		for i: int in 3:
+			run.vault.table.hand[i].value = 6
+			run.vault.place(i, run.vault.hand().id)
+		run.vault.end_turn()
+	assert_true(run.finish_vault())
+	assert_eq(run.step, DelveRun.Step.CLEARED)
+	assert_eq(run.haul.landmark, str(run.map.vault_prize["landmark"]))
+	assert_eq(run.kept_haul().landmark, run.haul.landmark, "and the town keeps it")
+	assert_false(run.finish_vault())
+
+
+func test_losing_to_koban_washes_up() -> void:
+	var run: DelveRun = _at_the_vault()
+	for round_index: int in 2:
+		run.vault.roll()
+		run.vault.house_hand.assign([6, 6, 6] as Array[int])
+		run.vault.end_turn()
+	assert_true(run.finish_vault())
+	assert_eq(run.step, DelveRun.Step.WASHED_UP)
+	assert_eq(run.haul.landmark, "")
+
+
+func test_a_whole_delve_replays_through_the_vault() -> void:
+	var played: int = 0
+	for s: int in range(1, 40):
+		var run: DelveRun = _run(s)
+		_play(run)
+		if run.step != DelveRun.Step.VAULT:
+			continue
+		VaultBot.new().play_vault(run.vault)
+		assert_true(run.finish_vault())
+		var again: DelveRun = DelveRun.replay(data, s, [], VILLAGERS, LANDMARKS, run.choices)
+		assert_not_null(again, "seed %d replays" % s)
+		assert_eq(again.step, run.step)
+		assert_eq(again.haul.to_dict(), run.haul.to_dict())
+		played += 1
+	assert_gt(played, 5)
+
+
 func test_surfacing_keeps_the_whole_haul() -> void:
 	var run: DelveRun = _run(3)
 	_play(run, DelveRun.Step.LANDING)

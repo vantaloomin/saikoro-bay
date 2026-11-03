@@ -9,7 +9,7 @@ extends RefCounted
 ##   finish_room()  once the room's own play is over (IN_ROOM)
 ##   surface()      leave with the whole haul (LANDING)
 ##   go_deeper()    on to the next floor (LANDING)
-## After the last row of the last floor the run waits at Koban's vault.
+##   finish_vault() once Koban's vault is won or lost (VAULT)
 ##
 ## Screens and bots read a RunView, never the map: the view hides what the
 ## player can't see yet.
@@ -24,12 +24,14 @@ extends RefCounted
 ## the haul, rest heals, and opening the rescue cage adds the villager. The
 ## tide in a rescue can wash you up like a lost fight.
 ##
-## Not built yet: the vault is a stop (the vault PR).
+## After the last row of the last floor the run opens Koban's vault (a
+## Vault on the run's own haul): finish_vault() once it's won or lost.
 
 enum Step { CHOOSE_ROOM, IN_ROOM, LANDING, VAULT, SURFACED, WASHED_UP, CLEARED }
 
 const LOADOUT: String = "fresh"
 const FORESIGHT_PERK: String = "foresight"
+const VAULT_ID: String = "koban"
 
 var map: DelveMap
 var step: Step = Step.CHOOSE_ROOM
@@ -45,6 +47,8 @@ var haul: Haul = Haul.new()
 var room_type: String = ""
 var fight: Fight
 var room: DiceRoom
+## Koban's vault, once the run reaches it.
+var vault: Vault
 ## Rooms walked into, in order, as [floor, row, col].
 var path: Array[Array] = []
 ## What the last cleared room paid: {resource id: amount}.
@@ -66,7 +70,8 @@ var _rng: RngStreams
 ## takes ({"perk": id, "source": id}). Returns null if the data is missing.
 static func create(data: GameData, seed_value: int, with_perks: Array[Dictionary],
 		villagers_left: Array[String], landmarks_left: Array[String]) -> DelveRun:
-	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice"):
+	if not data.has_row("loadouts", LOADOUT) or not data.has_row("delve", "slice") \
+			or not Vault.can_open(data, LOADOUT, VAULT_ID):
 		return null
 	var run: DelveRun = DelveRun.new()
 	run._data = data
@@ -100,6 +105,10 @@ static func replay(data: GameData, seed_value: int, with_perks: Array[Dictionary
 			room_moves.assign(entry["room"] as Array)
 			ok = (run.fight == null or run.fight.apply_moves(room_moves)) \
 				and (run.room == null or run.room.apply_moves(room_moves)) and run.finish_room()
+		elif entry.has("vault"):
+			var vault_moves: Array[Dictionary] = []
+			vault_moves.assign(entry["vault"] as Array)
+			ok = run.vault != null and run.vault.apply_moves(vault_moves) and run.finish_vault()
 		elif entry.has("landing"):
 			ok = run.surface() if str(entry["landing"]) == "surface" else run.go_deeper()
 		if not ok:
@@ -193,6 +202,11 @@ static func is_dice_room(type: String) -> bool:
 func finish_room() -> bool:
 	if step != Step.IN_ROOM:
 		return false
+	var opens_vault: bool = floor_index == map.floors.size() - 1 and row == map.rows_in_floor(floor_index) - 1
+	if opens_vault and not Vault.can_open(_data, LOADOUT, VAULT_ID):
+		# Fail closed: never strand the run at a vault that can't open.
+		push_error("DelveRun: can't open the vault \"%s\"" % VAULT_ID)
+		return false
 	if is_fight_room(room_type):
 		if fight == null or fight.state == Fight.State.PLAYER_TURN:
 			return false
@@ -228,6 +242,27 @@ func finish_room() -> bool:
 		step = Step.LANDING
 	else:
 		step = Step.VAULT
+		vault = Vault.create(_data, LOADOUT, VAULT_ID, _rng, perks, haul)
+		if vault == null:
+			push_error("DelveRun: can't open the vault \"%s\"" % VAULT_ID)
+	return true
+
+
+## Ends the delve at the vault once Koban's game is over. A win adds the
+## vault's prize to the haul and clears the delve; a loss washes up.
+func finish_vault() -> bool:
+	if step != Step.VAULT or vault == null or not vault.is_over():
+		return false
+	choices.append({"vault": vault.moves.duplicate(true)})
+	if vault.state == Vault.State.WON:
+		var prize: Dictionary = map.vault_prize
+		if prize.has("landmark"):
+			haul.landmark = str(prize["landmark"])
+		for id: String in prize.get("resources", {}) as Dictionary:
+			haul.add_resource(id, int(prize["resources"][id]))
+		step = Step.CLEARED
+	else:
+		step = Step.WASHED_UP
 	return true
 
 

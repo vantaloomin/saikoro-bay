@@ -3,8 +3,9 @@ extends Control
 ## room, always taking the leftmost room it can reach. Fights show on the
 ## board. Treasure, rest and rescue rooms have no board yet, so the room
 ## bot plays them and the status line says what they gave. At a landing,
-## Surface and Deeper choose; a wash-up or surfacing goes back to town,
-## where the haul is banked.
+## Surface and Deeper choose. Koban's vault has no board yet either, so the
+## vault bot plays it. A wash-up, surfacing or clearing the vault goes back
+## to town, where the haul is banked.
 
 const BOARD_SCENE: PackedScene = preload("res://game/delve/board/fight_board.tscn")
 
@@ -54,8 +55,14 @@ func _advance() -> void:
 				_surface.grab_focus()
 				return
 			DelveRun.Step.VAULT:
-				_set_status(run, "Koban's vault opens in a later build. Close the game to leave.")
-				return
+				if run.vault == null:
+					_set_status(run, "Koban's vault wouldn't open. Close the game to leave.")
+					return
+				# Stand-in until the vault board: the vault bot plays it.
+				VaultBot.new().play_vault(run.vault)
+				PlaytestLog.log_event("vault_played", {"won": run.vault.state == Vault.State.WON,
+					"rounds_won": run.vault.rounds_won, "rounds_lost": run.vault.rounds_lost})
+				run.finish_vault()
 			_:
 				if not Game.come_up():
 					# Refused (a transition was running): let the player retry.
