@@ -29,6 +29,7 @@ var _below: VBoxContainer
 var _surface: Button
 var _deeper: Button
 var _hint: Label
+var _notes: Label
 
 
 ## A row of peeked rooms, drawn with the map's shapes.
@@ -64,16 +65,26 @@ func show_view(view: RunView) -> void:
 	_clear(_keep)
 	_clear(_risk)
 	_clear(_below)
-	_keep.add_child(_heading("Keep everything"))
+	_keep.add_child(_heading("Back to town with everything"))
 	for line: String in keep_lines(haul):
+		_keep.add_child(BoardStyle.label(line, BoardStyle.BODY))
+	_keep.add_child(_heading("You leave behind"))
+	for line: String in left_behind_lines(view.peek()):
 		_keep.add_child(BoardStyle.label(line, BoardStyle.BODY))
 	_risk.add_child(_heading("If you wash up, you keep"))
 	for line: String in risk_lines(haul):
 		_risk.add_child(BoardStyle.label(line, BoardStyle.BODY))
 	var peek: Dictionary = view.peek()
 	_below.add_child(_heading(below_text(peek)))
-	for row_types: Array in peek.get("rows", []) as Array:
-		_below.add_child(PeekRow.new(row_types))
+	var peek_rows: Array = peek.get("rows", []) as Array
+	for i: int in peek_rows.size():
+		var line: HBoxContainer = HBoxContainer.new()
+		line.add_theme_constant_override("separation", 16)
+		var row_label: Label = BoardStyle.label("Row %d" % (i + 1), BoardStyle.SMALL, BoardStyle.DIM)
+		row_label.custom_minimum_size = Vector2(70, 0)
+		line.add_child(row_label)
+		line.add_child(PeekRow.new(peek_rows[i] as Array))
+		_below.add_child(line)
 	var source: String = view.foresight_source()
 	if not source.is_empty():
 		var badge: HBoxContainer = HBoxContainer.new()
@@ -102,6 +113,30 @@ func keep_lines(haul: Haul) -> PackedStringArray:
 	if lines.is_empty():
 		lines.append("Nothing yet")
 	return lines
+
+
+## The Surface side's cost: what's below that you won't reach this delve
+## (Mara, #29), so the safe choice has weight too.
+func left_behind_lines(peek: Dictionary) -> PackedStringArray:
+	var lines: PackedStringArray = []
+	var prize: Dictionary = peek.get("prize", {}) as Dictionary
+	if prize.has("rescue"):
+		lines.append("The caged %s waits for another delve" % _role(str(prize["rescue"])).to_lower())
+	if prize.has("vault"):
+		var vault_prize: Dictionary = prize["vault"] as Dictionary
+		if vault_prize.has("landmark"):
+			lines.append("Koban keeps the %s for now" % data.row("landmarks", str(vault_prize["landmark"]))["name"])
+		else:
+			lines.append("Koban keeps her vault for now")
+	if not peek.is_empty():
+		var floors_left: int = int(peek["floor"])
+		lines.append("Floor %d's loot" % (floors_left + 1))
+	return lines
+
+
+## What the rooms since the last stop gave, under the title.
+func show_notes(lines: PackedStringArray) -> void:
+	_notes.text = "" if lines.is_empty() else "Since your last stop: " + " · ".join(lines)
 
 
 ## The Deeper side: what a wash-up leaves you (Haul.halved), and who goes
@@ -244,6 +279,11 @@ func _build() -> void:
 	add_child(_deeper)
 	_surface.focus_neighbor_right = _surface.get_path_to(_deeper)
 	_deeper.focus_neighbor_left = _deeper.get_path_to(_surface)
+	_notes = BoardStyle.label("", BoardStyle.SMALL, BoardStyle.DIM)
+	_notes.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_notes.position = Vector2(0, 296)
+	_notes.size = Vector2(1920, 30)
+	add_child(_notes)
 	_hint = BoardStyle.label("", BoardStyle.BODY, BoardStyle.DIM)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.position = Vector2(0, 790)

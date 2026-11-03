@@ -73,11 +73,49 @@ static func summary(rows: Array, paths: Array[Array]) -> String:
 					n += 1
 			low = mini(low, n)
 			high = maxi(high, n)
-		if high == 0:
+		if high == 0 and not (kind[0] == DelveMap.FIGHT and paths.size() == 1):
 			continue
 		var count: String = str(high) if low == high else "%d-%d" % [low, high]
 		parts.append("%s %s" % [count, kind[1] if high == 1 else kind[2]])
 	return " · ".join(parts)
+
+
+## For the hover when paths through a room differ (Mara, #29): the safest
+## and the riskiest of them, as {"safest": summary, "riskiest": summary},
+## or {"only": summary} when every path holds the same rooms. Safest has
+## the fewest fights (an elite counts as two), then the most rests;
+## riskiest the most fights. Unseen rooms count as neither.
+static func extremes(rows: Array, paths: Array[Array]) -> Dictionary:
+	if paths.is_empty():
+		return {}
+	var safest: Array = paths[0]
+	var riskiest: Array = paths[0]
+	var distinct: Dictionary = {}
+	for p: Array in paths:
+		var single: Array[Array] = [p]
+		distinct[summary(rows, single)] = true
+		if _risk(rows, p) < _risk(rows, safest) or (_risk(rows, p) == _risk(rows, safest) and _count(rows, p, DelveMap.REST) > _count(rows, safest, DelveMap.REST)):
+			safest = p
+		if _risk(rows, p) > _risk(rows, riskiest):
+			riskiest = p
+	var safe_only: Array[Array] = [safest]
+	if distinct.size() == 1:
+		return {"only": summary(rows, safe_only)}
+	var risky_only: Array[Array] = [riskiest]
+	return {"safest": summary(rows, safe_only), "riskiest": summary(rows, risky_only)}
+
+
+## Fights on a path, an elite counting as two.
+static func _risk(rows: Array, p: Array) -> int:
+	return _count(rows, p, DelveMap.FIGHT) + 2 * _count(rows, p, DelveMap.ELITE)
+
+
+static func _count(rows: Array, p: Array, type: String) -> int:
+	var n: int = 0
+	for cell: Vector2i in p:
+		if (rows[cell.x] as Array)[cell.y]["type"] == type:
+			n += 1
+	return n
 
 
 static func _walk(rows: Array, cell: Vector2i, so_far: Array, out: Array[Array]) -> void:

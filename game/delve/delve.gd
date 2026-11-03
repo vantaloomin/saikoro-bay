@@ -77,6 +77,8 @@ func _advance() -> void:
 			DelveRun.Step.LANDING:
 				_show(_landing)
 				_landing.show_view(RunView.new(run))
+				_landing.show_notes(_notes)
+				_notes.clear()
 				return
 			DelveRun.Step.VAULT:
 				if run.vault == null:
@@ -120,17 +122,20 @@ func _play_room(run: DelveRun) -> void:
 	var played: DiceRoom = run.room
 	RoomBot.new().play_room(played)
 	var gave: PackedStringArray = []
+	var found: PackedStringArray = []
 	for id: String in played.payout:
-		gave.append("+%d %s" % [played.payout[id], Game.data.row("resources", id)["name"]])
+		found.append("%d %s" % [played.payout[id], Game.data.row("resources", id)["name"]])
+	if not found.is_empty():
+		gave.append("found " + ", ".join(found))
 	var before: int = run.hp
 	if played.hp > before:
-		gave.append("+%d HP" % (played.hp - before))
+		gave.append("healed %d HP" % (played.hp - before))
 	elif played.hp < before:
-		gave.append("-%d HP" % (before - played.hp))
+		gave.append("lost %d HP to the tide" % (before - played.hp))
 	if played.room_id == DelveMap.RESCUE:
-		gave.append("the cage opened" if played.succeeded else "still caged: you'll find them again")
+		gave.append("the cage opened" if played.succeeded else "they're still caged; you'll find them again")
 	var room_name: String = Game.data.row("rooms", played.room_id)["name"]
-	_notes.append("%s: %s" % [room_name, ", ".join(gave) if not gave.is_empty() else "nothing"])
+	_notes.append("%s: %s" % [room_name, ", ".join(gave) if not gave.is_empty() else "nothing this time"])
 	PlaytestLog.log_event("room_played", {"room": played.room_id, "floor": run.floor_index, "row": run.row,
 		"payout": played.payout, "hp": played.hp, "opened": played.succeeded})
 

@@ -49,11 +49,25 @@ func set_room(new_cell: Vector2i, new_type: String, new_state: String) -> void:
 	type = new_type
 	state = new_state
 	# Every room you might still walk through can take focus, so a
-	# controller can read the paths too; rooms behind you can't.
-	focus_mode = Control.FOCUS_ALL if state in ["next", "open"] else Control.FOCUS_NONE
+	# controller can read the paths too, and so can the room you're at
+	# (where focus starts); other rooms behind you can't.
+	focus_mode = Control.FOCUS_ALL if state in ["next", "open", "current"] else Control.FOCUS_NONE
 	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if state == "next" else Control.CURSOR_ARROW
 	tooltip_text = ""
 	queue_redraw()
+
+
+## Marks a room you see only thanks to Foresight with its giver's face
+## chip (KP-2).
+func set_foresight(villager_id: String, role: String) -> void:
+	var chip: FaceChip = FaceChip.new()
+	chip.villager_id = villager_id
+	chip.role = role
+	chip.custom_minimum_size = Vector2(34, 34)
+	chip.size = Vector2(34, 34)
+	chip.position = Vector2(SIZE - 22, -12)
+	chip.tooltip_text = "Seen with Foresight · %s" % role
+	add_child(chip)
 
 
 func _gui_input(event: InputEvent) -> void:

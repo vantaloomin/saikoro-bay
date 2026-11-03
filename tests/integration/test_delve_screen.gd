@@ -82,6 +82,15 @@ func test_the_map_shows_only_what_the_player_can_see() -> void:
 	assert_eq(next, run.reachable())
 
 
+func test_focus_starts_where_you_stand_with_no_path_lit() -> void:
+	var run: DelveRun = _new_run()
+	var map: MapView = _screen(run).get("_map")
+	assert_eq(get_viewport().gui_get_focus_owner(), map._entrance, "the way in, not a room")
+	for cell: Vector2i in map._nodes:
+		assert_false(map._nodes[cell].lit)
+	assert_eq(map._room_name.text, "Ways down")
+
+
 func test_a_pick_right_after_the_map_appears_is_ignored() -> void:
 	var run: DelveRun = _new_run()
 	var screen: Control = _screen(run)
@@ -102,7 +111,7 @@ func test_hovering_a_room_lights_the_paths_through_it() -> void:
 	var map: MapView = _screen(run).get("_map")
 	map._on_hovered(Vector2i(1, 0), true)
 	assert_true(map._nodes[Vector2i(1, 0)].lit)
-	assert_string_starts_with(map._summary.text, "Through here: ")
+	assert_string_starts_with(map._summary.text, "Through here:")
 	map._on_hovered(Vector2i(1, 0), false)
 	assert_false(map._nodes[Vector2i(1, 0)].lit)
 
@@ -139,6 +148,8 @@ func test_the_landing_ignores_presses_for_a_moment() -> void:
 func test_the_peek_names_the_next_floors_prize() -> void:
 	var landing: LandingPanel = LandingPanel.new()
 	landing.setup(Game.data)
+	assert_eq(landing.left_behind_lines({"floor": 1, "rows": [], "prize": {"rescue": "pearl_diver"}}),
+		PackedStringArray(["The caged pearl diver waits for another delve", "Floor 2's loot"]), "surfacing costs something too")
 	assert_eq(landing.below_text({"floor": 1, "rows": [], "prize": {"rescue": "shipwright"}}),
 		"Below: floor 2 · a caged villager (Shipwright)")
 	assert_eq(landing.below_text({"floor": 2, "rows": [], "prize": {"vault": {"landmark": "cafe"}}}),

@@ -40,7 +40,12 @@ class Legend:
 		var font: Font = get_theme_default_font()
 		for i: int in LEGEND.size():
 			var y: float = i * 64.0
-			MapGlyphs.draw_room(self, Rect2(0, y, 52, 52), LEGEND[i][0] as String, BoardStyle.INK, 3.0)
+			var rect: Rect2 = Rect2(0, y, 52, 52)
+			if LEGEND[i][0] == DelveMap.REST:
+				# The category only: a plain rounded square.
+				MapGlyphs.draw_outline(self, rect, DelveMap.REST, BoardStyle.INK, 3.0)
+			else:
+				MapGlyphs.draw_room(self, rect, LEGEND[i][0] as String, BoardStyle.INK, 3.0)
 			draw_string(font, Vector2(72, y + 36), LEGEND[i][1] as String, HORIZONTAL_ALIGNMENT_LEFT, -1, BoardStyle.SMALL, BoardStyle.INK)
 
 
@@ -58,6 +63,7 @@ var _last_floor: bool = false
 var _prize: String = ""
 
 var _title: Label
+var _entrance: Control
 var _room_name: Label
 var _summary: Label
 var _notes: Label
@@ -93,22 +99,29 @@ func show_view(run_view: RunView) -> void:
 			var cell: Vector2i = Vector2i(r, room["col"] as int)
 			var n: MapNode = MapNode.new()
 			n.set_room(cell, room["type"] as String, room["state"] as String)
+			if room.get("foresight", false) and not view.foresight_source().is_empty():
+				var source: String = view.foresight_source()
+				n.set_foresight(source, str(data.row("villagers", source)["role"]) if data.has_row("villagers", source) else source)
 			n.position = node_center(cell) - n.size / 2.0
 			n.picked.connect(_on_picked)
 			n.hovered.connect(_on_hovered)
 			_canvas.add_child(n)
 			_nodes[cell] = n
 	_guard_until = Time.get_ticks_msec() + GUARD_MS
-	var first: MapNode = _first_next()
-	if first != null:
-		first.grab_focus()
+	# Focus starts where you stand (the way in, or your room), so no path
+	# is lit before the player looks (Mara, #29).
+	var here: MapNode = _current()
+	if here != null:
+		here.grab_focus()
+	else:
+		_entrance.grab_focus()
 	_canvas.queue_redraw()
 
 
 ## What the rooms played since the last stop gave (the bot plays those
 ## rooms until their boards exist).
 func show_notes(lines: PackedStringArray) -> void:
-	_notes.text = "\n".join(lines)
+	_notes.text = "Since your last stop\n" + "\n".join(lines)
 	_notes.visible = not lines.is_empty()
 
 
@@ -119,13 +132,17 @@ func node_center(cell: Vector2i) -> Vector2:
 	return Vector2(x, ROW_Y0 + cell.x * ROW_GAP)
 
 
-func _first_next() -> MapNode:
+## The last room you walked into on this floor, or null at its start.
+func _current() -> MapNode:
+	var found: MapNode = null
 	var keys: Array = _nodes.keys()
 	keys.sort()
 	for cell: Vector2i in keys:
-		if _nodes[cell].state == "next":
-			return _nodes[cell]
-	return null
+		if _nodes[cell].state in ["visited", "current"]:
+			found = _nodes[cell]
+	if found != null:
+		found.focus_mode = Control.FOCUS_ALL
+	return found
 
 
 func _process(delta: float) -> void:
@@ -157,9 +174,9 @@ func _on_hovered(cell: Vector2i, on: bool) -> void:
 func _set_lit(cell: Vector2i) -> void:
 	_lit_cells = {}
 	_lit_links = {}
-	if cell.x < 0 or not _nodes.has(cell):
-		_room_name.text = ""
-		_summary.text = "Pick a room in the next row. Point at any room to see the paths through it."
+	if cell.x < 0 or not _nodes.has(cell) or _nodes[cell].state in ["visited", "current"] and _is_here(cell):
+		_room_name.text = "Ways down"
+		_summary.text = "%s\nPoint at a room to see the paths through it." % paths_text(_paths)
 	else:
 		var n: MapNode = _nodes[cell]
 		_room_name.text = room_name(n.type)
@@ -168,7 +185,7 @@ func _set_lit(cell: Vector2i) -> void:
 				var through: Array[Array] = MapPaths.through(_paths, cell)
 				_lit_cells = MapPaths.cells(through)
 				_lit_links = MapPaths.links(through)
-				_summary.text = "Through here: %s" % MapPaths.summary(_rows, through)
+				_summary.text = "Through here:\n%s" % paths_text(through)
 			"closed":
 				_summary.text = "Out of reach now."
 			_:
@@ -177,6 +194,25 @@ func _set_lit(cell: Vector2i) -> void:
 		_nodes[c].lit = _lit_cells.has(c)
 	if _canvas != null:
 		_canvas.queue_redraw()
+
+
+## "Safest: 0 fights · 2 rests" and "Riskiest: 2 fights", or one line
+## when every path holds the same rooms.
+func paths_text(paths: Array[Array]) -> String:
+	var ends: Dictionary = MapPaths.extremes(_rows, paths)
+	if ends.is_empty():
+		return ""
+	if ends.has("only"):
+		return str(ends["only"])
+	return "Safest: %s\nRiskiest: %s" % [ends["safest"], ends["riskiest"]]
+
+
+func _is_here(cell: Vector2i) -> bool:
+	var here: MapNode = null
+	for c: Vector2i in _nodes:
+		if _nodes[c].state in ["visited", "current"] and (here == null or c.x > here.cell.x):
+			here = _nodes[c]
+	return here != null and here.cell == cell
 
 
 func room_name(type: String) -> String:
@@ -204,6 +240,20 @@ func _build() -> void:
 	_canvas.position = Vector2((1920.0 - MAP_WIDTH) / 2.0, 0)
 	_canvas.draw.connect(_draw_canvas)
 	add_child(_canvas)
+	# The way in: where focus starts on a fresh floor.
+	_entrance = Control.new()
+	_entrance.focus_mode = Control.FOCUS_ALL
+	_entrance.custom_minimum_size = Vector2(160, 40)
+	_entrance.size = Vector2(160, 40)
+	_entrance.position = Vector2(MAP_WIDTH / 2.0 - 80, ENTRY_Y - 20)
+	_entrance.focus_entered.connect(func() -> void:
+		_set_lit(Vector2i(-1, -1))
+		_entrance.queue_redraw())
+	_entrance.focus_exited.connect(_entrance.queue_redraw)
+	_entrance.draw.connect(func() -> void:
+		if _entrance.has_focus():
+			BoardStyle.draw_brackets(_entrance, Rect2(Vector2.ZERO, _entrance.size), BoardStyle.INK))
+	_canvas.add_child(_entrance)
 
 	var right: VBoxContainer = VBoxContainer.new()
 	right.add_theme_constant_override("separation", 16)
@@ -272,9 +322,9 @@ func _link_style(from: Vector2i, to: Vector2i) -> Array:
 	if from_state in walked and to_state in walked:
 		return [BoardStyle.GOLD, 7.0]
 	if from.x >= 0 and to.x >= 0 and _lit_links.has([from, to]):
-		return [BoardStyle.INK, 7.0]
+		return [BoardStyle.JADE, 7.0, true]
 	if to.x < 0 and _lit_cells.has(from):
-		return [BoardStyle.INK, 7.0]
+		return [BoardStyle.JADE, 7.0, true]
 	if from_state == "closed" or to_state == "closed":
 		return [Color(BoardStyle.DIM, 0.35), 3.0]
 	if to_state == "next" and (from.x < 0 or from_state in walked):
@@ -287,6 +337,12 @@ func _state(cell: Vector2i) -> String:
 
 
 func _draw_link(a: Vector2, b: Vector2, style: Array) -> void:
+	if style.size() > 2 and style[2]:
+		# A path you're looking at glows, so it never reads as the default
+		# links or the gold walked path.
+		_canvas.draw_line(a, b, Color(BoardStyle.JADE, 0.35), 22.0, true)
+		_canvas.draw_line(a, b, BoardStyle.JADE, 7.0, true)
+		return
 	_canvas.draw_line(a, b, style[0] as Color, style[1] as float, true)
 
 

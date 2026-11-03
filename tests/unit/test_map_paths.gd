@@ -70,4 +70,31 @@ func test_lit_links_are_only_the_paths_through_the_room() -> void:
 	assert_true(links.has([Vector2i(0, 1), Vector2i(1, 1)]))
 	assert_true(links.has([Vector2i(1, 1), Vector2i(2, 0)]))
 	assert_eq(MapPaths.cells(through).size(), 3)
-	assert_eq(MapPaths.summary(rows, through), "1 elite · 1 rest · 1 treasure")
+	assert_eq(MapPaths.summary(rows, through), "0 fights · 1 elite · 1 rest · 1 treasure", "one path: no fights is worth saying")
+
+
+func test_differing_paths_name_the_safest_and_the_riskiest() -> void:
+	var rows: Array = _rows([
+		[["fight", "next", [0]], ["rest", "next", [0, 1]]],
+		[["elite", "open", [0]], ["rest", "open", [0]]],
+		[["treasure", "open", []]],
+	])
+	var ends: Dictionary = MapPaths.extremes(rows, MapPaths.all_paths(rows))
+	assert_eq(ends["safest"], "0 fights · 2 rests · 1 treasure")
+	assert_eq(ends["riskiest"], "1 fight · 1 elite · 1 treasure", "an elite counts as two fights")
+	var one: Array[Array] = MapPaths.through(MapPaths.all_paths(rows), Vector2i(0, 0))
+	assert_eq(MapPaths.extremes(rows, one), {"only": "1 fight · 1 elite · 1 treasure"})
+
+
+func test_rooms_seen_only_with_foresight_are_marked() -> void:
+	var perks: Array[Dictionary] = [{"perk": "foresight", "source": "shrine_keeper"}]
+	var run: DelveRun = DelveRun.create(data, 9, perks, VILLAGERS, LANDMARKS)
+	run.choose(run.reachable()[0])
+	var rows: Array = RunView.new(run).rows()
+	for r: int in rows.size():
+		for room: Dictionary in rows[r] as Array:
+			assert_eq(room.get("foresight", false), r == run.row + run.reveal_rows, "row %d" % r)
+	var plain: DelveRun = DelveRun.create(data, 9, [], VILLAGERS, LANDMARKS)
+	for row_rooms: Array in RunView.new(plain).rows():
+		for room: Dictionary in row_rooms:
+			assert_false(room.has("foresight"))

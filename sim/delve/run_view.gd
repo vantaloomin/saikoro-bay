@@ -76,6 +76,7 @@ func current_enemy() -> String:
 ##   state        "visited", "current", "next" (you can walk in now),
 ##                "open" (still reachable later) or "closed" (cut off)
 ##   villager     the villager in a revealed rescue room
+##   foresight    true on a room you see only thanks to Foresight
 func rows() -> Array:
 	var f: int = _run.floor_index
 	var open: Dictionary = _open_rooms()
@@ -87,6 +88,8 @@ func rows() -> Array:
 			var entry: Dictionary = {"col": c, "links": rm.links.duplicate(), "type": HIDDEN, "state": _state(r, c, open)}
 			if _revealed(r):
 				entry["type"] = rm.type
+				if _run.foresight and r == _run.row + _run.reveal_rows:
+					entry["foresight"] = true
 				if rm.type == DelveMap.RESCUE:
 					entry["villager"] = _run.map.rescue_villager
 			row_rooms.append(entry)
