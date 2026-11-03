@@ -119,6 +119,8 @@ var _hand_row: HBoxContainer
 var _dice: Array[DieView] = []
 var _preview: Label
 var _detail: Label
+## The turn's detail, which a held or focused kit die's note stands in for.
+var _detail_text: String = ""
 var _nudge: Button
 var _nudge_chip: FaceChip
 var _reroll: Button
@@ -633,6 +635,14 @@ func _round_results() -> Array[bool]:
 	return out
 
 
+## While a kit die is held or focused, the second line names it.
+func _show_kit_note() -> void:
+	if _detail == null:
+		return
+	var note: String = DieView.held_note(_dice)
+	_detail.text = note if not note.is_empty() else _detail_text
+
+
 func _refresh() -> void:
 	var wager: bool = vault.state == Vault.State.WAGER and _round_event.is_empty()
 	var turn: bool = vault.state == Vault.State.PLAYER_TURN or not _round_event.is_empty()
@@ -728,7 +738,8 @@ func _refresh() -> void:
 	# The big button.
 	var t: Dictionary = turn_preview() if _round_event.is_empty() and not vault.is_over() else {"headline": "", "detail": ""}
 	_preview.text = t["headline"]
-	_detail.text = t["detail"]
+	_detail_text = str(t["detail"])
+	_show_kit_note()
 	_verb.text = "Roll" if wager else "Play hand"
 	_verb.disabled = vault.is_over() or not _round_event.is_empty()
 	_reroll.visible = not wager and vault.table.rerolls_per_turn > 0
@@ -939,6 +950,9 @@ func _build() -> void:
 	for d: DiceTable.Die in vault.table.hand:
 		var view: DieView = DieView.new()
 		view.die_id = d.id
+		view.show_type(data, d.type_id)
+		view.focus_entered.connect(_show_kit_note)
+		view.focus_exited.connect(_show_kit_note)
 		view.custom_minimum_size = Vector2(150, 150)
 		view.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		view.pressed.connect(_on_die_pressed.bind(d.id))

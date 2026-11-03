@@ -110,6 +110,27 @@ static func gain_text(line: Dictionary) -> String:
 	return "%s · %s: %s" % [line["gain"], "happy" if line["happy"] else "if happy", bonus.left(1).to_lower() + bonus.substr(1)]
 
 
+## What a villager's perk does when they turn happy (`happy`) or stop
+## being happy: "Brace 2 → 3", "Nudge 1 → 2 a turn" (specs/bridge.md
+## section 5: move and swap tags say when they change a perk). "" when
+## they have no perk or it has no happy bonus.
+static func happy_change(data: GameData, villager: String, happy: bool) -> String:
+	if not data.has_row("villagers", villager):
+		return ""
+	var perk_id: String = str(data.row("villagers", villager).get("perk", ""))
+	if not data.has_row("perks", perk_id):
+		return ""
+	var row: Dictionary = data.row("perks", perk_id)
+	var field: String = "amount" if int(row["happy_amount"]) > 0 else "uses_per_turn"
+	var bonus: int = int(row["happy_" + field])
+	if bonus <= 0:
+		return ""
+	var plain: int = int(row[field])
+	var before: int = plain if happy else plain + bonus
+	var after: int = plain + bonus if happy else plain
+	return "%s %d → %d%s" % [row["name"], before, after, " a turn" if field == "uses_per_turn" else ""]
+
+
 ## A shop's perk for its Build card and the stamp: {"perk", "kit", "gain",
 ## "cost"}, where "kit" reads "Kit: + Weighted die (2 3 3 4 4 5)". {} for a
 ## building with no perk.

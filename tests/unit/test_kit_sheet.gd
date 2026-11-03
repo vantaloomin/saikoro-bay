@@ -117,3 +117,12 @@ func test_every_perk_reads_cleanly() -> void:
 		assert_false(str(row["gain"]).is_empty(), "%s says what it gives" % perk_id)
 		assert_false(str(row["gain"]).ends_with("."), "%s: a mark line has no full stop" % perk_id)
 		assert_false(str(row["cost"]).ends_with("."), "%s: a mark line has no full stop" % perk_id)
+
+
+func test_a_mood_change_names_what_the_perk_gains_or_loses() -> void:
+	assert_eq(KitSheet.happy_change(data, "shipwright", true), "Brace 2 → 3")
+	assert_eq(KitSheet.happy_change(data, "shipwright", false), "Brace 3 → 2")
+	assert_eq(KitSheet.happy_change(data, "pearl_diver", true), "Nudge 1 → 2 a turn")
+	assert_eq(KitSheet.happy_change(data, "onsen_keeper", true), "Mend 5 → 6")
+	assert_eq(KitSheet.happy_change(data, "shrine_keeper", true), "Foresight 1 → 2")
+	assert_eq(KitSheet.happy_change(data, "bait_shop", true), "", "only villagers turn happy")

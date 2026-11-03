@@ -578,6 +578,7 @@ func test_names_keep_off_the_swap_preview() -> void:
 	var loses: bool = Game.state.swap_moods(Game.data, "pearl_diver", sea).values().any(
 		func(mood: Town.Mood) -> bool: return mood != Town.Mood.HAPPY)
 	assert_eq(swap["mood"], Town.Mood.UNHAPPY if loses else Town.Mood.HAPPY, "the icon says gain or loss")
+	assert_string_contains(swap["text"], "Pearl diver happy · Nudge 1 → 2 a turn", "a swap says what the perk gains")
 	for tag: Dictionary in board.map_tags(board.view.villager_spots(Game.data, Game.state)):
 		assert_false((tag["rect"] as Rect2).intersects(swap["rect"]), "%s keeps off the swap preview" % tag["text"])
 
@@ -717,3 +718,20 @@ func test_a_shop_card_and_its_stamp_say_what_it_adds_to_the_kit() -> void:
 	var strip: KitMarks.Strip = town.find_child("KitStrip", true, false) as KitMarks.Strip
 	assert_eq(strip.perks_text, "0 → 1 perks", "the strip previews the stamp, as the ledger does")
 	assert_true(strip.dice[0]["new"], "the weighted die is the new one")
+
+
+func test_a_move_tag_says_what_a_perk_gains_or_loses() -> void:
+	Game.state._villagers.append("shipwright")
+	Game.state.town.homes["shipwright"] = Game.state.town.place("cottage", Vector2i(2, 5))
+	var shed: int = Game.state.town.place("net_shed", Vector2i(5, 5))
+	var town: TownScreen = _open()
+	var board: TownBoard = town.get_node("%Board") as TownBoard
+	town.start_carry("net_shed", shed)
+	board.carry_cell = Vector2i(2, 6)
+	assert_eq(board.move_tag()["text"], "Free · Shipwright happy · Brace 2 → 3")
+	assert_true(board.move_tag()["icon"])
+	var carried: Rect2 = board.carry_tag()["rect"]
+	for tag: Dictionary in board.map_tags(board.view.villager_spots(Game.data, Game.state)):
+		assert_false((tag["rect"] as Rect2).intersects(carried), "%s keeps off the move tag" % tag["text"])
+	board.carry_cell = Vector2i(6, 5)
+	assert_eq(board.move_tag(), {"text": "Free", "mood": Town.Mood.HAPPY, "icon": false})
