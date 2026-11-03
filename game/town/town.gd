@@ -311,7 +311,7 @@ func _end_pulse() -> void:
 		_kit_strip.queue_redraw()
 
 
-## "The Pearl diver is home · wishes to be next to the sea", or "…is home
+## "The Pearl diver is home and wishes to be next to the sea", or "…is home
 ## and happy": the rain cloud reads as a next step (Mara's #62 review).
 static func arrival_line(data: GameData, state: GameState, villager: String) -> String:
 	var row: Dictionary = data.row("villagers", villager)
@@ -321,7 +321,8 @@ static func arrival_line(data: GameData, state: GameState, villager: String) -> 
 	var wish: String = str(row.get("wish_text", ""))
 	if wish.is_empty():
 		return "The %s is home" % role
-	return "The %s is home · wishes to be %s" % [role, wish.substr(0, 1).to_lower() + wish.substr(1)]
+	# One sentence, so a wrap never strands a dot (Mara's #62 review).
+	return "The %s is home and wishes to be %s" % [role, wish.substr(0, 1).to_lower() + wish.substr(1)]
 
 
 func _on_walked_in() -> void:

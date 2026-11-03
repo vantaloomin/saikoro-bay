@@ -920,7 +920,7 @@ func test_an_unhappy_arrival_names_their_wish() -> void:
 	Game.state._villagers.append("pearl_diver")
 	Game.state.town.homes["pearl_diver"] = Game.state.town.place("cottage", Vector2i(0, 6))
 	assert_eq(TownScreen.arrival_line(Game.data, Game.state, "pearl_diver"),
-		"The Pearl diver is home · wishes to be next to the sea")
+		"The Pearl diver is home and wishes to be next to the sea")
 
 
 func test_arrivals_walk_at_a_pace_one_after_another() -> void:
