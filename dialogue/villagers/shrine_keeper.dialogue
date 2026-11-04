@@ -1,6 +1,7 @@
 # Kitsune shrine keeper: Akane, 34. A fox spirit and a grown woman. Her stated age is 34
 # everywhere; no centuries-old framing in any line (Nori's art review, store risk).
-# Vain, flirty, dry, a show-off. Speaks like a grown woman who's sure of herself.
+# Vain, flirty, dry, a show-off. Her flirting is a performance that wants an audience, and she
+# gets loud when she loses. Koban stays still; Akane fills the room (Vanta, 2026-11-03). Speaks like a grown woman who's sure of herself.
 # Never cutesy, no childish tics, no sibling-style address to the player.
 # Kept the fox shrine on the hill above the town.
 # Looks: fox ears, two tails, painted claws (Vanta, 2026-11-03).
@@ -116,8 +117,9 @@ shrine_keeper: So. Say something nice about me. Warm me up. [#face=happy]
 	set affection += 1
 	shrine_keeper: They are. You should have seen the other seven. [#face=flustered]
 - You've got sauce on your chin.
-	shrine_keeper: I do not. [#face=surprised]
-	shrine_keeper: I did. Thank you. That was nice in its own way. [#face=tease]
+	shrine_keeper: I do NOT. [#face=surprised]
+	She scrubs at her chin with a napkin, loudly, as if the napkin is at fault.
+	shrine_keeper: I did. Thank you. Nobody saw. Nobody saw, correct? [#face=flustered]
 - Your nose does a thing when you're smug.
 	set affection += 1
 	shrine_keeper: Nobody has ever noticed that. You're dangerous. [#face=flustered]
@@ -131,9 +133,9 @@ else
 	shrine_keeper: Never play a fox at cups. That's free advice. [#face=tease]
 - You're cheating.
 	set affection += 1
-	shrine_keeper: Of course I'm cheating. Well caught. [#face=tease]
+	shrine_keeper: How? HOW? Nobody catches me at cups! [#face=surprised]
 	She opens her hand. The pearl was there all along.
-	shrine_keeper: The cat caught me faster. But you're new. [#face=happy]
+	shrine_keeper: Fine. Well caught. The cat was faster, but you're new. [#face=tease]
 - (Lift all three at once.)
 	set affection += 1
 	All empty. She laughs and opens her hand to show the pearl.
